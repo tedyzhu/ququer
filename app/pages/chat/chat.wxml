@@ -1,0 +1,85 @@
+<view class="container chat-container">
+  <!-- 聊天消息区域 -->
+  <scroll-view 
+    id="scroll-view"
+    scroll-y="true" 
+    class="message-list" 
+    scroll-top="{{scrollTop}}"
+    scroll-with-animation="true"
+    enhanced="true"
+    show-scrollbar="false">
+    
+    <view id="message-container" class="messages-container">
+      <!-- 加载中 -->
+      <view wx:if="{{isLoading}}" class="loading-container">
+        <view class="loading-spinner"></view>
+        <view class="loading-text">加载中...</view>
+      </view>
+      
+      <!-- 消息列表 -->
+      <block wx:for="{{messages}}" wx:key="id">
+        <!-- 已销毁的消息 -->
+        <view wx:if="{{item.destroyed}}" class="message-item destroyed-message">
+          <view class="message-destroyed-notice">消息已销毁</view>
+        </view>
+        
+        <!-- 未销毁的消息 -->
+        <view 
+          wx:elif="{{!item.destroyed}}" 
+          class="message-item {{item.senderId === 'self' ? 'message-self' : 'message-other'}}"
+          bindtap="handleMessageTap"
+          data-messageid="{{item.id}}">
+          
+          <!-- 消息气泡 -->
+          <view class="message-bubble {{item.destroying ? 'destroying' : ''}}">
+            <!-- 消息内容 -->
+            <view class="message-content">{{item.content}}</view>
+            
+            <!-- 销毁倒计时 -->
+            <view wx:if="{{item.destroying}}" class="destroy-countdown">
+              {{item.remainTime}}s后销毁
+            </view>
+            
+            <!-- 消息时间和状态 -->
+            <view class="message-meta">
+              <text class="message-time">{{item.time}}</text>
+              <text wx:if="{{item.senderId === 'self' && item.status !== 'received'}}" class="message-status">
+                {{item.status === 'sending' ? '发送中' : '已发送'}}
+              </text>
+            </view>
+          </view>
+        </view>
+      </block>
+    </view>
+  </scroll-view>
+
+  <!-- 底部输入区域 -->
+  <view class="input-area">
+    <view class="input-box">
+      <input 
+        class="text-input" 
+        value="{{inputValue}}"
+        bindinput="handleInputChange"
+        confirm-type="send"
+        bindconfirm="sendMessage"
+        placeholder="输入消息..." />
+      
+      <view class="toolbar">
+        <view class="tool-button emotions-button">
+          <image class="tool-icon" src="/assets/images/emoji.png" mode="aspectFit"></image>
+        </view>
+        
+        <view class="tool-button photo-button">
+          <image class="tool-icon" src="/assets/images/photo.png" mode="aspectFit"></image>
+        </view>
+      </view>
+    </view>
+    
+    <button 
+      class="send-button {{inputValue ? 'active' : ''}}" 
+      bindtap="sendMessage"
+      disabled="{{!inputValue}}">
+      发送
+    </button>
+  </view>
+</view> 

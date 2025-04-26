@@ -1,0 +1,7 @@
+{
+  "desc": "阅后即焚小程序Sitemap配置",
+  "rules": [{
+    "action": "disallow",
+    "page": "*"
+  }]
+} 

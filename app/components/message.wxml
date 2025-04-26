@@ -1,0 +1,44 @@
+<view 
+  class="message-item {{isSelf ? 'message-self' : 'message-other'}} {{message.destroyed ? 'message-destroyed' : ''}}"
+  bindtap="handleTap"
+  bindlongpress="handleLongPress">
+  
+  <!-- 已销毁的消息 -->
+  <block wx:if="{{message.destroyed}}">
+    <view class="message-destroyed-notice">消息已销毁</view>
+  </block>
+  
+  <!-- 未销毁的消息 -->
+  <block wx:else>
+    <view class="message-bubble {{message.destroying || countdown > 0 ? 'destroying' : ''}}">
+      <!-- 消息内容 -->
+      <block wx:if="{{message.type === 'text'}}">
+        <view class="message-content">{{message.content}}</view>
+      </block>
+      
+      <block wx:elif="{{message.type === 'image'}}">
+        <image 
+          class="message-image" 
+          src="{{message.content}}" 
+          mode="widthFix" 
+          lazy-load="true" 
+          bindtap="handleImageTap"></image>
+      </block>
+      
+      <!-- 销毁倒计时 -->
+      <view wx:if="{{countdown > 0}}" class="destroy-countdown">
+        {{countdown}}s后销毁
+      </view>
+      
+      <!-- 消息元数据（时间和状态） -->
+      <view class="message-meta">
+        <text class="message-time">{{message.time}}</text>
+        <block wx:if="{{isSelf}}">
+          <text class="message-status">
+            {{message.status === 'sending' ? '发送中' : (message.status === 'sent' ? '已发送' : '已送达')}}
+          </text>
+        </block>
+      </view>
+    </view>
+  </block>
+</view> 

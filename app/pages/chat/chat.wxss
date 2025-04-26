@@ -1,0 +1,208 @@
+.chat-container {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--background-color);
+  height: 100vh;
+}
+
+/* 消息列表区域 */
+.message-list {
+  flex: 1;
+  padding: 20rpx;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.messages-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 消息项 */
+.message-item {
+  width: 100%;
+  margin-bottom: 30rpx;
+  display: flex;
+  flex-direction: column;
+}
+
+.message-self {
+  align-items: flex-end;
+}
+
+.message-other {
+  align-items: flex-start;
+}
+
+/* 消息气泡 */
+.message-bubble {
+  max-width: 70%;
+  padding: 20rpx;
+  border-radius: 8px;
+  position: relative;
+  transition: opacity 0.5s ease;
+}
+
+.message-self .message-bubble {
+  background-color: var(--primary-color);
+  color: var(--white);
+  border-top-right-radius: 0;
+}
+
+.message-other .message-bubble {
+  background-color: var(--white);
+  color: var(--text-color);
+  border-top-left-radius: 0;
+}
+
+/* 正在销毁状态 */
+.destroying {
+  animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  100% { opacity: 0.7; }
+}
+
+/* 销毁倒计时 */
+.destroy-countdown {
+  font-size: 24rpx;
+  color: var(--red);
+  margin-top: 8rpx;
+  text-align: right;
+}
+
+.message-other .destroy-countdown {
+  color: var(--red);
+}
+
+/* 消息内容 */
+.message-content {
+  font-size: 32rpx;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+/* 消息元数据（时间和状态） */
+.message-meta {
+  font-size: 24rpx;
+  margin-top: 10rpx;
+  display: flex;
+  align-items: center;
+}
+
+.message-self .message-meta {
+  justify-content: flex-end;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.message-other .message-meta {
+  color: var(--light-text-color);
+}
+
+.message-time {
+  margin-right: 10rpx;
+}
+
+/* 已销毁消息 */
+.destroyed-message {
+  align-items: center;
+  opacity: 0.7;
+}
+
+.message-destroyed-notice {
+  font-size: 28rpx;
+  color: var(--light-text-color);
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 10rpx 30rpx;
+  border-radius: 30rpx;
+}
+
+/* 输入区域 */
+.input-area {
+  width: 100%;
+  padding: 20rpx;
+  box-sizing: border-box;
+  background-color: var(--white);
+  border-top: 1rpx solid var(--border-color);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.input-box {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  background-color: var(--background-color);
+  border-radius: 10rpx;
+  padding: 10rpx 20rpx;
+  box-sizing: border-box;
+}
+
+.text-input {
+  flex: 1;
+  height: 68rpx;
+  font-size: 30rpx;
+}
+
+.toolbar {
+  display: flex;
+  flex-direction: row;
+}
+
+.tool-button {
+  width: 68rpx;
+  height: 68rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tool-icon {
+  width: 40rpx;
+  height: 40rpx;
+}
+
+.send-button {
+  width: 150rpx;
+  height: 68rpx;
+  margin-left: 20rpx;
+  line-height: 68rpx;
+  text-align: center;
+  font-size: 30rpx;
+  border-radius: 10rpx;
+  background-color: var(--light-text-color);
+  color: var(--white);
+  padding: 0;
+}
+
+.send-button.active {
+  background-color: var(--primary-color);
+}
+
+/* 加载状态 */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100rpx 30rpx;
+}
+
+.loading-spinner {
+  width: 60rpx;
+  height: 60rpx;
+  border: 4rpx solid rgba(0, 0, 0, 0.1);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+} 

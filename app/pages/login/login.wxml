@@ -1,0 +1,26 @@
+<view class="container login-container">
+  <view class="logo-area">
+    <image class="logo" src="/assets/images/logo.png" mode="aspectFit"></image>
+    <view class="app-name">秘信</view>
+    <view class="app-desc">阅后即焚的私密聊天工具</view>
+  </view>
+
+  <view class="login-box">
+    <view class="login-title">微信登录</view>
+    <view class="login-desc">授权后可使用微信头像和昵称</view>
+    
+    <button 
+      class="btn-login btn-primary" 
+      bindtap="getUserProfile" 
+      loading="{{isLoading}}" 
+      disabled="{{isLoading}}">
+      <image class="wechat-icon" src="/assets/images/wechat.png" mode="aspectFit"></image>
+      微信一键登录
+    </button>
+    
+    <view class="privacy-notice">
+      登录即表示您已阅读并同意
+      <text class="link" bindtap="navigateToPrivacy">《用户隐私协议》</text>
+    </view>
+  </view>
+</view> 

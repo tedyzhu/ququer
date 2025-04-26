@@ -1,0 +1,110 @@
+/* 消息项样式 */
+.message-item {
+  width: 100%;
+  margin-bottom: 30rpx;
+  display: flex;
+  flex-direction: column;
+}
+
+.message-self {
+  align-items: flex-end;
+}
+
+.message-other {
+  align-items: flex-start;
+}
+
+/* 消息气泡 */
+.message-bubble {
+  max-width: 70%;
+  padding: 20rpx;
+  border-radius: 8px;
+  position: relative;
+  transition: opacity 0.5s ease;
+}
+
+.message-self .message-bubble {
+  background-color: var(--primary-color);
+  color: var(--white);
+  border-top-right-radius: 0;
+}
+
+.message-other .message-bubble {
+  background-color: var(--white);
+  color: var(--text-color);
+  border-top-left-radius: 0;
+}
+
+/* 图片消息 */
+.message-image {
+  max-width: 400rpx;
+  border-radius: 8rpx;
+}
+
+/* 正在销毁状态 */
+.destroying {
+  animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  100% { opacity: 0.7; }
+}
+
+/* 销毁倒计时 */
+.destroy-countdown {
+  font-size: 24rpx;
+  color: var(--red);
+  margin-top: 8rpx;
+  text-align: right;
+}
+
+.message-other .destroy-countdown {
+  color: var(--red);
+}
+
+/* 消息内容 */
+.message-content {
+  font-size: 32rpx;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+/* 消息元数据（时间和状态） */
+.message-meta {
+  font-size: 24rpx;
+  margin-top: 10rpx;
+  display: flex;
+  align-items: center;
+}
+
+.message-self .message-meta {
+  justify-content: flex-end;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.message-other .message-meta {
+  color: var(--light-text-color);
+}
+
+.message-time {
+  margin-right: 10rpx;
+}
+
+.message-status {
+  font-size: 24rpx;
+}
+
+/* 已销毁消息 */
+.message-destroyed {
+  align-items: center;
+  opacity: 0.7;
+}
+
+.message-destroyed-notice {
+  font-size: 28rpx;
+  color: var(--light-text-color);
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 10rpx 30rpx;
+  border-radius: 30rpx;
+}
