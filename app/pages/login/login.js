@@ -18,6 +18,23 @@ Page({
     if (app.globalData.hasLogin) {
       this.navigateToHome();
     }
+    
+    // 检查云环境是否初始化
+    if (!wx.cloud) {
+      console.error('基础库版本过低，请使用2.2.3或以上的基础库');
+      wx.showModal({
+        title: '提示',
+        content: '当前微信版本过低，请升级微信后再使用',
+        showCancel: false
+      });
+      return;
+    }
+    
+    // 确保云环境已初始化
+    if (!wx.cloud._isInit) {
+      const app = getApp();
+      app.initCloud();
+    }
   },
 
   /**
@@ -34,6 +51,7 @@ Page({
     wx.getUserProfile({
       desc: '用于完善用户资料',
       success: (res) => {
+        console.log('获取用户信息成功', res.userInfo);
         // 获取用户openId
         that.loginWithWeixin(res.userInfo);
       },
@@ -87,8 +105,14 @@ Page({
           that.navigateToHome();
         } else {
           console.error('登录失败:', res);
+          let errorMsg = '登录失败，请重试';
+          // 如果返回了具体错误信息，则显示
+          if (res.result && res.result.error && res.result.error.message) {
+            console.error('错误详情:', res.result.error.message);
+            errorMsg = '登录失败: ' + res.result.error.message;
+          }
           wx.showToast({
-            title: '登录失败，请重试',
+            title: errorMsg,
             icon: 'none'
           });
           that.setData({
@@ -98,13 +122,34 @@ Page({
       },
       fail: (err) => {
         console.error('云函数调用失败:', err);
+        let errorMsg = '网络异常，请重试';
+        if (err && err.errMsg) {
+          console.error('错误详情:', err.errMsg);
+          // 针对不同错误类型提供更具体的提示
+          if (err.errMsg.includes('FunctionName not exist')) {
+            errorMsg = '登录功能未部署，请联系管理员';
+          } else if (err.errMsg.includes('timeout')) {
+            errorMsg = '网络连接超时，请检查网络';
+          }
+        }
         wx.showToast({
-          title: '网络异常，请重试',
-          icon: 'none'
+          title: errorMsg,
+          icon: 'none',
+          duration: 3000
         });
         that.setData({
           isLoading: false
         });
+      },
+      complete: () => {
+        // 无论成功失败，确保loading状态被清除
+        setTimeout(() => {
+          if (that.data.isLoading) {
+            that.setData({
+              isLoading: false
+            });
+          }
+        }, 3000);
       }
     });
   },
@@ -117,4 +162,5 @@ Page({
       url: '/app/pages/home/home'
     });
   }
+}) 
 }) 

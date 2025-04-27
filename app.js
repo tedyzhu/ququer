@@ -14,15 +14,7 @@ App({
    */
   onLaunch: function (options) {
     // 初始化云环境
-    if (!wx.cloud) {
-      console.error('请使用2.2.3或以上的基础库以使用云能力');
-    } else {
-      wx.cloud.init({
-        env: 'cloud1-9gmp8bcn2dc3576a',
-        traceUser: true
-      });
-      console.log('云环境初始化成功: cloud1-9gmp8bcn2dc3576a');
-    }
+    this.initCloud();
     
     // 检查登录状态
     this.checkLoginStatus();
@@ -36,6 +28,28 @@ App({
         confirmText: '我知道了'
       });
     });
+  },
+  
+  /**
+   * 初始化云环境
+   */
+  initCloud: function() {
+    if (!wx.cloud) {
+      console.error('请使用2.2.3或以上的基础库以使用云能力');
+      return false;
+    } else {
+      try {
+        wx.cloud.init({
+          env: 'cloud1-9gmp8bcn2dc3576a',
+          traceUser: true
+        });
+        console.log('云环境初始化成功: cloud1-9gmp8bcn2dc3576a');
+        return true;
+      } catch (e) {
+        console.error('云环境初始化失败', e);
+        return false;
+      }
+    }
   },
 
   /**
