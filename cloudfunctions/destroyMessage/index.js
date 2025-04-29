@@ -6,7 +6,7 @@ const cloud = require('wx-server-sdk');
 
 // 初始化云开发环境
 cloud.init({
-  env: cloud.DYNAMIC_CURRENT_ENV
+  env: 'cloud1-9gmp8bcn2dc3576a'
 });
 
 /**

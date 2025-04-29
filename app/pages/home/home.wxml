@@ -1,64 +1,24 @@
-<view class="container home-container">
-  <!-- 顶部用户信息 -->
-  <view class="user-info">
-    <image class="user-avatar" src="{{userInfo.avatarUrl || '/assets/images/default-avatar.png'}}" mode="aspectFill"></image>
-    <view class="user-info-details">
-      <view class="user-nickname">{{userInfo.nickName || '用户'}}</view>
-      <view class="user-login-time" wx:if="{{lastLoginTime}}">上次登录: {{lastLoginTime}}</view>
+<view class="container">
+  <view class="header">
+    <view class="title">会话列表</view>
+  </view>
+  
+  <view class="content">
+    <view wx:if="{{isLoading}}" class="loading-container">
+      <view class="loading"></view>
+      <text>加载中...</text>
     </view>
-    <view class="add-contact" bindtap="addContact">
-      <image class="icon-add" src="/assets/images/add.png" mode="aspectFit"></image>
+    
+    <view wx:elif="{{conversations.length === 0}}" class="empty-container">
+      <image class="empty-icon" src="/assets/images/logo.svg" mode="aspectFit"></image>
+      <text class="empty-text">暂无会话</text>
+      <text class="empty-desc">点击右下角按钮开始新的对话</text>
+    </view>
+    
+    <view wx:else class="conversation-list">
+      <!-- 会话列表内容 -->
     </view>
   </view>
-
-  <!-- 会话列表标题 -->
-  <view class="section-title">会话</view>
-
-  <!-- 会话列表 -->
-  <view class="conversation-list">
-    <block wx:if="{{loading}}">
-      <view class="loading-container">
-        <view class="loading-spinner"></view>
-        <view class="loading-text">加载中...</view>
-      </view>
-    </block>
-
-    <block wx:elif="{{conversations.length === 0}}">
-      <view class="empty-container">
-        <image class="empty-icon" src="/assets/images/empty.png" mode="aspectFit"></image>
-        <view class="empty-text">暂无会话，添加好友开始聊天吧</view>
-      </view>
-    </block>
-
-    <block wx:else>
-      <view 
-        wx:for="{{conversations}}" 
-        wx:key="id" 
-        class="conversation-item" 
-        bindtap="navigateToChat" 
-        data-id="{{item.id}}" 
-        data-nickname="{{item.nickName}}">
-        
-        <!-- 用户头像和未读消息提示 -->
-        <view class="avatar-container">
-          <image class="avatar" src="{{item.avatarUrl}}" mode="aspectFill"></image>
-          <view wx:if="{{item.unread > 0}}" class="badge">{{item.unread}}</view>
-        </view>
-        
-        <!-- 会话信息 -->
-        <view class="conversation-info">
-          <view class="conversation-top-row">
-            <view class="nickname">{{item.nickName}}</view>
-            <view class="time">{{item.lastTime}}</view>
-          </view>
-          
-          <view class="conversation-bottom-row">
-            <view class="{{item.destroyed ? 'message-destroyed' : 'message-preview'}} text-ellipsis">
-              {{item.destroyed ? '[已销毁]' : item.lastMessage}}
-            </view>
-          </view>
-        </view>
-      </view>
-    </block>
-  </view>
+  
+  <view class="add-btn" bindtap="onAddBtnTap">+</view>
 </view> 

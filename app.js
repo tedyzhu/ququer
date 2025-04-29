@@ -5,7 +5,8 @@ App({
   globalData: {
     userInfo: null,
     hasLogin: false,
-    conversations: []
+    conversations: [],
+    cloudInitialized: false
   },
 
   /**
@@ -32,8 +33,14 @@ App({
   
   /**
    * 初始化云环境
+   * @returns {boolean} 初始化是否成功
    */
   initCloud: function() {
+    // 如果已经初始化过，直接返回true
+    if (this.globalData.cloudInitialized) {
+      return true;
+    }
+    
     if (!wx.cloud) {
       console.error('请使用2.2.3或以上的基础库以使用云能力');
       return false;
@@ -44,6 +51,7 @@ App({
           traceUser: true
         });
         console.log('云环境初始化成功: cloud1-9gmp8bcn2dc3576a');
+        this.globalData.cloudInitialized = true;
         return true;
       } catch (e) {
         console.error('云环境初始化失败', e);

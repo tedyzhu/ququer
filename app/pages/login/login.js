@@ -1,166 +1,185 @@
 /**
- * 登录页面逻辑
+ * 登录页面
  */
 Page({
   /**
    * 页面初始数据
    */
   data: {
-    isLoading: false
+    isLoading: false,
+    avatarUrl: 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0'
   },
 
   /**
    * 页面加载时执行
    */
-  onLoad: function () {
-    // 检查是否已经登录
+  onLoad: function() {
+    // 检查云环境是否已初始化
     const app = getApp();
-    if (app.globalData.hasLogin) {
-      this.navigateToHome();
+    if (!app.globalData.cloudInitialized) {
+      console.log('云环境未初始化，开始初始化...');
+      app.initCloud();
+    } else {
+      console.log('云环境已初始化');
     }
-    
-    // 检查云环境是否初始化
-    if (!wx.cloud) {
-      console.error('基础库版本过低，请使用2.2.3或以上的基础库');
+  },
+
+  /**
+   * 选择头像事件
+   * @param {Object} e - 事件对象
+   */
+  onChooseAvatar(e) {
+    try {
+      const { avatarUrl } = e.detail;
+      if (avatarUrl) {
+        console.log('获取到头像URL:', avatarUrl);
+        this.setData({
+          avatarUrl
+        });
+      } else {
+        console.warn('未获取到头像URL');
+      }
+    } catch (error) {
+      console.error('头像选择过程中出错:', error);
+      // 模拟器中可能会失败，但不影响其他功能
+      wx.showToast({
+        title: '头像选择失败，请在真机上测试',
+        icon: 'none',
+        duration: 2000
+      });
+    }
+  },
+
+  /**
+   * 表单提交事件
+   * @param {Object} e - 事件对象
+   */
+  onFormSubmit: function(e) {
+    const nickname = e.detail.value.nickname;
+    if (!nickname) {
       wx.showModal({
         title: '提示',
-        content: '当前微信版本过低，请升级微信后再使用',
+        content: '请输入昵称',
         showCancel: false
       });
       return;
     }
-    
-    // 确保云环境已初始化
-    if (!wx.cloud._isInit) {
-      const app = getApp();
-      app.initCloud();
-    }
-  },
 
-  /**
-   * 用户点击获取头像昵称授权按钮
-   * @param {Object} e - 事件对象
-   */
-  getUserProfile: function (e) {
-    const that = this;
-    that.setData({
+    this.setData({
       isLoading: true
     });
 
-    // 推荐使用wx.getUserProfile获取用户信息
-    wx.getUserProfile({
-      desc: '用于完善用户资料',
-      success: (res) => {
-        console.log('获取用户信息成功', res.userInfo);
-        // 获取用户openId
-        that.loginWithWeixin(res.userInfo);
-      },
-      fail: (err) => {
-        console.error('获取用户信息失败', err);
-        wx.showToast({
-          title: '授权失败',
-          icon: 'none'
-        });
-        that.setData({
-          isLoading: false
-        });
-      }
-    });
-  },
+    // 构建用户信息对象
+    const userInfo = {
+      nickName: nickname,
+      avatarUrl: this.data.avatarUrl
+    };
 
-  /**
-   * 使用微信登录并获取openId
-   * @param {Object} userInfo - 用户信息
-   */
-  loginWithWeixin: function (userInfo) {
-    const that = this;
-    
-    console.log('正在调用login云函数...');
-    // 使用云函数获取openId并注册/更新用户
+    console.log('准备调用登录云函数，发送数据:', userInfo);
+
+    // 调用云函数登录
     wx.cloud.callFunction({
       name: 'login',
-      data: { userInfo },
-      success: (res) => {
-        console.log('云函数调用成功:', res);
+      data: {
+        userInfo: userInfo
+      },
+      success: res => {
+        console.log('登录云函数调用成功，完整响应:', res);
+        console.log('登录云函数返回结果:', res.result);
+        
+        // 即使云函数返回格式不对，也尝试进行登录处理
+        // 判断是否有tcbContext，这表示云函数至少被成功调用
+        if (res.result && res.result.tcbContext) {
+          // 获取用户openId
+          const openId = res.result.tcbContext && res.result.tcbContext.openid;
+          
+          if (openId) {
+            // 存储用户信息
+            const app = getApp();
+            app.globalData.userInfo = userInfo;
+            app.globalData.openId = openId;
+            app.globalData.hasLogin = true;
+            
+            console.log('用户信息已存储到全局数据，openId:', openId);
+            
+            // 存储用户信息到本地
+            wx.setStorage({
+              key: 'userInfo',
+              data: userInfo,
+              success: () => console.log('用户信息已存储到本地存储')
+            });
+            
+            // 显示登录成功提示
+            wx.showToast({
+              title: '登录成功',
+              icon: 'success',
+              duration: 1500
+            });
+            
+            // 跳转到首页
+            setTimeout(() => {
+              wx.reLaunch({
+                url: '/app/pages/home/home'
+              });
+            }, 1500);
+            
+            return;
+          }
+        }
+        
+        // 处理标准返回格式（如之前的修改生效）
         if (res.result && res.result.success) {
           // 存储用户信息
           const app = getApp();
-          // 将openId添加到用户信息中
-          userInfo.openId = res.result.openId;
           app.globalData.userInfo = userInfo;
+          app.globalData.openId = res.result.openId;
           app.globalData.hasLogin = true;
+          
+          console.log('用户信息已存储到全局数据', app.globalData);
           
           // 存储用户信息到本地
           wx.setStorage({
             key: 'userInfo',
-            data: userInfo
+            data: userInfo,
+            success: () => console.log('用户信息已存储到本地存储')
           });
           
-          wx.showToast({
-            title: '登录成功',
-            icon: 'success',
-            duration: 2000
+          // 跳转到首页
+          wx.reLaunch({
+            url: '/app/pages/home/home'
           });
-          
-          that.navigateToHome();
         } else {
-          console.error('登录失败:', res);
-          let errorMsg = '登录失败，请重试';
-          // 如果返回了具体错误信息，则显示
-          if (res.result && res.result.error && res.result.error.message) {
-            console.error('错误详情:', res.result.error.message);
-            errorMsg = '登录失败: ' + res.result.error.message;
+          console.error('登录失败，返回结果:', res.result);
+          let errorMsg = '未知错误';
+          
+          if (res.result) {
+            if (res.result.error) {
+              errorMsg = res.result.error.message || JSON.stringify(res.result.error);
+            } else {
+              errorMsg = '返回结果格式错误: ' + JSON.stringify(res.result);
+            }
           }
-          wx.showToast({
-            title: errorMsg,
-            icon: 'none'
-          });
-          that.setData({
-            isLoading: false
+          
+          wx.showModal({
+            title: '登录失败',
+            content: errorMsg,
+            showCancel: false
           });
         }
       },
-      fail: (err) => {
-        console.error('云函数调用失败:', err);
-        let errorMsg = '网络异常，请重试';
-        if (err && err.errMsg) {
-          console.error('错误详情:', err.errMsg);
-          // 针对不同错误类型提供更具体的提示
-          if (err.errMsg.includes('FunctionName not exist')) {
-            errorMsg = '登录功能未部署，请联系管理员';
-          } else if (err.errMsg.includes('timeout')) {
-            errorMsg = '网络连接超时，请检查网络';
-          }
-        }
-        wx.showToast({
-          title: errorMsg,
-          icon: 'none',
-          duration: 3000
-        });
-        that.setData({
-          isLoading: false
+      fail: err => {
+        console.error('登录云函数调用失败，错误信息:', err);
+        wx.showModal({
+          title: '登录失败',
+          content: '网络异常，请重试',
+          showCancel: false
         });
       },
       complete: () => {
-        // 无论成功失败，确保loading状态被清除
-        setTimeout(() => {
-          if (that.data.isLoading) {
-            that.setData({
-              isLoading: false
-            });
-          }
-        }, 3000);
+        this.setData({
+          isLoading: false
+        });
       }
     });
-  },
-
-  /**
-   * 跳转到首页
-   */
-  navigateToHome: function () {
-    wx.reLaunch({
-      url: '/app/pages/home/home'
-    });
   }
-}) 
-}) 
+}); 

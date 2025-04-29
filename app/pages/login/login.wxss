@@ -1,3 +1,90 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  padding: 40rpx;
+  box-sizing: border-box;
+}
+
+.logo-container {
+  margin-bottom: 60rpx;
+}
+
+.logo {
+  width: 200rpx;
+  height: 200rpx;
+}
+
+.title {
+  font-size: 48rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 20rpx;
+}
+
+.subtitle {
+  font-size: 28rpx;
+  color: #666;
+  margin-bottom: 60rpx;
+}
+
+.user-info-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 40rpx;
+}
+
+.avatar-wrapper {
+  padding: 0;
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 80rpx;
+  margin-bottom: 40rpx;
+  background-color: transparent;
+}
+
+.avatar-wrapper::after {
+  border: none;
+}
+
+.avatar {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 80rpx;
+}
+
+.nickname-input {
+  width: 80%;
+  height: 88rpx;
+  border-bottom: 1px solid #ddd;
+  text-align: center;
+  font-size: 32rpx;
+  color: #333;
+}
+
+.login-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80%;
+  height: 88rpx;
+  background: #07C160;
+  color: #fff;
+  font-size: 32rpx;
+  border-radius: 44rpx;
+  margin-top: 40rpx;
+}
+
+.wechat-icon {
+  width: 40rpx;
+  height: 40rpx;
+  margin-right: 10rpx;
+}
+
 .login-container {
   padding: 0;
   justify-content: space-between;
@@ -9,11 +96,6 @@
   flex-direction: column;
   align-items: center;
   margin-top: 100rpx;
-}
-
-.logo {
-  width: 200rpx;
-  height: 200rpx;
 }
 
 .app-name {
@@ -51,23 +133,6 @@
   margin-bottom: 50rpx;
 }
 
-.btn-login {
-  width: 100%;
-  height: 88rpx;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-  border-radius: 44rpx;
-  font-size: 32rpx;
-}
-
-.wechat-icon {
-  width: 40rpx;
-  height: 40rpx;
-  margin-right: 10rpx;
-}
-
 .privacy-notice {
   font-size: 24rpx;
   color: var(--light-text-color);
@@ -76,4 +141,10 @@
 
 .link {
   color: var(--primary-color);
+}
+
+.tips {
+  font-size: 24rpx;
+  color: #999;
+  margin-bottom: 20rpx;
 } 

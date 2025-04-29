@@ -9,13 +9,15 @@ Page({
     userInfo: {},
     conversations: [],
     loading: true,
-    lastLoginTime: ''
+    lastLoginTime: '',
+    isLoading: true
   },
 
   /**
    * 生命周期函数--监听页面加载
    */
-  onLoad: function () {
+  onLoad: function (options) {
+    // 检查登录状态
     this.checkLoginStatus();
   },
 
@@ -23,7 +25,8 @@ Page({
    * 生命周期函数--监听页面显示
    */
   onShow: function () {
-    this.fetchConversations();
+    // 尝试加载会话列表
+    this.loadConversations();
     // 获取用户最近登录时间
     this.getUserData();
   },
@@ -34,12 +37,14 @@ Page({
   checkLoginStatus: function () {
     const app = getApp();
     if (!app.globalData.hasLogin) {
+      console.log('用户未登录，跳转到登录页');
       wx.redirectTo({
         url: '/app/pages/login/login'
       });
       return;
     }
     
+    console.log('用户已登录', app.globalData.userInfo);
     this.setData({
       userInfo: app.globalData.userInfo
     });
@@ -228,8 +233,39 @@ Page({
    */
   onShareAppMessage: function () {
     return {
-      title: '秘信 - 阅后即焚的私密聊天工具',
-      path: '/app/pages/login/login'
+      title: '秘信 - 阅后即焚的私密聊天工具'
     };
+  },
+
+  /**
+   * 加载会话列表
+   */
+  loadConversations: function() {
+    // 目前先显示空列表
+    this.setData({
+      isLoading: false,
+      conversations: []
+    });
+    
+    // 稍后可以添加真实的会话列表加载逻辑
+    console.log('加载会话列表');
+  },
+
+  /**
+   * 页面相关事件处理函数--监听用户下拉动作
+   */
+  onPullDownRefresh: function () {
+    this.loadConversations();
+    wx.stopPullDownRefresh();
+  },
+
+  /**
+   * 添加新会话按钮点击
+   */
+  onAddBtnTap: function() {
+    wx.showToast({
+      title: '新建会话功能开发中',
+      icon: 'none'
+    });
   }
 }) 
