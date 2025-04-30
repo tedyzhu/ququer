@@ -87,47 +87,51 @@ Page({
         console.log('登录云函数调用成功，完整响应:', res);
         console.log('登录云函数返回结果:', res.result);
         
-        // 即使云函数返回格式不对，也尝试进行登录处理
-        // 判断是否有tcbContext，这表示云函数至少被成功调用
+        // 查看完整的tcbContext结构
         if (res.result && res.result.tcbContext) {
-          // 获取用户openId
-          const openId = res.result.tcbContext && res.result.tcbContext.openid;
-          
-          if (openId) {
-            // 存储用户信息
-            const app = getApp();
-            app.globalData.userInfo = userInfo;
-            app.globalData.openId = openId;
-            app.globalData.hasLogin = true;
-            
-            console.log('用户信息已存储到全局数据，openId:', openId);
-            
-            // 存储用户信息到本地
-            wx.setStorage({
-              key: 'userInfo',
-              data: userInfo,
-              success: () => console.log('用户信息已存储到本地存储')
-            });
-            
-            // 显示登录成功提示
-            wx.showToast({
-              title: '登录成功',
-              icon: 'success',
-              duration: 1500
-            });
-            
-            // 跳转到首页
-            setTimeout(() => {
-              wx.reLaunch({
-                url: '/app/pages/home/home'
-              });
-            }, 1500);
-            
-            return;
-          }
+          console.log('tcbContext完整结构:', JSON.stringify(res.result.tcbContext));
         }
         
-        // 处理标准返回格式（如之前的修改生效）
+        // 处理cloud.getWXContext()返回的结构
+        // 从微信云函数返回的标准格式中获取openid
+        if (res.result && res.result.tcbContext && res.result.tcbContext.OPENID) {
+          const openId = res.result.tcbContext.OPENID;
+          
+          console.log('从tcbContext中获取到openId:', openId);
+          
+          // 存储用户信息
+          const app = getApp();
+          app.globalData.userInfo = userInfo;
+          app.globalData.openId = openId;
+          app.globalData.hasLogin = true;
+          
+          console.log('用户信息已存储到全局数据，openId:', openId);
+          
+          // 存储用户信息到本地
+          wx.setStorage({
+            key: 'userInfo',
+            data: userInfo,
+            success: () => console.log('用户信息已存储到本地存储')
+          });
+          
+          // 显示登录成功提示
+          wx.showToast({
+            title: '登录成功',
+            icon: 'success',
+            duration: 1500
+          });
+          
+          // 跳转到首页
+          setTimeout(() => {
+            wx.reLaunch({
+              url: '/app/pages/home/home'
+            });
+          }, 1500);
+          
+          return;
+        }
+        
+        // 处理之前修改后的标准返回格式
         if (res.result && res.result.success) {
           // 存储用户信息
           const app = getApp();
