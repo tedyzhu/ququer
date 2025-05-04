@@ -1,0 +1,5 @@
+<view class="container">
+  <image class="logo" src="/assets/images/logo.svg"></image>
+  <view class="title">秘信</view>
+  <view class="loading">{{message}}</view>
+</view> 

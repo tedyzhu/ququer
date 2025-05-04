@@ -1,0 +1,159 @@
+.detail-container {
+  min-height: 100vh;
+  background-color: #f7f7f7;
+  padding-bottom: 40rpx;
+}
+
+/* 加载中 */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300rpx;
+}
+
+.loading {
+  width: 60rpx;
+  height: 60rpx;
+  border: 6rpx solid #f3f3f3;
+  border-top: 6rpx solid #07C160;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20rpx;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 内容区 */
+.detail-content {
+  padding-bottom: 40rpx;
+}
+
+/* 区块样式 */
+.section {
+  margin-top: 20rpx;
+  background-color: #ffffff;
+  border-top: 1rpx solid #eaeaea;
+  border-bottom: 1rpx solid #eaeaea;
+}
+
+.section-header {
+  padding: 20rpx 30rpx;
+  border-bottom: 1rpx solid #f5f5f5;
+}
+
+.section-title {
+  font-size: 28rpx;
+  color: #999999;
+}
+
+/* 聊天成员 */
+.participants-list {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 30rpx;
+}
+
+.participant-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 120rpx;
+  margin: 0 20rpx 20rpx 0;
+}
+
+.avatar {
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 10rpx;
+  margin-bottom: 10rpx;
+}
+
+.nickname {
+  font-size: 24rpx;
+  color: #333333;
+  text-align: center;
+  width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 添加成员按钮 */
+.add-participant {
+  cursor: pointer;
+}
+
+.add-icon {
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 10rpx;
+  background-color: #f5f5f5;
+  color: #999999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 50rpx;
+  margin-bottom: 10rpx;
+}
+
+.add-text {
+  font-size: 24rpx;
+  color: #666666;
+}
+
+/* 设置选项 */
+.option-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 30rpx;
+  border-bottom: 1rpx solid #f5f5f5;
+}
+
+.option-item:last-child {
+  border-bottom: none;
+}
+
+.option-name {
+  font-size: 32rpx;
+  color: #333333;
+}
+
+.option-name.danger {
+  color: #e64340;
+}
+
+.option-arrow {
+  color: #cccccc;
+  font-size: 32rpx;
+}
+
+/* 选项值 */
+.option-value {
+  display: flex;
+  align-items: center;
+  color: #999999;
+  font-size: 28rpx;
+}
+
+.option-value .option-arrow {
+  margin-left: 10rpx;
+}
+
+/* 返回聊天按钮 */
+.back-button {
+  width: 90%;
+  height: 90rpx;
+  background-color: #07C160;
+  color: #ffffff;
+  text-align: center;
+  line-height: 90rpx;
+  border-radius: 10rpx;
+  margin: 40rpx auto;
+  font-size: 32rpx;
+} 

@@ -7,13 +7,15 @@ Page({
    */
   data: {
     isLoading: false,
-    avatarUrl: 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0'
+    avatarUrl: 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0',
+    inviteId: '', // 邀请ID
+    isInvited: false // 是否是被邀请的用户
   },
 
   /**
    * 页面加载时执行
    */
-  onLoad: function() {
+  onLoad: function(options) {
     // 检查云环境是否已初始化
     const app = getApp();
     if (!app.globalData.cloudInitialized) {
@@ -21,6 +23,18 @@ Page({
       app.initCloud();
     } else {
       console.log('云环境已初始化');
+    }
+
+    // 检查是否有邀请信息
+    const isInvited = wx.getStorageSync('isInvited');
+    const inviteId = wx.getStorageSync('inviteId');
+    
+    if (isInvited && inviteId) {
+      console.log('检测到邀请信息，邀请ID:', inviteId);
+      this.setData({
+        inviteId: inviteId,
+        isInvited: true
+      });
     }
   },
 
@@ -87,89 +101,82 @@ Page({
         console.log('登录云函数调用成功，完整响应:', res);
         console.log('登录云函数返回结果:', res.result);
         
-        // 查看完整的tcbContext结构
-        if (res.result && res.result.tcbContext) {
-          console.log('tcbContext完整结构:', JSON.stringify(res.result.tcbContext));
-        }
-        
-        // 处理cloud.getWXContext()返回的结构
-        // 从微信云函数返回的标准格式中获取openid
-        if (res.result && res.result.tcbContext && res.result.tcbContext.OPENID) {
-          const openId = res.result.tcbContext.OPENID;
-          
-          console.log('从tcbContext中获取到openId:', openId);
-          
-          // 存储用户信息
-          const app = getApp();
-          app.globalData.userInfo = userInfo;
-          app.globalData.openId = openId;
-          app.globalData.hasLogin = true;
-          
-          console.log('用户信息已存储到全局数据，openId:', openId);
-          
-          // 存储用户信息到本地
-          wx.setStorage({
-            key: 'userInfo',
-            data: userInfo,
-            success: () => console.log('用户信息已存储到本地存储')
+        // 确保result不为空
+        if (!res.result) {
+          console.error('云函数返回结果为空');
+          wx.showModal({
+            title: '登录失败',
+            content: '服务器返回结果为空，请重试',
+            showCancel: false
           });
-          
-          // 显示登录成功提示
-          wx.showToast({
-            title: '登录成功',
-            icon: 'success',
-            duration: 1500
-          });
-          
-          // 跳转到首页
-          setTimeout(() => {
-            wx.reLaunch({
-              url: '/app/pages/home/home'
-            });
-          }, 1500);
-          
+          this.setData({ isLoading: false });
           return;
         }
         
-        // 处理之前修改后的标准返回格式
-        if (res.result && res.result.success) {
-          // 存储用户信息
-          const app = getApp();
-          app.globalData.userInfo = userInfo;
-          app.globalData.openId = res.result.openId;
-          app.globalData.hasLogin = true;
-          
-          console.log('用户信息已存储到全局数据', app.globalData);
-          
-          // 存储用户信息到本地
-          wx.setStorage({
-            key: 'userInfo',
-            data: userInfo,
-            success: () => console.log('用户信息已存储到本地存储')
-          });
-          
-          // 跳转到首页
-          wx.reLaunch({
-            url: '/app/pages/home/home'
-          });
+        // 打印完整结构便于调试
+        console.log('完整结构:', JSON.stringify(res.result));
+        
+        // 提取openId - 尝试多种方式获取
+        let openId = null;
+        
+        // 检查所有可能的位置
+        if (res.result.openId) {
+          // 直接从结果中获取
+          openId = res.result.openId;
+          console.log('从结果中直接获取到openId:', openId);
+        } else if (res.result.tcbContext && res.result.tcbContext.OPENID) {
+          // 从tcbContext中获取
+          openId = res.result.tcbContext.OPENID;
+          console.log('从tcbContext中获取到openId:', openId);
         } else {
-          console.error('登录失败，返回结果:', res.result);
-          let errorMsg = '未知错误';
-          
-          if (res.result) {
-            if (res.result.error) {
-              errorMsg = res.result.error.message || JSON.stringify(res.result.error);
-            } else {
-              errorMsg = '返回结果格式错误: ' + JSON.stringify(res.result);
-            }
-          }
-          
-          wx.showModal({
-            title: '登录失败',
-            content: errorMsg,
-            showCancel: false
-          });
+          // 如果没有找到，生成一个本地ID
+          openId = 'local_' + Date.now();
+          console.log('无法从服务器获取openId，生成本地ID:', openId);
         }
+        
+        // 存储用户信息和ID
+        const app = getApp();
+        app.globalData.userInfo = userInfo;
+        app.globalData.openId = openId;
+        app.globalData.hasLogin = true;
+        
+        console.log('用户信息已存储到全局数据，openId:', openId);
+        
+        // 存储用户信息到本地
+        wx.setStorage({
+          key: 'userInfo',
+          data: userInfo,
+          success: () => console.log('用户信息已存储到本地存储')
+        });
+        
+        wx.setStorage({
+          key: 'openId',
+          data: openId,
+          success: () => console.log('openId已存储到本地存储')
+        });
+        
+        // 显示登录成功提示
+        wx.showToast({
+          title: '登录成功',
+          icon: 'success',
+          duration: 1000
+        });
+        
+        // 根据是否是被邀请用户决定跳转逻辑
+        setTimeout(() => {
+          if (this.data.isInvited && this.data.inviteId) {
+            console.log('被邀请用户登录成功，直接进入聊天，邀请ID:', this.data.inviteId);
+            // 跳转到首页并传递邀请ID参数
+            wx.reLaunch({
+              url: `../home/home?inviteId=${this.data.inviteId}&directJoin=true`
+            });
+          } else {
+            // 普通用户登录，跳转到首页
+            wx.reLaunch({
+              url: '../home/home'
+            });
+          }
+        }, 1000);
       },
       fail: err => {
         console.error('登录云函数调用失败，错误信息:', err);

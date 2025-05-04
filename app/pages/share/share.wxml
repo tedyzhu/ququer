@@ -1,0 +1,15 @@
+<view class="share-container">
+  <block wx:if="{{loading}}">
+    <view class="loading-box">
+      <image class="logo" src="/assets/images/logo.svg" mode="aspectFit"></image>
+      <view class="loading-text">{{message}}</view>
+    </view>
+  </block>
+  
+  <block wx:else>
+    <view class="error-box" wx:if="{{error}}">
+      <image class="error-icon" src="/assets/images/logo.svg" mode="aspectFit"></image>
+      <view class="error-text">{{error}}</view>
+    </view>
+  </block>
+</view> 

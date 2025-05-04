@@ -1,5 +1,5 @@
 /**
- * 首页/会话列表页面逻辑
+ * 首页/欢迎页面逻辑
  */
 Page({
   /**
@@ -7,16 +7,43 @@ Page({
    */
   data: {
     userInfo: {},
-    conversations: [],
-    loading: true,
-    lastLoginTime: '',
-    isLoading: true
+    isLoading: true,
+    hasInvitation: false, // 是否已发出邀请
+    conversationStarted: false, // 是否已开始对话
+    partnerName: '', // 对话伙伴昵称
+    messages: [], // 消息列表
+    inputContent: '', // 输入框内容
+    conversationId: '', // 会话ID
+    directJoin: false, // 是否直接加入聊天
   },
 
   /**
    * 生命周期函数--监听页面加载
    */
   onLoad: function (options) {
+    console.log('首页加载，参数:', options);
+    // 检查是否从分享链接进入
+    if (options.inviteId) {
+      console.log('通过邀请链接进入，邀请ID:', options.inviteId);
+      this.setData({
+        conversationId: options.inviteId,
+        directJoin: options.directJoin === 'true' // 是否要直接加入聊天
+      });
+      
+      // 标记为受邀用户
+      wx.setStorageSync('isInvited', true);
+      wx.setStorageSync('inviteId', options.inviteId);
+      
+      // 如果用户还未登录，需要先去登录
+      const app = getApp();
+      if (!app.globalData.hasLogin) {
+        wx.redirectTo({
+          url: '../login/login'
+        });
+        return;
+      }
+    }
+    
     // 检查登录状态
     this.checkLoginStatus();
   },
@@ -25,10 +52,11 @@ Page({
    * 生命周期函数--监听页面显示
    */
   onShow: function () {
-    // 尝试加载会话列表
-    this.loadConversations();
-    // 获取用户最近登录时间
-    this.getUserData();
+    // 已登录状态下检查是否有未处理的邀请
+    const app = getApp();
+    if (app.globalData.hasLogin) {
+      this.checkInvitation();
+    }
   },
 
   /**
@@ -39,233 +67,182 @@ Page({
     if (!app.globalData.hasLogin) {
       console.log('用户未登录，跳转到登录页');
       wx.redirectTo({
-        url: '/app/pages/login/login'
+        url: '../login/login'
       });
       return;
     }
     
     console.log('用户已登录', app.globalData.userInfo);
     this.setData({
-      userInfo: app.globalData.userInfo
+      userInfo: app.globalData.userInfo,
+      isLoading: false
     });
-  },
-
-  /**
-   * 获取用户数据（包括最近登录时间）
-   */
-  getUserData: function() {
-    const app = getApp();
-    if (!app.globalData.hasLogin) return;
     
-    console.log('正在获取用户数据，openId:', app.globalData.userInfo.openId);
-    const db = wx.cloud.database();
-    db.collection('users').where({
-      openId: app.globalData.userInfo.openId
-    }).get({
-      success: res => {
-        console.log('获取用户数据成功:', res);
-        if (res.data && res.data.length > 0) {
-          const userData = res.data[0];
-          // 格式化登录时间
-          let loginTimeStr = '未知';
-          if (userData.lastLoginTime) {
-            const loginTime = new Date(userData.lastLoginTime);
-            loginTimeStr = `${loginTime.getFullYear()}-${loginTime.getMonth() + 1}-${loginTime.getDate()} ${loginTime.getHours()}:${loginTime.getMinutes()}`;
-          }
-          
-          this.setData({
-            lastLoginTime: loginTimeStr
-          });
-        } else {
-          console.log('未找到用户数据');
-        }
-      },
-      fail: err => {
-        console.error('获取用户数据失败', err);
-      }
-    });
+    // 如果需要直接加入聊天，立即处理邀请
+    if (this.data.directJoin && this.data.conversationId) {
+      console.log('直接加入聊天:', this.data.conversationId);
+      this.joinConversation(this.data.conversationId);
+    }
   },
-
+  
   /**
-   * 获取会话列表
+   * 检查是否有邀请需要处理
    */
-  fetchConversations: function () {
-    const that = this;
-    // 调用云函数获取会话列表
-    wx.cloud.callFunction({
-      name: 'getConversations',
-      success: res => {
-        console.log('获取会话列表成功', res);
-        if (res.result && res.result.success) {
-          // 处理会话列表数据
-          const conversations = res.result.conversations.map(conv => {
-            return {
-              id: conv.id,
-              avatarUrl: conv.contactInfo.avatarUrl || 'https://placekitten.com/80/80',
-              nickName: conv.contactInfo.nickName || '用户',
-              lastMessage: conv.lastMessage.destroyed ? '' : conv.lastMessage.content,
-              lastTime: that.formatTime(conv.lastMessage.time),
-              unread: 0, // 默认无未读
-              destroyed: conv.lastMessage.destroyed
-            };
-          });
-          
-          that.setData({
-            conversations: conversations,
-            loading: false
-          });
-          
-          // 更新全局数据
-          const app = getApp();
-          app.globalData.conversations = conversations;
-        } else {
-          // 获取失败时显示模拟数据
-          that.showMockData();
-        }
-      },
-      fail: err => {
-        console.error('获取会话列表失败', err);
-        // 获取失败时显示模拟数据
-        that.showMockData();
+  checkInvitation: function() {
+    // 如果已经直接处理了邀请，就不再重复处理
+    if (this.data.directJoin && this.data.conversationStarted) {
+      console.log('已直接加入聊天，不再重复处理邀请');
+      return;
+    }
+    
+    const isInvited = wx.getStorageSync('isInvited');
+    const inviteId = wx.getStorageSync('inviteId');
+    
+    if (isInvited && inviteId) {
+      console.log('处理邀请，ID:', inviteId);
+      this.joinConversation(inviteId);
+      
+      // 清除邀请标记，避免重复处理
+      wx.removeStorageSync('isInvited');
+    }
+  },
+  
+  /**
+   * 加入会话
+   */
+  joinConversation: function(inviteId) {
+    const app = getApp();
+    const userInfo = app.globalData.userInfo;
+    
+    // 模拟加入会话的过程
+    // 实际项目中应该调用云函数处理
+    setTimeout(() => {
+      this.setData({
+        conversationStarted: true,
+        partnerName: '向冬', // 实际应从服务器获取对方昵称
+        conversationId: inviteId,
+        messages: [
+          {
+            id: Date.now(),
+            content: '你好，欢迎加入蛐曲儿~',
+            isSelf: false,
+            timestamp: new Date().toISOString()
+          }
+        ]
+      });
+      
+      console.log('成功加入会话:', inviteId);
+      
+      // 通知对方已加入会话
+      this.notifyPartnerJoined(inviteId, userInfo);
+    }, 1000);
+  },
+  
+  /**
+   * 通知对方已加入会话
+   */
+  notifyPartnerJoined: function(conversationId, userInfo) {
+    // 这里应该调用云函数通知对方
+    console.log('通知对方已加入会话:', conversationId, userInfo);
+    // wx.cloud.callFunction 实现...
+    
+    // 模拟对方收到通知后的响应
+    setTimeout(() => {
+      if (this.data.messages.length === 1) {
+        // 添加一条来自对方的消息
+        const messages = this.data.messages.concat({
+          id: Date.now(),
+          content: '很高兴你能加入，开始聊天吧！',
+          isSelf: false,
+          timestamp: new Date().toISOString()
+        });
+        
+        this.setData({ messages });
       }
+    }, 2000);
+  },
+  
+  /**
+   * 响应输入框内容变化
+   */
+  onInputChange: function(e) {
+    this.setData({
+      inputContent: e.detail.value
     });
   },
   
   /**
-   * 显示模拟数据（作为备份）
+   * 发送消息
    */
-  showMockData: function() {
-    const mockConversations = [
-      {
-        id: '1',
-        avatarUrl: 'https://placekitten.com/80/80',
-        nickName: '张三',
-        lastMessage: '你好，这是一条测试消息',
-        lastTime: '14:25',
-        unread: 2,
-        destroyed: false
-      },
-      {
-        id: '2',
-        avatarUrl: 'https://placekitten.com/81/81',
-        nickName: '李四',
-        lastMessage: '',
-        lastTime: '昨天',
-        unread: 0,
-        destroyed: true
-      },
-      {
-        id: '3',
-        avatarUrl: 'https://placekitten.com/82/82',
-        nickName: '王五',
-        lastMessage: '请查看我发送的最新文档',
-        lastTime: '周一',
-        unread: 1,
-        destroyed: false
-      }
-    ];
-
+  sendMessage: function() {
+    const content = this.data.inputContent.trim();
+    if (!content) return;
+    
+    // 创建消息对象
+    const message = {
+      id: Date.now(),
+      content: content,
+      isSelf: true,
+      timestamp: new Date().toISOString()
+    };
+    
+    // 添加到本地消息列表
+    const messages = this.data.messages;
+    messages.push(message);
+    
     this.setData({
-      conversations: mockConversations,
-      loading: false
+      messages: messages,
+      inputContent: '' // 清空输入框
     });
-
-    // 更新全局数据
-    const app = getApp();
-    app.globalData.conversations = mockConversations;
+    
+    // 发送消息到服务器
+    this.sendMessageToServer(message);
   },
-
+  
   /**
-   * 格式化时间
+   * 将消息发送到服务器
    */
-  formatTime: function(timeStr) {
-    if (!timeStr) return '';
+  sendMessageToServer: function(message) {
+    // 这里调用云函数发送消息
+    console.log('发送消息到服务器:', message);
+    // wx.cloud.callFunction 实现...
     
-    const time = new Date(timeStr);
-    const now = new Date();
-    
-    // 今天的消息显示时间
-    if (time.toDateString() === now.toDateString()) {
-      return `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+    // 模拟对方收到消息后的回复
+    if (Math.random() > 0.5) { // 50%概率回复
+      setTimeout(() => {
+        const reply = {
+          id: Date.now(),
+          content: '收到你的消息了！',
+          isSelf: false,
+          timestamp: new Date().toISOString()
+        };
+        
+        const messages = this.data.messages.concat(reply);
+        this.setData({ messages });
+      }, 1500 + Math.random() * 1000); // 随机1.5-2.5秒回复
     }
-    
-    // 昨天的消息
-    const yesterday = new Date(now);
-    yesterday.setDate(now.getDate() - 1);
-    if (time.toDateString() === yesterday.toDateString()) {
-      return '昨天';
-    }
-    
-    // 一周内的消息显示星期几
-    const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-    const diffDays = Math.floor((now - time) / (24 * 3600 * 1000));
-    if (diffDays < 7) {
-      return weekdays[time.getDay()];
-    }
-    
-    // 更早的消息显示日期
-    return `${time.getMonth() + 1}-${time.getDate()}`;
   },
-
-  /**
-   * 打开聊天页面
-   * @param {Object} e - 事件对象
-   */
-  navigateToChat: function (e) {
-    const { id, nickname } = e.currentTarget.dataset;
-    wx.navigateTo({
-      url: `/app/pages/chat/chat?id=${id}&name=${encodeURIComponent(nickname)}`
-    });
-  },
-
-  /**
-   * 添加新联系人
-   */
-  addContact: function () {
-    wx.showToast({
-      title: '添加好友功能开发中',
-      icon: 'none'
-    });
-  },
-
+  
   /**
    * 用户点击右上角分享
    */
   onShareAppMessage: function () {
-    return {
-      title: '秘信 - 阅后即焚的私密聊天工具'
-    };
-  },
-
-  /**
-   * 加载会话列表
-   */
-  loadConversations: function() {
-    // 目前先显示空列表
-    this.setData({
-      isLoading: false,
-      conversations: []
-    });
+    const app = getApp();
+    let conversationId = this.data.conversationId;
     
-    // 稍后可以添加真实的会话列表加载逻辑
-    console.log('加载会话列表');
-  },
-
-  /**
-   * 页面相关事件处理函数--监听用户下拉动作
-   */
-  onPullDownRefresh: function () {
-    this.loadConversations();
-    wx.stopPullDownRefresh();
-  },
-
-  /**
-   * 添加新会话按钮点击
-   */
-  onAddBtnTap: function() {
-    wx.showToast({
-      title: '新建会话功能开发中',
-      icon: 'none'
-    });
+    // 如果没有会话ID，创建一个新的
+    if (!conversationId) {
+      conversationId = 'invite_' + Date.now() + '_' + app.globalData.userInfo.nickName;
+      this.setData({
+        conversationId: conversationId,
+        hasInvitation: true
+      });
+    }
+    
+    return {
+      title: `${app.globalData.userInfo.nickName}邀请你加入蛐曲儿私密聊天`,
+      path: `/pages/home/home?inviteId=${conversationId}`,
+      imageUrl: '/assets/images/logo.svg'
+    };
   }
-}) 
+}); 

@@ -1,0 +1,65 @@
+.share-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  height: 100vh;
+  background-color: #ffffff;
+  padding: 100rpx 50rpx 50rpx;
+  box-sizing: border-box;
+}
+
+.logo-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.logo {
+  width: 180rpx;
+  height: 180rpx;
+  margin-bottom: 30rpx;
+}
+
+.app-name {
+  font-size: 48rpx;
+  font-weight: bold;
+  color: #333333;
+  margin-bottom: 20rpx;
+}
+
+.loading-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 30rpx 0;
+}
+
+.loading-spinner {
+  width: 80rpx;
+  height: 80rpx;
+  border: 8rpx solid #f3f3f3;
+  border-top: 8rpx solid #6d4aff;
+  border-radius: 50%;
+  margin-bottom: 40rpx;
+  animation: spin 1s linear infinite;
+}
+
+.loading-text {
+  font-size: 32rpx;
+  color: #666666;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.footer-text {
+  font-size: 28rpx;
+  color: #999999;
+  margin-top: 60rpx;
+  text-align: center;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+} 

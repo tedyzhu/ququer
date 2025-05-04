@@ -1,0 +1,82 @@
+<view class="chat-container">
+  <!-- 销毁计时器 -->
+  <view class="destroy-timer" wx:if="{{showDestroyTimer}}">
+    <view class="timer-text">{{destroyTimerText}}</view>
+  </view>
+  
+  <!-- 聊天内容区域 -->
+  <scroll-view
+    class="messages-container"
+    scroll-y="true"
+    scroll-into-view="{{scrollIntoView}}"
+    enable-flex="true"
+  >
+    <!-- 正在加载 -->
+    <view wx:if="{{isLoading}}" class="loading-container">
+      <view class="loading"></view>
+      <text>加载中...</text>
+    </view>
+    
+    <!-- 消息列表 -->
+    <view wx:else class="messages-list">
+      <block wx:for="{{messages}}" wx:key="id">
+        <!-- 系统消息 -->
+        <view 
+          wx:if="{{item.isSystem}}"
+          id="{{item.id}}"
+          class="message-wrapper system"
+        >
+          <view class="system-message">
+            <view class="message-text">{{item.content}}</view>
+          </view>
+        </view>
+        
+        <!-- 普通消息 -->
+        <view 
+          wx:else
+          id="{{item.id}}"
+          class="message-wrapper {{item.isSelf ? 'self' : 'other'}}"
+          bindlongpress="onMessageLongTap"
+          data-msgid="{{item.id}}"
+        >
+          <!-- 头像 -->
+          <image class="avatar" src="{{item.avatar}}" mode="aspectFill"></image>
+          
+          <!-- 消息内容 -->
+          <view class="message-content {{item.isDestroying ? 'destroying' : ''}} {{item.isDestroyed ? 'destroyed' : ''}}"
+          >
+            <view class="message-text">{{item.content}}</view>
+            <view class="message-time">{{item.time}}</view>
+          </view>
+        </view>
+      </block>
+    </view>
+  </scroll-view>
+  
+  <!-- 底部输入区域 -->
+  <view class="input-container">
+    <view class="voice-btn" bindtap="toggleVoiceInput">
+      <image class="icon" src="/assets/images/mic.png" mode="aspectFit"></image>
+    </view>
+    
+    <input
+      class="message-input"
+      type="text"
+      placeholder="输入消息..."
+      value="{{inputValue}}"
+      bindinput="onInputChange"
+      confirm-type="send"
+      bindconfirm="sendMessage"
+    />
+    
+    <view class="emoji-btn" bindtap="openEmojiPicker">
+      <image class="icon" src="/assets/images/emoji.png" mode="aspectFit"></image>
+    </view>
+    
+    <view class="more-btn" bindtap="openMoreFunctions">
+      <image class="icon" src="/assets/images/more.png" mode="aspectFit"></image>
+    </view>
+    
+    <view class="send-btn" bindtap="sendMessage" wx:if="{{inputValue.length > 0}}">发送</view>
+  </view>
+</view> 

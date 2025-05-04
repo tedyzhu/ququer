@@ -1,6 +1,6 @@
 <view class="container">
   <view class="header">
-    <view class="title">会话列表</view>
+    <view class="title">蛐曲儿</view>
   </view>
   
   <view class="content">
@@ -9,16 +9,36 @@
       <text>加载中...</text>
     </view>
     
-    <view wx:elif="{{conversations.length === 0}}" class="empty-container">
-      <image class="empty-icon" src="/assets/images/logo.svg" mode="aspectFit"></image>
-      <text class="empty-text">暂无会话</text>
-      <text class="empty-desc">点击右下角按钮开始新的对话</text>
-    </view>
-    
-    <view wx:else class="conversation-list">
-      <!-- 会话列表内容 -->
+    <view wx:else class="welcome-container">
+      <view wx:if="{{conversationStarted}}" class="chat-header">
+        <view class="welcome-title">{{userInfo.nickName}} 和 {{partnerName}} ~</view>
+        <view class="welcome-subtitle">{{partnerName}} 加入了蛐曲儿～</view>
+        
+        <view class="chat-container">
+          <scroll-view scroll-y="true" class="message-list" scroll-into-view="msg-{{messages[messages.length-1].id}}">
+            <block wx:for="{{messages}}" wx:key="id">
+              <view class="message {{item.isSelf ? 'self' : 'other'}}" id="msg-{{item.id}}">
+                <view class="message-content">{{item.content}}</view>
+              </view>
+            </block>
+          </scroll-view>
+          
+          <view class="input-area">
+            <input class="message-input" bindinput="onInputChange" value="{{inputContent}}" placeholder="输入消息..." confirm-type="send" bindconfirm="sendMessage" />
+            <button class="send-btn" bindtap="sendMessage">发送</button>
+          </view>
+        </view>
+      </view>
+      <view wx:elif="{{hasInvitation}}">
+        <view class="welcome-title">{{userInfo.nickName}} ~</view>
+        <view class="welcome-subtitle">已发出邀请，稍等，稍等一会儿～</view>
+        <view class="invite-tips">邀请已发送，等待好友加入后即可开始聊天</view>
+      </view>
+      <view wx:else>
+        <view class="welcome-title">{{userInfo.nickName}} ~</view>
+        <view class="welcome-subtitle">等待朋友加入～</view>
+        <view class="welcome-guide">可点击"..."转发来邀请朋友，一起开始蛐曲儿～</view>
+      </view>
     </view>
   </view>
-  
-  <view class="add-btn" bindtap="onAddBtnTap">+</view>
 </view> 
