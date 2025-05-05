@@ -146,8 +146,35 @@
   color: var(--primary-color);
 }
 
+.privacy-text {
+  font-size: 24rpx;
+  color: #999999;
+  text-align: center;
+  margin-top: 30rpx;
+  line-height: 1.5;
+}
+
 .tips {
   font-size: 24rpx;
   color: #999;
   margin-bottom: 20rpx;
+}
+
+.debug-section {
+  margin-top: 60rpx;
+  padding: 20rpx;
+  border-top: 1rpx solid #eee;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.debug-button {
+  margin: 10rpx;
+  font-size: 24rpx;
+  padding: 10rpx;
+  background: #f5f5f5;
+  color: #666;
+  border: 1rpx solid #ddd;
+  border-radius: 6rpx;
 } 

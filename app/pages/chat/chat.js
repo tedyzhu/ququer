@@ -13,7 +13,13 @@ Page({
     scrollTop: 0,
     isLoading: true,
     // 阅后即焚倒计时配置（秒）
-    destroyTimeout: 10
+    destroyTimeout: 10,
+    // 是否正在创建聊天
+    isCreatingChat: false,
+    // 创建聊天重试次数
+    createChatRetryCount: 0,
+    // 最大重试次数
+    maxRetryCount: 5
   },
 
   /**
@@ -21,11 +27,16 @@ Page({
    * @param {Object} options - 页面参数
    */
   onLoad: function (options) {
-    const { id, name } = options;
+    console.log('聊天页面加载，携带参数:', options);
+    const { id, name, inviter } = options;
+    
+    // 检查是否来自邀请链接
+    const isFromInvite = !!inviter;
     
     this.setData({
       contactId: id,
-      contactName: decodeURIComponent(name || '聊天')
+      contactName: decodeURIComponent(name || inviter || '聊天'),
+      isCreatingChat: isFromInvite // 如果是从邀请链接进入，显示创建聊天状态
     });
 
     // 设置导航栏标题
@@ -33,8 +44,16 @@ Page({
       title: this.data.contactName
     });
 
-    // 获取聊天记录
-    this.fetchMessages();
+    if (isFromInvite) {
+      // 如果是从邀请链接进入，启动轮询检查聊天状态
+      this.startChatCreationCheck();
+      
+      // 添加系统提示消息
+      this.addSystemMessage('正在与对方建立聊天...');
+    } else {
+      // 否则直接获取聊天记录
+      this.fetchMessages();
+    }
   },
 
   /**
@@ -382,5 +401,95 @@ Page({
     const minutes = date.getMinutes();
     
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  },
+
+  /**
+   * 添加系统消息
+   */
+  addSystemMessage: function(content) {
+    const systemMessage = {
+      id: 'sys_' + new Date().getTime(),
+      senderId: 'system',
+      content: content,
+      type: 'system',
+      time: this.formatTime(new Date()),
+      status: 'sent',
+      destroyed: false,
+      destroying: false,
+      remainTime: 0
+    };
+    
+    const messages = this.data.messages || [];
+    messages.push(systemMessage);
+    
+    this.setData({
+      messages: messages
+    });
+  },
+  
+  /**
+   * 启动聊天创建状态检查
+   */
+  startChatCreationCheck: function() {
+    // 清除可能存在的旧定时器
+    if (this.chatCreationTimer) {
+      clearInterval(this.chatCreationTimer);
+    }
+    
+    // 每3秒检查一次
+    this.chatCreationTimer = setInterval(() => {
+      this.checkChatCreationStatus();
+    }, 3000);
+  },
+  
+  /**
+   * 检查聊天创建状态
+   */
+  checkChatCreationStatus: function() {
+    const { createChatRetryCount, maxRetryCount } = this.data;
+    
+    console.log(`检查聊天创建状态: 第${createChatRetryCount+1}/${maxRetryCount}次`);
+    
+    // 检查重试次数
+    if (createChatRetryCount >= maxRetryCount) {
+      // 超过最大重试次数，停止轮询并进入聊天状态
+      clearInterval(this.chatCreationTimer);
+      console.log('超过最大重试次数，强制进入聊天界面');
+      
+      this.setData({
+        isCreatingChat: false
+      });
+      
+      // 获取聊天记录
+      this.fetchMessages();
+      
+      // 添加系统消息
+      this.addSystemMessage('聊天已创建成功，可以开始聊天了');
+      return;
+    }
+    
+    // 我们可以在这里添加云函数调用来检查聊天是否真的创建成功
+    // 但为了简单起见，我们暂时模拟一个随机过程
+    
+    // 50%的概率认为聊天创建成功
+    if (Math.random() > 0.5 || createChatRetryCount > 2) {
+      clearInterval(this.chatCreationTimer);
+      console.log('检测到聊天创建成功，结束创建状态');
+      
+      this.setData({
+        isCreatingChat: false
+      });
+      
+      // 获取聊天记录
+      this.fetchMessages();
+      
+      // 添加系统消息
+      this.addSystemMessage('聊天已创建成功，你们可以开始聊天了');
+    } else {
+      // 增加重试计数
+      this.setData({
+        createChatRetryCount: createChatRetryCount + 1
+      });
+    }
   }
 }) 

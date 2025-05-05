@@ -10,7 +10,7 @@
       <button class="avatar-wrapper" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
         <image class="avatar" src="{{avatarUrl}}"></image>
       </button>
-      <view class="tips">点击头像可更换(真机测试)</view>
+      <view class="tips">点击头像可更换</view>
       <input type="nickname" name="nickname" class="nickname-input" placeholder="请输入昵称" />
     </view>
     
@@ -18,4 +18,13 @@
       开始聊天
     </button>
   </form>
+  
+  <view class="privacy-text">
+    登录即表示您同意蛐曲儿的隐私保护政策
+  </view>
+  
+  <view class="debug-section" wx:if="{{isDebugMode}}">
+    <button class="debug-button" bindtap="debugClearStorage">清除存储</button>
+    <button class="debug-button" bindtap="debugReInitCloud">重新初始化云环境</button>
+  </view>
 </view> 

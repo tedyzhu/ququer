@@ -10,7 +10,8 @@ Page({
     avatarUrl: 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0',
     inviteId: '', // 邀请ID
     inviter: '', // 邀请人
-    isInvited: false // 是否是被邀请的用户
+    isInvited: false, // 是否是被邀请的用户
+    isDebugMode: false // 调试模式开关
   },
 
   /**
@@ -49,6 +50,83 @@ Page({
           isInvited: true
         });
       }
+    }
+    
+    // 检查是否开启调试模式
+    this.checkDebugMode();
+  },
+  
+  /**
+   * 检查是否开启调试模式
+   */
+  checkDebugMode: function() {
+    try {
+      // 在开发环境中可以开启调试模式
+      const systemInfo = wx.getSystemInfoSync();
+      if (systemInfo.platform === 'devtools') {
+        this.setData({
+          isDebugMode: true
+        });
+        console.log('已开启调试模式');
+      }
+    } catch (e) {
+      console.error('获取系统信息失败', e);
+    }
+  },
+
+  /**
+   * 清除存储(调试功能)
+   */
+  debugClearStorage: function() {
+    try {
+      wx.clearStorageSync();
+      wx.showToast({
+        title: '存储已清除',
+        icon: 'success'
+      });
+      
+      // 重置全局数据
+      const app = getApp();
+      app.globalData.userInfo = null;
+      app.globalData.hasLogin = false;
+      app.globalData.openId = '';
+      app.globalData.cloudInitialized = false;
+      
+      console.log('存储和全局数据已重置');
+    } catch (e) {
+      console.error('清除存储失败', e);
+      wx.showToast({
+        title: '清除失败',
+        icon: 'error'
+      });
+    }
+  },
+
+  /**
+   * 重新初始化云环境(调试功能)
+   */
+  debugReInitCloud: function() {
+    const app = getApp();
+    if (app.initCloud && typeof app.initCloud === 'function') {
+      // 先重置初始化状态
+      app.globalData.cloudInitialized = false;
+      
+      if (app.initCloud()) {
+        wx.showToast({
+          title: '云环境已重新初始化',
+          icon: 'success'
+        });
+      } else {
+        wx.showToast({
+          title: '重新初始化失败',
+          icon: 'error'
+        });
+      }
+    } else {
+      wx.showToast({
+        title: '初始化方法不存在',
+        icon: 'error'
+      });
     }
   },
 

@@ -1,4 +1,12 @@
 <view class="container chat-container">
+  <!-- 创建聊天状态覆盖层 -->
+  <view class="creating-chat-overlay" wx:if="{{isCreatingChat}}">
+    <view class="creating-chat-content">
+      <view class="creating-chat-spinner"></view>
+      <text class="creating-chat-text">正在创建聊天...</text>
+    </view>
+  </view>
+  
   <!-- 聊天消息区域 -->
   <scroll-view 
     id="scroll-view"
@@ -62,7 +70,8 @@
         bindinput="handleInputChange"
         confirm-type="send"
         bindconfirm="sendMessage"
-        placeholder="输入消息..." />
+        placeholder="输入消息..."
+        disabled="{{isCreatingChat}}" />
       
       <view class="toolbar">
         <view class="tool-button emotions-button">
@@ -78,7 +87,7 @@
     <button 
       class="send-button {{inputValue ? 'active' : ''}}" 
       bindtap="sendMessage"
-      disabled="{{!inputValue}}">
+      disabled="{{!inputValue || isCreatingChat}}">
       发送
     </button>
   </view>
