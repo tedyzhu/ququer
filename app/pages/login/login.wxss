@@ -28,6 +28,9 @@
   font-size: 28rpx;
   color: #666;
   margin-bottom: 60rpx;
+  text-align: center;
+  line-height: 1.5;
+  width: 80%;
 }
 
 .user-info-container {
@@ -72,7 +75,7 @@
   justify-content: center;
   width: 80%;
   height: 88rpx;
-  background: #07C160;
+  background: #000000;
   color: #fff;
   font-size: 32rpx;
   border-radius: 44rpx;

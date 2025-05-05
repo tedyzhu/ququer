@@ -2,26 +2,25 @@
   <view class="logo-container">
     <image class="logo" src="/assets/images/logo.svg" mode="aspectFit"></image>
   </view>
-  <view class="title">秘信</view>
-  <view class="subtitle">阅后即焚，保护隐私</view>
+  <view class="title">蛐曲儿</view>
+  <view class="subtitle">聊天有时像夏日虫鸣，听过便随风～</view>
   
   <form bindsubmit="onFormSubmit">
     <view class="user-info-container">
       <button class="avatar-wrapper" open-type="chooseAvatar" bind:chooseavatar="onChooseAvatar">
-        <image class="avatar" src="{{avatarUrl || '/assets/images/default-avatar.png'}}"></image>
+        <image class="avatar" src="{{avatarUrl || 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242L3M4EnjhT8l8cubIgL8F7nM7YhnHR7R0FnsPO0Cdua8ZrOeYuwibLw1ohEJCQKfTgNw/0'}}"></image>
       </button>
       <view class="tips">点击头像可更换</view>
       <input type="nickname" class="nickname-input" placeholder="请输入昵称" bindinput="onNickNameInput" value="{{nickName}}" />
     </view>
     
     <button class="login-btn" form-type="submit" loading="{{submitting}}">
-      <image class="wechat-icon" src="/assets/images/logo.svg" mode="aspectFit"></image>
       开始聊天
     </button>
   </form>
   
   <view class="privacy-text">
-    登录即表示您同意阅后即焚的隐私保护政策
+    登录即表示您同意蛐曲儿的隐私保护政策
   </view>
   
   <view class="debug-section" wx:if="{{isDebugMode}}">
