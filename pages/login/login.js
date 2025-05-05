@@ -404,33 +404,62 @@ Page({
    * 跳转到首页
    */
   redirectToHome: function() {
-    console.log('登录成功，准备跳转到首页');
+    console.log('登录成功，准备跳转页面');
     
     // 检查是否有等待处理的邀请
     const pendingInvite = wx.getStorageSync('pendingInvite');
-    let url = '/pages/home/home';
     
+    // 如果有邀请信息，直接跳转到聊天页面
     if (pendingInvite && pendingInvite.inviteId) {
-      console.log('发现待处理的邀请:', pendingInvite);
-      // 构建带参数的URL
-      url = `/pages/home/home?inviteId=${pendingInvite.inviteId}&inviter=${encodeURIComponent(pendingInvite.inviter || '朋友')}`;
+      console.log('发现待处理的邀请，直接跳转到聊天页面:', pendingInvite);
       
-      // 不要清除pendingInvite，让home页面去清除它，防止跳转过程中丢失
+      // 构建跳转URL
+      const url = `/pages/chat/chat?id=${pendingInvite.inviteId}&inviter=${encodeURIComponent(pendingInvite.inviter || '朋友')}`;
+      
+      // 使用reLaunch跳转
+      wx.reLaunch({
+        url: url,
+        success: () => {
+          console.log('成功跳转到聊天页面');
+          
+          // 不要立即清除pendingInvite，让聊天页面处理完成后再清除
+          setTimeout(() => {
+            wx.removeStorageSync('pendingInvite');
+          }, 5000);
+        },
+        fail: (err) => {
+          console.error('跳转到聊天页面失败:', err);
+          
+          // 如果跳转失败，尝试使用navigateTo
+          wx.navigateTo({
+            url: url,
+            fail: (err2) => {
+              console.error('navigateTo也失败:', err2);
+              
+              // 最后尝试跳转到首页
+              wx.reLaunch({
+                url: '/pages/home/home'
+              });
+            }
+          });
+        }
+      });
+    } else {
+      // 没有邀请，跳转到首页
+      console.log('没有待处理的邀请，跳转到首页');
+      wx.reLaunch({
+        url: '/pages/home/home',
+        success: () => {
+          console.log('成功跳转到首页');
+        },
+        fail: (err) => {
+          console.error('跳转到首页失败:', err);
+          // 如果跳转失败，尝试使用navigateTo
+          wx.navigateTo({
+            url: '/pages/home/home'
+          });
+        }
+      });
     }
-    
-    // 使用reLaunch确保正确加载首页，处理可能的邀请参数
-    wx.reLaunch({
-      url: url,
-      success: () => {
-        console.log('成功跳转到首页');
-      },
-      fail: (err) => {
-        console.error('跳转到首页失败:', err);
-        // 如果跳转失败，尝试使用navigateTo
-        wx.navigateTo({
-          url: url
-        });
-      }
-    });
   }
 }) 
