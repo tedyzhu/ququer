@@ -1,13 +1,16 @@
 {
   "pages": [
     "app/pages/login/login",
-    "app/pages/home/home"
+    "app/pages/home/home",
+    "app/pages/chat/chat",
+    "app/pages/chat/detail"
   ],
   "window": {
     "backgroundTextStyle": "light",
     "navigationBarBackgroundColor": "#fff",
-    "navigationBarTitleText": "秘信",
-    "navigationBarTextStyle": "black"
+    "navigationBarTitleText": "蛐曲儿",
+    "navigationBarTextStyle": "black",
+    "navigationStyle": "custom"
   },
   "style": "v2",
   "sitemapLocation": "sitemap.json",

@@ -182,8 +182,11 @@ Page({
             console.log('被邀请用户登录成功，直接进入聊天，邀请ID:', this.data.inviteId);
             
             // 跳转到聊天页面
+            const chatUrl = `/app/pages/chat/chat?id=${this.data.inviteId}&inviter=${encodeURIComponent(this.data.inviter || '朋友')}`;
+            console.log('准备跳转到聊天页面:', chatUrl);
+            
             wx.reLaunch({
-              url: `/pages/chat/chat?id=${this.data.inviteId}&inviter=${encodeURIComponent(this.data.inviter || '朋友')}`,
+              url: chatUrl,
               success: () => {
                 console.log('成功跳转到聊天页面');
                 
@@ -196,16 +199,51 @@ Page({
               },
               fail: (err) => {
                 console.error('跳转到聊天页面失败:', err);
-                // 如果失败，跳转到首页
+                
+                // 尝试使用另一种路径格式
+                const altChatUrl = `../chat/chat?id=${this.data.inviteId}&inviter=${encodeURIComponent(this.data.inviter || '朋友')}`;
+                console.log('尝试使用相对路径跳转:', altChatUrl);
+                
                 wx.reLaunch({
-                  url: '/pages/home/home'
+                  url: altChatUrl,
+                  success: () => {
+                    console.log('使用相对路径跳转成功');
+                  },
+                  fail: (err2) => {
+                    console.error('相对路径跳转也失败:', err2);
+                    // 弹窗提示跳转失败
+                    wx.showModal({
+                      title: '跳转失败',
+                      content: '无法进入聊天页面，即将进入首页',
+                      showCancel: false,
+                      success: () => {
+                        // 如果失败，跳转到首页
+                        wx.reLaunch({
+                          url: '../home/home'
+                        });
+                      }
+                    });
+                  }
                 });
               }
             });
           } else {
             // 普通用户登录，跳转到首页
+            console.log('普通用户登录成功，跳转到首页');
             wx.reLaunch({
-              url: '/pages/home/home'
+              url: '../home/home',
+              success: () => {
+                console.log('成功跳转到首页');
+              },
+              fail: (err) => {
+                console.error('跳转到首页失败:', err);
+                // 弹窗提示跳转失败
+                wx.showModal({
+                  title: '跳转失败',
+                  content: '无法进入首页，请重启小程序',
+                  showCancel: false
+                });
+              }
             });
           }
         }, 1000);
