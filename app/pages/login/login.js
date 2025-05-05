@@ -9,6 +9,7 @@ Page({
     isLoading: false,
     avatarUrl: 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0',
     inviteId: '', // 邀请ID
+    inviter: '', // 邀请人
     isInvited: false // 是否是被邀请的用户
   },
 
@@ -16,6 +17,8 @@ Page({
    * 页面加载时执行
    */
   onLoad: function(options) {
+    console.log('登录页面加载，参数:', options);
+    
     // 检查云环境是否已初始化
     const app = getApp();
     if (!app.globalData.cloudInitialized) {
@@ -25,16 +28,27 @@ Page({
       console.log('云环境已初始化');
     }
 
-    // 检查是否有邀请信息
-    const isInvited = wx.getStorageSync('isInvited');
-    const inviteId = wx.getStorageSync('inviteId');
-    
-    if (isInvited && inviteId) {
-      console.log('检测到邀请信息，邀请ID:', inviteId);
+    // 检查是否有待处理的邀请信息
+    const pendingInvite = wx.getStorageSync('pendingInvite');
+    if (pendingInvite && pendingInvite.inviteId) {
+      console.log('检测到待处理邀请:', pendingInvite);
       this.setData({
-        inviteId: inviteId,
+        inviteId: pendingInvite.inviteId,
+        inviter: pendingInvite.inviter || '朋友',
         isInvited: true
       });
+    } else {
+      // 向下兼容旧的存储方式
+      const isInvited = wx.getStorageSync('isInvited');
+      const inviteId = wx.getStorageSync('inviteId');
+      
+      if (isInvited && inviteId) {
+        console.log('检测到旧格式邀请信息，邀请ID:', inviteId);
+        this.setData({
+          inviteId: inviteId,
+          isInvited: true
+        });
+      }
     }
   },
 
@@ -166,14 +180,32 @@ Page({
         setTimeout(() => {
           if (this.data.isInvited && this.data.inviteId) {
             console.log('被邀请用户登录成功，直接进入聊天，邀请ID:', this.data.inviteId);
-            // 跳转到首页并传递邀请ID参数
+            
+            // 跳转到聊天页面
             wx.reLaunch({
-              url: `../home/home?inviteId=${this.data.inviteId}&directJoin=true`
+              url: `/pages/chat/chat?id=${this.data.inviteId}&inviter=${encodeURIComponent(this.data.inviter || '朋友')}`,
+              success: () => {
+                console.log('成功跳转到聊天页面');
+                
+                // 登录成功并跳转后，延迟一段时间再清除邀请信息
+                setTimeout(() => {
+                  wx.removeStorageSync('pendingInvite');
+                  wx.removeStorageSync('isInvited');
+                  wx.removeStorageSync('inviteId');
+                }, 5000);
+              },
+              fail: (err) => {
+                console.error('跳转到聊天页面失败:', err);
+                // 如果失败，跳转到首页
+                wx.reLaunch({
+                  url: '/pages/home/home'
+                });
+              }
             });
           } else {
             // 普通用户登录，跳转到首页
             wx.reLaunch({
-              url: '../home/home'
+              url: '/pages/home/home'
             });
           }
         }, 1000);

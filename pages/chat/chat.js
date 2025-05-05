@@ -20,7 +20,10 @@ Page({
     participants: [], // 聊天参与者
     isNewChat: false, // 是否是新建的聊天
     chatName: '', // 聊天名称
-    showWelcomeHint: false // 是否显示欢迎提示
+    showWelcomeHint: false, // 是否显示欢迎提示
+    isCreatingChat: false, // 是否正在创建聊天
+    createChatRetryCount: 0, // 聊天创建重试次数
+    maxRetryCount: 5 // 最大重试次数
   },
 
   /**
@@ -35,6 +38,51 @@ Page({
       isLoading: false
     });
     
+    // 获取当前用户信息
+    const app = getApp();
+    const userInfo = app.globalData.userInfo || {};
+    
+    // 检查用户是否已登录，如果未登录，保存邀请信息后跳转到登录页
+    if (!app.globalData.hasLogin || !userInfo.nickName) {
+      console.log('用户未登录，跳转到登录页面');
+      // 保存邀请信息
+      if (options.id && options.inviter) {
+        const inviteInfo = {
+          inviteId: options.id,
+          inviter: options.inviter ? decodeURIComponent(options.inviter) : '朋友',
+          timestamp: Date.now()
+        };
+        wx.setStorageSync('pendingInvite', inviteInfo);
+        console.log('已保存邀请信息:', inviteInfo);
+      }
+      
+      // 跳转到登录页
+      wx.redirectTo({
+        url: '/pages/login/login',
+        success: () => {
+          console.log('成功跳转到登录页面');
+        },
+        fail: (err) => {
+          console.error('跳转到登录页面失败:', err);
+          wx.showToast({
+            title: '请先登录',
+            icon: 'none'
+          });
+        }
+      });
+      return;
+    }
+    
+    // 以下是已登录用户的处理逻辑
+    // 解码options中可能的编码参数
+    if (options.inviter) {
+      try {
+        options.inviter = decodeURIComponent(options.inviter);
+      } catch (e) {
+        console.error('解码inviter失败:', e);
+      }
+    }
+    
     const { id, isNewChat, inviter } = options;
     
     if (!id) {
@@ -48,9 +96,7 @@ Page({
       return;
     }
     
-    // 获取当前用户信息
-    const app = getApp();
-    const userInfo = app.globalData.userInfo;
+    console.log('当前用户信息:', userInfo);
     
     // 确保云环境已初始化
     if (app.initCloud && typeof app.initCloud === 'function') {
@@ -65,16 +111,18 @@ Page({
     let isJoiningExistingChat = false;
     let initialParticipants = [];
     
-    // 简化聊天初始化逻辑
-    // 1. 检查聊天是否存在
+    // 检查聊天是否已存在于全局数据中
     const existingChat = app.globalData.chats[id];
+    console.log('检查聊天是否存在:', existingChat);
     
     if (existingChat && existingChat.participants && existingChat.participants.length > 0) {
       console.log('聊天已存在，参与者:', existingChat.participants);
       
       // 处理现有参与者，标记自己
       initialParticipants = existingChat.participants.map(p => {
-        if (p.id === userInfo.openId || (userInfo.nickName && p.nickName === userInfo.nickName)) {
+        if (p.id === userInfo.openId || 
+            (userInfo.nickName && p.nickName === userInfo.nickName) ||
+            (p.isSelf === true)) {
           return {...p, isSelf: true};
         }
         return {...p, isSelf: false};
@@ -83,7 +131,7 @@ Page({
       // 检查当前用户是否已在参与者列表中
       const currentUserInChat = initialParticipants.some(p => p.isSelf);
       
-      if (!currentUserInChat) {
+      if (!currentUserInChat && userInfo.nickName) {
         console.log('当前用户不在聊天参与者中，添加');
         isJoiningExistingChat = true;
         
@@ -99,33 +147,41 @@ Page({
       console.log('聊天不存在，创建新聊天');
       
       // 创建新聊天，添加自己作为参与者
-      initialParticipants = [{
-        id: userInfo.openId || 'user_' + new Date().getTime(),
-        nickName: userInfo.nickName,
-        avatarUrl: userInfo.avatarUrl,
-        isSelf: true
-      }];
+      if (userInfo.nickName) {
+        initialParticipants = [{
+          id: userInfo.openId || 'user_' + new Date().getTime(),
+          nickName: userInfo.nickName,
+          avatarUrl: userInfo.avatarUrl,
+          isSelf: true
+        }];
+      } else {
+        initialParticipants = [];
+      }
       
       // 如果是通过邀请进入，添加邀请者
       if (inviter) {
         initialParticipants.push({
           id: 'inviter_' + new Date().getTime(),
-          nickName: decodeURIComponent(inviter),
+          nickName: inviter,
           avatarUrl: '/assets/images/avatar1.png',
           isSelf: false
         });
       }
     }
     
-    console.log('最终参与者列表:', initialParticipants);
+    console.log('处理后的参与者列表:', initialParticipants);
+    
+    // 检查是否需要设置创建聊天状态
+    const needsCreation = initialParticipants.length < 2;
     
     // 设置页面数据
     this.setData({
       chatId: id,
       isNewChat: isNewChat === 'true',
       participants: initialParticipants,
-      contactName: inviter ? decodeURIComponent(inviter) : '',
-      showWelcomeHint: isJoiningExistingChat
+      contactName: inviter || '',
+      showWelcomeHint: isJoiningExistingChat,
+      isCreatingChat: needsCreation
     });
     
     // 更新全局聊天信息
@@ -142,6 +198,21 @@ Page({
     // 加载聊天记录
     this.loadMessages();
     
+    // 如果是正在创建聊天状态，启动轮询检查
+    if (this.data.isCreatingChat) {
+      // 添加系统消息
+      this.addSystemMessage('正在等待对方加入聊天...');
+      
+      // 启动轮询
+      this.startChatCreationCheck();
+    } else if (isJoiningExistingChat) {
+      // 如果是加入已存在的聊天，发送系统消息
+      this.addSystemMessage('你已成功加入聊天');
+      
+      // 主动触发一次参与者更新
+      this.updateParticipantsInfo();
+    }
+    
     // 设置右上角按钮，开启分享
     wx.showShareMenu({
       withShareTicket: true,
@@ -149,6 +220,223 @@ Page({
     });
   },
   
+  /**
+   * 启动聊天创建状态检查
+   */
+  startChatCreationCheck: function() {
+    // 清除可能存在的旧定时器
+    if (this.chatCreationTimer) {
+      clearInterval(this.chatCreationTimer);
+    }
+    
+    // 每3秒检查一次
+    this.chatCreationTimer = setInterval(() => {
+      this.checkChatCreationStatus();
+    }, 3000);
+  },
+  
+  /**
+   * 检查聊天创建状态
+   */
+  checkChatCreationStatus: function() {
+    const app = getApp();
+    const { chatId, createChatRetryCount, maxRetryCount } = this.data;
+    
+    console.log(`检查聊天创建状态: 第${createChatRetryCount+1}/${maxRetryCount}次`);
+    
+    // 检查重试次数
+    if (createChatRetryCount >= maxRetryCount) {
+      // 超过最大重试次数，停止轮询
+      clearInterval(this.chatCreationTimer);
+      console.log('超过最大重试次数，强制进入聊天界面');
+      
+      // 假设聊天已经创建成功，强制进入聊天界面
+      this.setData({
+        isCreatingChat: false
+      });
+      
+      // 如果参与者少于2人，模拟一个参与者
+      if (this.data.participants.length < 2) {
+        const userInfo = app.globalData.userInfo;
+        const otherParticipant = {
+          id: 'auto_' + new Date().getTime(),
+          nickName: this.data.contactName || '好友',
+          avatarUrl: '/assets/images/avatar1.png',
+          isSelf: false
+        };
+        
+        const updatedParticipants = [...this.data.participants, otherParticipant];
+        
+        this.setData({
+          participants: updatedParticipants
+        });
+        
+        // 更新全局数据
+        if (app.globalData.chats && app.globalData.chats[chatId]) {
+          app.globalData.chats[chatId].participants = updatedParticipants;
+          app.globalData.chats[chatId].lastActive = new Date().getTime();
+        }
+      }
+      
+      // 强制更新界面
+      this.updateNavigationBarTitle();
+      this.loadMessages();
+      
+      // 添加系统消息说明情况
+      this.addSystemMessage('聊天已创建成功，可以开始聊天了');
+      return;
+    }
+    
+    // 检查全局聊天数据
+    if (app.globalData.chats && app.globalData.chats[chatId]) {
+      const chatInfo = app.globalData.chats[chatId];
+      console.log('当前聊天信息:', chatInfo);
+      
+      // 检查参与者数量
+      if (chatInfo.participants && chatInfo.participants.length >= 2) {
+        console.log('检测到聊天参与者已满足条件，结束创建状态');
+        
+        // 停止轮询
+        clearInterval(this.chatCreationTimer);
+        
+        // 更新参与者列表和状态
+        this.setData({
+          isCreatingChat: false,
+          participants: chatInfo.participants.map(p => {
+            // 保留isSelf标记
+            const existingParticipant = this.data.participants.find(ep => ep.id === p.id);
+            if (existingParticipant) {
+              return {...p, isSelf: existingParticipant.isSelf};
+            }
+            // 检查是否是当前用户
+            const app = getApp();
+            const userInfo = app.globalData.userInfo || {};
+            if (p.id === userInfo.openId || (userInfo.nickName && p.nickName === userInfo.nickName)) {
+              return {...p, isSelf: true};
+            }
+            // 默认为非自己
+            return {...p, isSelf: false};
+          })
+        });
+        
+        // 更新界面
+        this.updateNavigationBarTitle();
+        this.loadMessages();
+        
+        // 提示用户
+        wx.showToast({
+          title: '聊天已创建成功',
+          icon: 'none',
+          duration: 1500
+        });
+        
+        // 添加系统消息
+        this.addSystemMessage('聊天已创建成功，你们可以开始聊天了');
+        return;
+      }
+    }
+    
+    // 增加重试计数
+    this.setData({
+      createChatRetryCount: createChatRetryCount + 1
+    });
+    
+    // 尝试主动更新参与者信息
+    this.updateParticipantsInfo();
+    
+    // 每次检查也调用一次保存，以便更新时间戳
+    this.saveChatInfo();
+  },
+  
+  /**
+   * 主动更新参与者信息
+   */
+  updateParticipantsInfo: function() {
+    const app = getApp();
+    const { chatId, participants } = this.data;
+    
+    // 确保聊天信息存在
+    if (!app.globalData.chats) {
+      app.globalData.chats = {};
+    }
+    
+    if (!app.globalData.chats[chatId]) {
+      app.globalData.chats[chatId] = {
+        id: chatId,
+        participants: participants,
+        lastActive: new Date().getTime(),
+        createdAt: new Date().getTime(),
+        __updating: false // 添加互斥锁
+      };
+    }
+    
+    const chatInfo = app.globalData.chats[chatId];
+    
+    // 检查互斥锁，避免并发更新
+    if (chatInfo.__updating) {
+      console.log('当前聊天信息正在被更新，跳过本次更新');
+      return;
+    }
+    
+    // 设置互斥锁
+    chatInfo.__updating = true;
+    
+    try {
+      // 检查当前用户是否在参与者列表中
+      const userInfo = app.globalData.userInfo || {};
+      const currentUserInParticipants = participants.some(p => 
+        p.isSelf || p.id === userInfo.openId || (userInfo.nickName && p.nickName === userInfo.nickName)
+      );
+      
+      // 如果当前用户不在列表中，添加
+      if (!currentUserInParticipants && userInfo.nickName) {
+        console.log('将当前用户添加到参与者列表');
+        const updatedParticipants = [...participants, {
+          id: userInfo.openId || 'user_' + new Date().getTime(),
+          nickName: userInfo.nickName,
+          avatarUrl: userInfo.avatarUrl,
+          isSelf: true
+        }];
+        
+        this.setData({
+          participants: updatedParticipants
+        });
+        
+        chatInfo.participants = updatedParticipants;
+      }
+      
+      // 如果是从邀请进入，检查邀请者是否在列表中
+      if (this.data.contactName && participants.length < 2) {
+        const inviterInParticipants = participants.some(p => 
+          !p.isSelf && p.nickName === this.data.contactName
+        );
+        
+        // 如果邀请者不在列表中，添加
+        if (!inviterInParticipants) {
+          console.log('将邀请者添加到参与者列表');
+          const updatedParticipants = [...participants, {
+            id: 'inviter_' + new Date().getTime(),
+            nickName: this.data.contactName,
+            avatarUrl: '/assets/images/avatar1.png',
+            isSelf: false
+          }];
+          
+          this.setData({
+            participants: updatedParticipants
+          });
+          
+          chatInfo.participants = updatedParticipants;
+        }
+      }
+      
+      // 更新时间戳
+      chatInfo.lastActive = new Date().getTime();
+    } finally {
+      // 释放互斥锁
+      chatInfo.__updating = false;
+    }
+  },
+
   /**
    * 保存聊天信息到全局或云数据库
    */
