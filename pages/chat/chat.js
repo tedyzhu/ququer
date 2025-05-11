@@ -23,7 +23,8 @@ Page({
     showWelcomeHint: false, // 是否显示欢迎提示
     isCreatingChat: false, // 是否正在创建聊天
     createChatRetryCount: 0, // 聊天创建重试次数
-    maxRetryCount: 5 // 最大重试次数
+    maxRetryCount: 5, // 最大重试次数
+    chatCreationStatus: '' // 聊天创建状态
   },
 
   /**
@@ -31,7 +32,44 @@ Page({
    * @param {Object} options - 页面参数
    */
   onLoad: function (options) {
-    console.log('聊天页onLoad，携带参数:', options);
+    console.log('[邀请流程] 聊天页onLoad，携带参数:', options);
+    
+    // 获取app实例
+    const app = getApp();
+    
+    // 使用全局统一的邀请参数处理
+    const inviteInfo = app.handleInviteParams(options);
+    
+    // 解析聊天参数，优先使用options.id，如果没有则使用邀请信息
+    let chatId = options.id;
+    let inviter = options.inviter || '';
+    
+    if (!chatId && inviteInfo && inviteInfo.inviteId) {
+      chatId = inviteInfo.inviteId;
+      inviter = inviteInfo.inviter;
+      console.log('[邀请流程] 使用邀请信息作为聊天参数:', inviteInfo);
+    }
+    
+    // 检查必要的id参数
+    if (!chatId) {
+      wx.showModal({
+        title: '错误',
+        content: '聊天ID不存在，无法加载聊天',
+        showCancel: false,
+        success: () => {
+          // 返回首页
+          wx.reLaunch({
+            url: '../home/home',
+            fail: () => {
+              wx.reLaunch({
+                url: '/pages/home/home'
+              });
+            }
+          });
+        }
+      });
+      return;
+    }
     
     // 立即结束加载状态，避免界面卡在loading
     this.setData({
@@ -39,178 +77,56 @@ Page({
     });
     
     // 获取当前用户信息
-    const app = getApp();
     const userInfo = app.globalData.userInfo || {};
     
     // 检查用户是否已登录，如果未登录，保存邀请信息后跳转到登录页
     if (!app.globalData.hasLogin || !userInfo.nickName) {
-      console.log('用户未登录，跳转到登录页面');
-      // 保存邀请信息
-      if (options.id && options.inviter) {
-        const inviteInfo = {
-          inviteId: options.id,
-          inviter: options.inviter ? decodeURIComponent(options.inviter) : '朋友',
-          timestamp: Date.now()
-        };
-        wx.setStorageSync('pendingInvite', inviteInfo);
-        console.log('已保存邀请信息:', inviteInfo);
-      }
+      console.log('[邀请流程] 用户未登录，跳转到登录页面');
       
-      // 跳转到登录页
-      wx.redirectTo({
-        url: '/pages/login/login',
-        success: () => {
-          console.log('成功跳转到登录页面');
-        },
-        fail: (err) => {
-          console.error('跳转到登录页面失败:', err);
-          wx.showToast({
-            title: '请先登录',
-            icon: 'none'
-          });
-        }
-      });
+      // 保存邀请信息
+      app.saveInviteInfo(chatId, inviter ? decodeURIComponent(inviter) : '朋友');
+      
+      // 尝试多种路径格式跳转到登录页
+      this.tryNavigateToLogin();
       return;
     }
     
     // 以下是已登录用户的处理逻辑
     // 解码options中可能的编码参数
-    if (options.inviter) {
+    if (inviter) {
       try {
-        options.inviter = decodeURIComponent(options.inviter);
+        inviter = decodeURIComponent(inviter);
       } catch (e) {
         console.error('解码inviter失败:', e);
       }
     }
     
-    const { id, isNewChat, inviter } = options;
-    
-    if (!id) {
-      wx.showToast({
-        title: '参数错误',
-        icon: 'none'
-      });
-      setTimeout(() => {
-        wx.navigateBack();
-      }, 1500);
-      return;
-    }
-    
-    console.log('当前用户信息:', userInfo);
-    
-    // 确保云环境已初始化
-    if (app.initCloud && typeof app.initCloud === 'function') {
-      app.initCloud();
-    }
-    
-    // 确保全局chats对象已初始化
-    if (!app.globalData.chats) {
-      app.globalData.chats = {};
-    }
-    
-    let isJoiningExistingChat = false;
-    let initialParticipants = [];
-    
-    // 检查聊天是否已存在于全局数据中
-    const existingChat = app.globalData.chats[id];
-    console.log('检查聊天是否存在:', existingChat);
-    
-    if (existingChat && existingChat.participants && existingChat.participants.length > 0) {
-      console.log('聊天已存在，参与者:', existingChat.participants);
-      
-      // 处理现有参与者，标记自己
-      initialParticipants = existingChat.participants.map(p => {
-        if (p.id === userInfo.openId || 
-            (userInfo.nickName && p.nickName === userInfo.nickName) ||
-            (p.isSelf === true)) {
-          return {...p, isSelf: true};
-        }
-        return {...p, isSelf: false};
-      });
-      
-      // 检查当前用户是否已在参与者列表中
-      const currentUserInChat = initialParticipants.some(p => p.isSelf);
-      
-      if (!currentUserInChat && userInfo.nickName) {
-        console.log('当前用户不在聊天参与者中，添加');
-        isJoiningExistingChat = true;
-        
-        // 添加当前用户
-        initialParticipants.push({
-          id: userInfo.openId || 'user_' + new Date().getTime(),
-          nickName: userInfo.nickName,
-          avatarUrl: userInfo.avatarUrl,
-          isSelf: true
-        });
-      }
-    } else {
-      console.log('聊天不存在，创建新聊天');
-      
-      // 创建新聊天，添加自己作为参与者
-      if (userInfo.nickName) {
-        initialParticipants = [{
-          id: userInfo.openId || 'user_' + new Date().getTime(),
-          nickName: userInfo.nickName,
-          avatarUrl: userInfo.avatarUrl,
-          isSelf: true
-        }];
-      } else {
-        initialParticipants = [];
-      }
-      
-      // 如果是通过邀请进入，添加邀请者
-      if (inviter) {
-        initialParticipants.push({
-          id: 'inviter_' + new Date().getTime(),
-          nickName: inviter,
-          avatarUrl: '/assets/images/avatar1.png',
-          isSelf: false
-        });
-      }
-    }
-    
-    console.log('处理后的参与者列表:', initialParticipants);
-    
-    // 检查是否需要设置创建聊天状态
-    const needsCreation = initialParticipants.length < 2;
+    // 检查是否是从邀请链接进入
+    const isFromInvite = !!inviter;
     
     // 设置页面数据
     this.setData({
-      chatId: id,
-      isNewChat: isNewChat === 'true',
-      participants: initialParticipants,
-      contactName: inviter || '',
-      showWelcomeHint: isJoiningExistingChat,
-      isCreatingChat: needsCreation
+      chatId: chatId,
+      isNewChat: options.isNewChat === 'true',
+      contactName: inviter || options.name || '聊天',
+      showWelcomeHint: false,
+      isCreatingChat: isFromInvite,
+      chatCreationStatus: isFromInvite ? '正在建立连接...' : ''
     });
-    
-    // 更新全局聊天信息
-    app.globalData.chats[id] = {
-      id: id,
-      participants: initialParticipants,
-      lastActive: new Date().getTime(),
-      createdAt: existingChat ? existingChat.createdAt : new Date().getTime()
-    };
     
     // 更新导航栏标题
     this.updateNavigationBarTitle();
     
-    // 加载聊天记录
-    this.loadMessages();
-    
     // 如果是正在创建聊天状态，启动轮询检查
     if (this.data.isCreatingChat) {
       // 添加系统消息
-      this.addSystemMessage('正在等待对方加入聊天...');
+      this.addSystemMessage('正在与对方建立聊天...');
       
       // 启动轮询
       this.startChatCreationCheck();
-    } else if (isJoiningExistingChat) {
-      // 如果是加入已存在的聊天，发送系统消息
-      this.addSystemMessage('你已成功加入聊天');
-      
-      // 主动触发一次参与者更新
-      this.updateParticipantsInfo();
+    } else {
+      // 加载聊天记录
+      this.loadMessages();
     }
     
     // 设置右上角按钮，开启分享
@@ -218,21 +134,81 @@ Page({
       withShareTicket: true,
       menus: ['shareAppMessage']
     });
+    
+    // 标记为已处理邀请，在5秒后清理邀请信息
+    if (inviteInfo) {
+      setTimeout(() => {
+        app.clearInviteInfo();
+      }, 5000);
+    }
+  },
+  
+  /**
+   * 尝试多种路径格式跳转到登录页
+   */
+  tryNavigateToLogin: function() {
+    const loginUrls = [
+      '/pages/login/login',
+      '../login/login',
+      '/app/pages/login/login'
+    ];
+    
+    const app = getApp();
+    app.tryNavigateToUrls(loginUrls, 0, null, () => {
+      wx.showModal({
+        title: '错误',
+        content: '无法跳转到登录页，请重启小程序',
+        showCancel: false
+      });
+    });
   },
   
   /**
    * 启动聊天创建状态检查
    */
   startChatCreationCheck: function() {
+    console.log('[邀请流程] 启动聊天创建状态检查');
+    
     // 清除可能存在的旧定时器
     if (this.chatCreationTimer) {
       clearInterval(this.chatCreationTimer);
     }
     
-    // 每3秒检查一次
+    // 更新UI状态
+    this.setData({
+      isCreatingChat: true,
+      chatCreationStatus: '正在建立连接...',
+      // 重置重试计数器
+      createChatRetryCount: 0
+    });
+    
+    // 先尝试主动创建聊天，不等待检查
+    this.tryCreateChat(true);
+    
+    // 每2秒检查一次
     this.chatCreationTimer = setInterval(() => {
       this.checkChatCreationStatus();
-    }, 3000);
+    }, 2000);
+    
+    // 设置20秒超时，防止永久等待
+    setTimeout(() => {
+      if (this.data.isCreatingChat) {
+        // 20秒后仍在创建状态，强制结束
+        clearInterval(this.chatCreationTimer);
+        console.log('[邀请流程] 创建聊天超时，强制进入聊天界面');
+        
+        this.setData({
+          isCreatingChat: false,
+          chatCreationStatus: ''
+        });
+        
+        // 加载聊天记录
+        this.loadMessages();
+        
+        // 添加系统消息
+        this.addSystemMessage('聊天创建超时，已自动为您进入聊天。如遇问题，请联系对方重新邀请。');
+      }
+    }, 20000);
   },
   
   /**
@@ -242,112 +218,264 @@ Page({
     const app = getApp();
     const { chatId, createChatRetryCount, maxRetryCount } = this.data;
     
-    console.log(`检查聊天创建状态: 第${createChatRetryCount+1}/${maxRetryCount}次`);
+    console.log(`[邀请流程] 检查聊天创建状态: 第${createChatRetryCount+1}/${maxRetryCount}次`);
+    
+    // 更新状态文本
+    this.setData({
+      chatCreationStatus: `正在建立连接(${createChatRetryCount+1}/${maxRetryCount})...`
+    });
     
     // 检查重试次数
-    if (createChatRetryCount >= maxRetryCount) {
-      // 超过最大重试次数，停止轮询
-      clearInterval(this.chatCreationTimer);
-      console.log('超过最大重试次数，强制进入聊天界面');
+    if (createChatRetryCount >= 2) {
+      // 超过2次就尝试主动创建一次，然后退出创建状态
+      this.tryCreateChat(true);
       
-      // 假设聊天已经创建成功，强制进入聊天界面
-      this.setData({
-        isCreatingChat: false
-      });
-      
-      // 如果参与者少于2人，模拟一个参与者
-      if (this.data.participants.length < 2) {
-        const userInfo = app.globalData.userInfo;
-        const otherParticipant = {
-          id: 'auto_' + new Date().getTime(),
-          nickName: this.data.contactName || '好友',
-          avatarUrl: '/assets/images/avatar1.png',
-          isSelf: false
-        };
-        
-        const updatedParticipants = [...this.data.participants, otherParticipant];
+      setTimeout(() => {
+        clearInterval(this.chatCreationTimer);
+        console.log('[邀请流程] 已尝试检查多次，直接进入聊天界面');
         
         this.setData({
-          participants: updatedParticipants
+          isCreatingChat: false,
+          chatCreationStatus: ''
         });
         
-        // 更新全局数据
-        if (app.globalData.chats && app.globalData.chats[chatId]) {
-          app.globalData.chats[chatId].participants = updatedParticipants;
-          app.globalData.chats[chatId].lastActive = new Date().getTime();
-        }
-      }
+        // 加载聊天记录
+        this.loadMessages();
+        
+        // 添加系统消息
+        this.addSystemMessage('聊天已准备就绪，可以开始聊天了');
+      }, 1500);
       
-      // 强制更新界面
-      this.updateNavigationBarTitle();
-      this.loadMessages();
-      
-      // 添加系统消息说明情况
-      this.addSystemMessage('聊天已创建成功，可以开始聊天了');
       return;
     }
     
-    // 检查全局聊天数据
-    if (app.globalData.chats && app.globalData.chats[chatId]) {
-      const chatInfo = app.globalData.chats[chatId];
-      console.log('当前聊天信息:', chatInfo);
-      
-      // 检查参与者数量
-      if (chatInfo.participants && chatInfo.participants.length >= 2) {
-        console.log('检测到聊天参与者已满足条件，结束创建状态');
+    // 调用云函数检查聊天是否真的创建成功
+    wx.cloud.callFunction({
+      name: 'checkChatStatus',
+      data: {
+        chatId: chatId
+      },
+      success: res => {
+        console.log('[邀请流程] 检查聊天状态结果:', res);
         
-        // 停止轮询
-        clearInterval(this.chatCreationTimer);
+        // 如果云函数返回聊天已创建
+        if (res.result && res.result.exists) {
+          clearInterval(this.chatCreationTimer);
+          console.log('[邀请流程] 检测到聊天创建成功，结束创建状态');
+          
+          this.setData({
+            isCreatingChat: false,
+            chatCreationStatus: ''
+          });
+          
+          // 加载聊天记录
+          this.loadMessages();
+          
+          // 添加系统消息
+          this.addSystemMessage('聊天已创建成功，你们可以开始聊天了');
+          
+          // 主动调用startConversation通知对方
+          this.notifyConversationStarted();
+          
+          // 清除邀请信息
+          app.clearInviteInfo();
+        } else {
+          // 增加重试计数
+          this.setData({
+            createChatRetryCount: createChatRetryCount + 1
+          });
+          
+          // 如果第一次检查失败，直接尝试创建
+          if (createChatRetryCount === 0) {
+            this.tryCreateChat(false);
+          }
+          
+          // 如果已经是第二次检查，准备退出创建状态
+          if (createChatRetryCount === 1) {
+            // 进行最后一次尝试创建
+            setTimeout(() => {
+              this.tryCreateChat(true);
+              
+              setTimeout(() => {
+                if (this.data.isCreatingChat) {
+                  clearInterval(this.chatCreationTimer);
+                  console.log('[邀请流程] 两次检查后直接进入聊天界面');
+                  
+                  this.setData({
+                    isCreatingChat: false,
+                    chatCreationStatus: ''
+                  });
+                  
+                  // 加载聊天记录
+                  this.loadMessages();
+                  
+                  // 添加系统消息
+                  this.addSystemMessage('聊天已创建，现在可以开始聊天了');
+                  
+                  // 主动调用startConversation通知对方
+                  this.notifyConversationStarted();
+                }
+              }, 1500);
+            }, 500);
+          }
+        }
+      },
+      fail: err => {
+        console.error('[邀请流程] 检查聊天状态失败:', err);
         
-        // 更新参与者列表和状态
+        // 增加重试计数
         this.setData({
-          isCreatingChat: false,
-          participants: chatInfo.participants.map(p => {
-            // 保留isSelf标记
-            const existingParticipant = this.data.participants.find(ep => ep.id === p.id);
-            if (existingParticipant) {
-              return {...p, isSelf: existingParticipant.isSelf};
-            }
-            // 检查是否是当前用户
-            const app = getApp();
-            const userInfo = app.globalData.userInfo || {};
-            if (p.id === userInfo.openId || (userInfo.nickName && p.nickName === userInfo.nickName)) {
-              return {...p, isSelf: true};
-            }
-            // 默认为非自己
-            return {...p, isSelf: false};
-          })
+          createChatRetryCount: createChatRetryCount + 1
         });
         
-        // 更新界面
-        this.updateNavigationBarTitle();
-        this.loadMessages();
+        // 如果第一次检查就失败，直接尝试创建
+        if (createChatRetryCount === 0) {
+          this.tryCreateChat(false);
+        }
         
-        // 提示用户
-        wx.showToast({
-          title: '聊天已创建成功',
-          icon: 'none',
-          duration: 1500
-        });
-        
-        // 添加系统消息
-        this.addSystemMessage('聊天已创建成功，你们可以开始聊天了');
-        return;
+        // 如果已经是第二次检查失败，直接进入聊天并尝试最后一次通知
+        if (createChatRetryCount === 1) {
+          setTimeout(() => {
+            this.tryCreateChat(true);
+            
+            setTimeout(() => {
+              if (this.data.isCreatingChat) {
+                clearInterval(this.chatCreationTimer);
+                console.log('[邀请流程] 检查失败，直接进入聊天界面');
+                
+                this.setData({
+                  isCreatingChat: false,
+                  chatCreationStatus: ''
+                });
+                
+                // 加载聊天记录
+                this.loadMessages();
+                
+                // 添加系统消息
+                this.addSystemMessage('无法创建聊天，但您仍可以使用聊天功能');
+                
+                // 主动调用startConversation通知对方
+                this.notifyConversationStarted();
+              }
+            }, 1500);
+          }, 500);
+        }
       }
-    }
-    
-    // 增加重试计数
-    this.setData({
-      createChatRetryCount: createChatRetryCount + 1
     });
-    
-    // 尝试主动更新参与者信息
-    this.updateParticipantsInfo();
-    
-    // 每次检查也调用一次保存，以便更新时间戳
-    this.saveChatInfo();
   },
   
+  /**
+   * 通知会话已开始
+   */
+  notifyConversationStarted: function() {
+    const app = getApp();
+    const userInfo = app.globalData.userInfo || {};
+    
+    console.log('[邀请流程] 主动通知对方聊天已开始');
+    
+    wx.cloud.callFunction({
+      name: 'startConversation',
+      data: {
+        conversationId: this.data.chatId,
+        userName: userInfo.nickName || '用户'
+      },
+      success: res => {
+        console.log('[邀请流程] 通知开始聊天结果:', res);
+      },
+      fail: err => {
+        console.error('[邀请流程] 通知开始聊天失败:', err);
+      }
+    });
+  },
+  
+  /**
+   * 尝试创建聊天（备选方案）
+   * @param {Boolean} [isInitial=false] - 是否是初始创建尝试
+   */
+  tryCreateChat: function(isInitial) {
+    console.log('[邀请流程] 尝试主动创建聊天...');
+    
+    // 更新状态文本
+    this.setData({
+      chatCreationStatus: isInitial ? '正在创建聊天...' : '正在尝试创建聊天...'
+    });
+    
+    const app = getApp();
+    const userInfo = app.globalData.userInfo || {};
+    
+    // 调用云函数创建聊天
+    wx.cloud.callFunction({
+      name: 'startConversation',
+      data: {
+        conversationId: this.data.chatId,
+        userName: userInfo.nickName || '用户'
+      },
+      success: res => {
+        console.log('[邀请流程] 创建聊天结果:', res);
+        
+        if (res.result && res.result.success) {
+          clearInterval(this.chatCreationTimer);
+          
+          this.setData({
+            isCreatingChat: false,
+            chatCreationStatus: ''
+          });
+          
+          // 加载聊天记录
+          this.loadMessages();
+          
+          // 添加系统消息
+          this.addSystemMessage('聊天已成功创建，可以开始交流了');
+        } else {
+          // 创建失败，显示错误消息
+          this.setData({
+            chatCreationStatus: '创建聊天失败，继续重试...'
+          });
+          
+          // 如果是初始创建尝试失败，也加载消息界面而不是无限等待
+          if (isInitial) {
+            setTimeout(() => {
+              console.log('[邀请流程] 初始创建失败，强制进入聊天');
+              clearInterval(this.chatCreationTimer);
+              
+              this.setData({
+                isCreatingChat: false,
+                chatCreationStatus: ''
+              });
+              
+              // 加载聊天记录
+              this.loadMessages();
+            }, 1500);
+          }
+        }
+      },
+      fail: err => {
+        console.error('[邀请流程] 创建聊天失败:', err);
+        
+        // 创建失败，显示错误消息
+        this.setData({
+          chatCreationStatus: '创建聊天失败，继续重试...'
+        });
+        
+        // 如果是初始创建尝试失败，还是尝试加载界面
+        if (isInitial) {
+          setTimeout(() => {
+            console.log('[邀请流程] 初始创建失败，强制进入聊天');
+            clearInterval(this.chatCreationTimer);
+            
+            this.setData({
+              isCreatingChat: false,
+              chatCreationStatus: ''
+            });
+            
+            // 加载聊天记录
+            this.loadMessages();
+          }, 1500);
+        }
+      }
+    });
+  },
+
   /**
    * 主动更新参与者信息
    */
@@ -500,13 +628,30 @@ Page({
    * 生命周期函数--监听页面显示
    */
   onShow: function() {
-    console.log('聊天页面显示');
+    console.log('[邀请流程] 聊天页面显示');
     
-    // 保存聊天信息到全局数据
-    this.saveChatInfo();
+    // 获取app实例
+    const app = getApp();
     
-    // 每次页面显示时检查是否有新参与者加入
-    this.checkParticipantsUpdate();
+    // 检查用户是否已登录，如果未登录，保存邀请信息后跳转到登录页
+    if (!app.globalData.hasLogin || !app.globalData.userInfo) {
+      console.log('[邀请流程] 用户未登录，跳转到登录页面');
+      
+      // 保存邀请信息
+      if (this.data.chatId) {
+        app.saveInviteInfo(this.data.chatId, this.data.contactName || '朋友');
+      }
+      
+      // 跳转到登录页
+      this.tryNavigateToLogin();
+      return;
+    }
+    
+    // 如果仍在创建聊天状态，继续检查
+    if (this.data.isCreatingChat && !this.chatCreationTimer) {
+      console.log('[邀请流程] 聊天页面显示时仍在创建状态，重新启动检查');
+      this.startChatCreationCheck();
+    }
   },
   
   /**

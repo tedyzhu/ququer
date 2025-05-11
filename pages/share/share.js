@@ -27,7 +27,40 @@ Page({
     // 处理分享参数并保存
     this.processAndSaveParams(options);
     
-    // 无论如何都延迟跳转到登录页
+    // 检查用户是否已登录
+    const app = getApp();
+    if (app.globalData.hasLogin && app.globalData.userInfo) {
+      console.log('☢️ 用户已登录，准备跳转到聊天页面');
+      
+      // 获取存储的邀请信息
+      const pendingInvite = wx.getStorageSync('pendingInvite');
+      if (pendingInvite && pendingInvite.inviteId) {
+        // 有邀请信息，跳转到聊天页面
+        setTimeout(() => {
+          app.tryNavigateToChat(
+            pendingInvite.inviteId, 
+            pendingInvite.inviter,
+            () => {
+              console.log('☢️ 成功跳转到聊天页面');
+            },
+            () => {
+              console.error('☢️ 跳转到聊天页面失败，转向登录页');
+              this.redirectToLogin();
+            }
+          );
+        }, 1000);
+        return;
+      }
+    }
+    
+    // 未登录或没有邀请信息，跳转到登录页
+    this.redirectToLogin();
+  },
+  
+  /**
+   * 跳转到登录页面
+   */
+  redirectToLogin: function() {
     setTimeout(() => {
       wx.reLaunch({
         url: '/pages/login/login',
