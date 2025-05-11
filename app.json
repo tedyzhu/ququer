@@ -3,7 +3,15 @@
     "app/pages/login/login",
     "app/pages/home/home",
     "app/pages/chat/chat",
-    "app/pages/chat/detail"
+    "app/pages/chat/detail",
+    "app/pages/index/index",
+    "app/pages/share/share",
+    "pages/login/login",
+    "pages/home/home",
+    "pages/chat/chat",
+    "pages/chat/detail",
+    "pages/index/index",
+    "pages/share/share"
   ],
   "window": {
     "backgroundTextStyle": "light",

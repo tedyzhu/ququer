@@ -38,7 +38,14 @@
       "disablePlugins": [],
       "outputPath": ""
     },
-    "useCompilerPlugins": false
+    "useCompilerPlugins": false,
+    "crossOriginIsolation": true,
+    "enableCrossSiteHeader": true,
+    "securityHeaders": {
+      "crossOriginOpenerPolicy": "same-origin",
+      "crossOriginEmbedderPolicy": "require-corp",
+      "crossOriginResourcePolicy": "same-origin"
+    }
   },
   "compileType": "miniprogram",
   "libVersion": "2.19.4",
