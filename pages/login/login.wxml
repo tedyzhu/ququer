@@ -7,14 +7,14 @@
   
   <form bindsubmit="onFormSubmit">
     <view class="user-info-container">
-      <button class="avatar-wrapper" open-type="chooseAvatar" bind:chooseavatar="onChooseAvatar">
-        <image class="avatar" src="{{avatarUrl || 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242L3M4EnjhT8l8cubIgL8F7nM7YhnHR7R0FnsPO0Cdua8ZrOeYuwibLw1ohEJCQKfTgNw/0'}}"></image>
+      <button class="avatar-wrapper" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
+        <image class="avatar" src="{{avatarUrl}}"></image>
       </button>
       <view class="tips">点击头像可更换</view>
-      <input type="nickname" class="nickname-input" placeholder="请输入昵称" bindinput="onNickNameInput" value="{{nickName}}" />
+      <input type="nickname" name="nickname" class="nickname-input" placeholder="请输入昵称" bindinput="onNickNameInput" value="{{nickName}}" />
     </view>
     
-    <button class="login-btn" form-type="submit" loading="{{submitting}}">
+    <button class="login-btn" form-type="submit" loading="{{isLoading}}">
       开始聊天
     </button>
   </form>

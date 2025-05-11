@@ -132,19 +132,67 @@ Page({
    */
   checkLoginStatus: function () {
     const app = getApp();
-    if (!app.globalData.hasLogin) {
-      console.log('用户未登录，跳转到登录页');
-      wx.redirectTo({
-        url: '/pages/login/login'
+    
+    // 如果全局状态已经表明已登录，直接返回true
+    if (app.globalData.hasLogin && app.globalData.userInfo) {
+      console.log('用户已登录(全局状态):', app.globalData.userInfo);
+      this.setData({
+        userInfo: app.globalData.userInfo
       });
-      return false;
+      return true;
     }
     
-    console.log('用户已登录', app.globalData.userInfo);
-    this.setData({
-      userInfo: app.globalData.userInfo
+    try {
+      // 先检查本地存储中是否有用户信息
+      const storageInfo = wx.getStorageInfoSync();
+      if (!storageInfo.keys.includes('userInfo')) {
+        console.log('本地存储中没有用户信息，需要登录');
+        this.redirectToLogin();
+        return false;
+      }
+      
+      // 尝试获取用户信息
+      const userInfo = wx.getStorageSync('userInfo');
+      if (userInfo && userInfo.nickName) {
+        console.log('从本地存储获取到用户信息:', userInfo);
+        
+        // 更新全局状态
+        app.globalData.userInfo = userInfo;
+        app.globalData.hasLogin = true;
+        
+        // 更新页面数据
+        this.setData({
+          userInfo: userInfo
+        });
+        
+        return true;
+      } else {
+        console.log('本地存储中的用户信息无效');
+        this.redirectToLogin();
+        return false;
+      }
+    } catch (error) {
+      console.error('检查登录状态出错:', error);
+      this.redirectToLogin();
+      return false;
+    }
+  },
+  
+  /**
+   * 重定向到登录页
+   */
+  redirectToLogin: function() {
+    console.log('用户未登录，跳转到登录页');
+    wx.redirectTo({
+      url: '/pages/login/login',
+      fail: function(err) {
+        console.error('跳转到登录页面失败:', err);
+        // 使用reLaunch作为备选方案
+        wx.reLaunch({
+          url: '/pages/login/login'
+        });
+      }
     });
-    return true;
   },
 
   /**

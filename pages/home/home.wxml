@@ -1,11 +1,6 @@
 <view class="container">
-  <!-- 自定义导航栏 -->
-  <view class="custom-nav">
-    <view class="status-bar" style="height:{{statusBarHeight}}px"></view>
-    <view class="nav-content">
-      <text class="nav-title">蛐曲儿</text>
-    </view>
-  </view>
+  <!-- 状态栏占位 -->
+  <view class="status-bar" style="height:{{statusBarHeight}}px"></view>
 
   <view class="loading-container" wx:if="{{isLoading}}">
     <view class="loading"></view>
@@ -13,18 +8,13 @@
   </view>
 
   <view class="welcome-container" wx:else>
-    <view class="profile-header">
-      <text class="username">{{userInfo.nickName || '蛐曲儿'}}</text>
-      <text class="more-icon" bindtap="showShareMenu">⋮</text>
-    </view>
-    
     <view class="welcome-content">
-      <text class="welcome-title">Hi~ 我是蛐曲儿～</text>
+      <text class="welcome-title">蛐曲儿</text>
       <text class="welcome-subtitle">聊天有时就该像夏夜虫鸣，听过便随风。</text>
     </view>
     
     <view class="invite-status" wx:if="{{inviteSent}}">
-      <text class="invite-status-text">已发出邀请，稍等，稍等一会儿～</text>
+      <text class="invite-status-text">已发出邀请，稍等一会儿～</text>
     </view>
     
     <view class="button-group">
