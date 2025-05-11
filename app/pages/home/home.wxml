@@ -31,8 +31,12 @@
       </view>
       <view wx:elif="{{hasInvitation}}">
         <view class="welcome-title">{{userInfo.nickName}} ~</view>
-        <view class="welcome-subtitle">已发出邀请，稍等，稍等一会儿～</view>
-        <view class="invite-tips">邀请已发送，等待好友加入后即可开始聊天</view>
+        <view wx:if="{{friendJoined}}" class="welcome-subtitle">{{friendName}} 已加入聊天</view>
+        <view wx:else class="welcome-subtitle">已发出邀请，稍等，稍等一会儿～</view>
+        <view wx:if="{{friendJoined}}" class="invite-tips">您的朋友已经加入聊天，现在可以开始交流了</view>
+        <view wx:else class="invite-tips">邀请已发送，等待好友加入后即可开始聊天</view>
+        
+        <button wx:if="{{friendJoined}}" class="start-chat-btn" bindtap="startChat">开始聊天</button>
       </view>
       <view wx:else>
         <view class="welcome-title">{{userInfo.nickName}} ~</view>

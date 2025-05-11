@@ -3,7 +3,7 @@
   <view class="creating-chat-overlay" wx:if="{{isCreatingChat}}">
     <view class="creating-chat-content">
       <view class="creating-chat-spinner"></view>
-      <text class="creating-chat-text">正在创建聊天...</text>
+      <text class="creating-chat-text">{{chatCreationStatus || '正在创建聊天...'}}</text>
     </view>
   </view>
   

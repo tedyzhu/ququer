@@ -88,64 +88,6 @@
   margin-right: 10rpx;
 }
 
-.login-container {
-  padding: 0;
-  justify-content: space-between;
-  background-color: var(--white);
-}
-
-.logo-area {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-top: 100rpx;
-}
-
-.app-name {
-  font-size: 48rpx;
-  font-weight: bold;
-  margin-top: 30rpx;
-  color: var(--primary-color);
-}
-
-.app-desc {
-  font-size: 28rpx;
-  color: var(--light-text-color);
-  margin-top: 10rpx;
-}
-
-.login-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-bottom: 80rpx;
-  width: 100%;
-  padding: 0 50rpx;
-  box-sizing: border-box;
-}
-
-.login-title {
-  font-size: 36rpx;
-  font-weight: bold;
-  margin-bottom: 20rpx;
-}
-
-.login-desc {
-  font-size: 28rpx;
-  color: var(--light-text-color);
-  margin-bottom: 50rpx;
-}
-
-.privacy-notice {
-  font-size: 24rpx;
-  color: var(--light-text-color);
-  margin-top: 30rpx;
-}
-
-.link {
-  color: var(--primary-color);
-}
-
 .privacy-text {
   font-size: 24rpx;
   color: #999999;

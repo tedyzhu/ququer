@@ -11,7 +11,7 @@
         <image class="avatar" src="{{avatarUrl}}"></image>
       </button>
       <view class="tips">点击头像可更换</view>
-      <input type="nickname" name="nickname" class="nickname-input" placeholder="请输入昵称" />
+      <input type="nickname" name="nickname" class="nickname-input" placeholder="请输入昵称" bindinput="onNickNameInput" value="{{nickName}}" />
     </view>
     
     <button class="login-btn" form-type="submit" loading="{{isLoading}}">

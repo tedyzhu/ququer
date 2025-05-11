@@ -361,4 +361,19 @@
   align-items: center;
   font-size: 60rpx;
   box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.15);
+}
+
+/* 开始聊天按钮 */
+.start-chat-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80%;
+  height: 88rpx;
+  background: #000000;
+  color: #fff;
+  font-size: 32rpx;
+  border-radius: 44rpx;
+  margin-top: 60rpx;
+  margin-bottom: 30rpx;
 } 
