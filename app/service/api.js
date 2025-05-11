@@ -15,7 +15,11 @@ function initCloud() {
   // 初始化云开发
   wx.cloud.init({
     env: 'cloud1-9gmp8bcn2dc3576a', // 使用提供的云环境ID
-    traceUser: true
+    traceUser: true,
+    // 添加安全相关配置，解决SharedArrayBuffer警告
+    securityHeaders: {
+      enableCrossOriginIsolation: true
+    }
   });
   
   return true;

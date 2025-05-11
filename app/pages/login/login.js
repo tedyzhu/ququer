@@ -8,6 +8,7 @@ Page({
   data: {
     isLoading: false,
     avatarUrl: 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0',
+    nickName: '', // 添加昵称字段
     inviteId: '', // 邀请ID
     inviter: '', // 邀请人
     isInvited: false, // 是否是被邀请的用户
@@ -18,7 +19,7 @@ Page({
    * 页面加载时执行
    */
   onLoad: function(options) {
-    console.log('登录页面加载，参数:', options);
+    console.log('[邀请流程] 登录页面加载，参数:', options);
     
     // 检查云环境是否已初始化
     const app = getApp();
@@ -29,31 +30,49 @@ Page({
       console.log('云环境已初始化');
     }
 
-    // 检查是否有待处理的邀请信息
-    const pendingInvite = wx.getStorageSync('pendingInvite');
-    if (pendingInvite && pendingInvite.inviteId) {
-      console.log('检测到待处理邀请:', pendingInvite);
-      this.setData({
-        inviteId: pendingInvite.inviteId,
-        inviter: pendingInvite.inviter || '朋友',
-        isInvited: true
-      });
-    } else {
-      // 向下兼容旧的存储方式
-      const isInvited = wx.getStorageSync('isInvited');
-      const inviteId = wx.getStorageSync('inviteId');
-      
-      if (isInvited && inviteId) {
-        console.log('检测到旧格式邀请信息，邀请ID:', inviteId);
-        this.setData({
-          inviteId: inviteId,
-          isInvited: true
-        });
-      }
-    }
+    // 处理可能存在的邀请参数
+    this.handleInviteParams(options);
     
     // 检查是否开启调试模式
     this.checkDebugMode();
+  },
+  
+  /**
+   * 生命周期函数--监听页面显示
+   */
+  onShow: function() {
+    console.log('登录页面显示');
+    
+    // 尝试从全局参数中提取邀请信息
+    try {
+      const app = getApp();
+      if (app.globalData.launchOptions) {
+        this.handleInviteParams(app.globalData.launchOptions);
+      }
+    } catch (error) {
+      console.error('处理全局启动参数失败:', error);
+    }
+  },
+  
+  /**
+   * 处理邀请参数
+   * @param {Object} options - 可能包含邀请信息的参数对象
+   */
+  handleInviteParams: function(options) {
+    console.log('[邀请流程] 处理可能的邀请参数:', options);
+    
+    const app = getApp();
+    const inviteInfo = app.handleInviteParams(options);
+    
+    if (inviteInfo) {
+      this.setData({
+        inviteId: inviteInfo.inviteId,
+        inviter: inviteInfo.inviter,
+        isInvited: true
+      });
+      
+      console.log('[邀请流程] 登录页面已记录邀请信息:', inviteInfo);
+    }
   },
   
   /**
@@ -62,8 +81,8 @@ Page({
   checkDebugMode: function() {
     try {
       // 在开发环境中可以开启调试模式
-      const systemInfo = wx.getSystemInfoSync();
-      if (systemInfo.platform === 'devtools') {
+      const appBaseInfo = wx.getAppBaseInfo();
+      if (appBaseInfo.platform === 'devtools') {
         this.setData({
           isDebugMode: true
         });
@@ -157,11 +176,23 @@ Page({
   },
 
   /**
+   * 处理昵称输入
+   * @param {Object} e - 事件对象
+   */
+  onNickNameInput: function(e) {
+    this.setData({
+      nickName: e.detail.value
+    });
+  },
+
+  /**
    * 表单提交事件
    * @param {Object} e - 事件对象
    */
   onFormSubmit: function(e) {
-    const nickname = e.detail.value.nickname;
+    // 获取昵称，优先使用data中的nickName，如果不存在则从表单中获取
+    const nickname = this.data.nickName || (e.detail.value && e.detail.value.nickname);
+    
     if (!nickname) {
       wx.showModal({
         title: '提示',
@@ -181,7 +212,7 @@ Page({
       avatarUrl: this.data.avatarUrl
     };
 
-    console.log('准备调用登录云函数，发送数据:', userInfo);
+    console.log('[邀请流程] 准备调用登录云函数，发送数据:', userInfo);
 
     // 调用云函数登录
     wx.cloud.callFunction({
@@ -205,9 +236,6 @@ Page({
           return;
         }
         
-        // 打印完整结构便于调试
-        console.log('完整结构:', JSON.stringify(res.result));
-        
         // 提取openId - 尝试多种方式获取
         let openId = null;
         
@@ -228,24 +256,7 @@ Page({
         
         // 存储用户信息和ID
         const app = getApp();
-        app.globalData.userInfo = userInfo;
-        app.globalData.openId = openId;
-        app.globalData.hasLogin = true;
-        
-        console.log('用户信息已存储到全局数据，openId:', openId);
-        
-        // 存储用户信息到本地
-        wx.setStorage({
-          key: 'userInfo',
-          data: userInfo,
-          success: () => console.log('用户信息已存储到本地存储')
-        });
-        
-        wx.setStorage({
-          key: 'openId',
-          data: openId,
-          success: () => console.log('openId已存储到本地存储')
-        });
+        app.saveUserInfo(userInfo, openId);
         
         // 显示登录成功提示
         wx.showToast({
@@ -256,70 +267,84 @@ Page({
         
         // 根据是否是被邀请用户决定跳转逻辑
         setTimeout(() => {
-          if (this.data.isInvited && this.data.inviteId) {
-            console.log('被邀请用户登录成功，直接进入聊天，邀请ID:', this.data.inviteId);
+          // 从app全局获取最新的邀请信息
+          const inviteInfo = app.getStoredInviteInfo();
+          
+          if (inviteInfo && inviteInfo.inviteId) {
+            console.log('[邀请流程] 被邀请用户登录成功，直接进入聊天，邀请ID:', inviteInfo.inviteId);
             
-            // 跳转到聊天页面
-            const chatUrl = `/app/pages/chat/chat?id=${this.data.inviteId}&inviter=${encodeURIComponent(this.data.inviter || '朋友')}`;
-            console.log('准备跳转到聊天页面:', chatUrl);
-            
-            wx.reLaunch({
-              url: chatUrl,
-              success: () => {
-                console.log('成功跳转到聊天页面');
-                
-                // 登录成功并跳转后，延迟一段时间再清除邀请信息
+            // 使用app全局方法进行跳转
+            app.tryNavigateToChat(inviteInfo.inviteId, inviteInfo.inviter, 
+              // 成功回调
+              () => {
+                // 延迟清除邀请信息
                 setTimeout(() => {
-                  wx.removeStorageSync('pendingInvite');
-                  wx.removeStorageSync('isInvited');
-                  wx.removeStorageSync('inviteId');
+                  app.clearInviteInfo();
                 }, 5000);
-              },
-              fail: (err) => {
-                console.error('跳转到聊天页面失败:', err);
-                
-                // 尝试使用另一种路径格式
-                const altChatUrl = `../chat/chat?id=${this.data.inviteId}&inviter=${encodeURIComponent(this.data.inviter || '朋友')}`;
-                console.log('尝试使用相对路径跳转:', altChatUrl);
-                
-                wx.reLaunch({
-                  url: altChatUrl,
+              }, 
+              // 失败回调
+              () => {
+                // 所有跳转都失败的后备方案
+                wx.showModal({
+                  title: '跳转失败',
+                  content: '无法进入聊天页面，即将进入首页',
+                  showCancel: false,
                   success: () => {
-                    console.log('使用相对路径跳转成功');
-                  },
-                  fail: (err2) => {
-                    console.error('相对路径跳转也失败:', err2);
-                    // 弹窗提示跳转失败
-                    wx.showModal({
-                      title: '跳转失败',
-                      content: '无法进入聊天页面，即将进入首页',
-                      showCancel: false,
-                      success: () => {
-                        // 如果失败，跳转到首页
+                    // 尝试跳转到首页
+                    wx.reLaunch({
+                      url: '/app/pages/home/home',
+                      fail: () => {
                         wx.reLaunch({
-                          url: '../home/home'
+                          url: '../home/home',
+                          fail: () => {
+                            wx.showModal({
+                              title: '无法跳转',
+                              content: '请重启小程序',
+                              showCancel: false
+                            });
+                          }
                         });
                       }
                     });
                   }
                 });
               }
-            });
+            );
           } else {
             // 普通用户登录，跳转到首页
-            console.log('普通用户登录成功，跳转到首页');
+            console.log('普通用户登录成功，尝试跳转到首页');
+            // 先尝试绝对路径
             wx.reLaunch({
-              url: '../home/home',
+              url: '/app/pages/home/home',
               success: () => {
-                console.log('成功跳转到首页');
+                console.log('使用绝对路径成功跳转到首页');
               },
               fail: (err) => {
-                console.error('跳转到首页失败:', err);
-                // 弹窗提示跳转失败
-                wx.showModal({
-                  title: '跳转失败',
-                  content: '无法进入首页，请重启小程序',
-                  showCancel: false
+                console.error('绝对路径跳转到首页失败:', err);
+                // 尝试相对路径
+                wx.reLaunch({
+                  url: '../home/home',
+                  success: () => {
+                    console.log('使用相对路径成功跳转到首页');
+                  },
+                  fail: (err2) => {
+                    console.error('相对路径跳转到首页也失败:', err2);
+                    // 最后尝试传统路径
+                    wx.reLaunch({
+                      url: '/pages/home/home',
+                      success: () => {
+                        console.log('使用传统路径成功跳转到首页');
+                      },
+                      fail: (err3) => {
+                        // 弹窗提示跳转失败
+                        wx.showModal({
+                          title: '跳转失败',
+                          content: '无法进入首页，请重启小程序',
+                          showCancel: false
+                        });
+                      }
+                    });
+                  }
                 });
               }
             });
@@ -340,5 +365,17 @@ Page({
         });
       }
     });
+  },
+  
+  /**
+   * 尝试按顺序导航到URL列表中的一个URL
+   * @param {Array} urls - URL列表
+   * @param {Number} index - 当前尝试的索引
+   * @param {Function} onAllFailed - 所有URL尝试失败后的回调
+   */
+  tryNavigateTo: function(urls, index, onAllFailed) {
+    // 使用app全局方法进行跳转，逐渐弃用此方法
+    const app = getApp();
+    app.tryNavigateToUrls(urls, index, null, onAllFailed);
   }
 }); 

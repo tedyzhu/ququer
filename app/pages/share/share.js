@@ -39,7 +39,14 @@ Page({
       // 无效分享ID，3秒后跳转到首页
       setTimeout(() => {
         wx.reLaunch({
-          url: '/pages/index/index'
+          url: '/app/pages/index/index',
+          fail: (err) => {
+            console.error('跳转到首页失败:', err);
+            // 尝试备用路径
+            wx.reLaunch({
+              url: '../index/index'
+            });
+          }
         });
       }, 3000);
       
@@ -58,7 +65,14 @@ Page({
       
       // 跳转到登录页
       wx.reLaunch({
-        url: '/pages/login/login'
+        url: '/app/pages/login/login',
+        fail: (err) => {
+          console.error('跳转到登录页失败:', err);
+          // 尝试备用路径
+          wx.reLaunch({
+            url: '../login/login'
+          });
+        }
       });
       
       return;
@@ -78,15 +92,25 @@ Page({
     // TODO: 根据实际业务逻辑处理分享ID
     // 这里简单示例，直接跳转到聊天页面
     wx.navigateTo({
-      url: '/pages/chat/chat?id=' + shareId,
+      url: '/app/pages/chat/chat?id=' + shareId,
       success: () => {
         console.log('成功跳转到聊天页面');
       },
       fail: (error) => {
         console.error('跳转到聊天页面失败:', error);
-        this.setData({
-          loading: false,
-          error: '无法打开聊天: ' + error.errMsg
+        // 尝试备用路径
+        wx.navigateTo({
+          url: '../chat/chat?id=' + shareId,
+          success: () => {
+            console.log('使用相对路径成功跳转到聊天页面');
+          },
+          fail: (error2) => {
+            console.error('备用路径跳转也失败:', error2);
+            this.setData({
+              loading: false,
+              error: '无法打开聊天: ' + error2.errMsg
+            });
+          }
         });
       }
     });
