@@ -6,7 +6,11 @@ const cloud = require('wx-server-sdk');
 
 // 初始化云开发环境
 cloud.init({
-  env: 'cloud1-9gmp8bcn2dc3576a'
+  env: 'cloud1-9gmp8bcn2dc3576a',
+  // 添加安全相关配置，解决SharedArrayBuffer警告
+  securityHeaders: {
+    enableCrossOriginIsolation: true
+  }
 });
 
 /**

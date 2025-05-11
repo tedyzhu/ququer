@@ -1,5 +1,21 @@
 <view class="container">
-  <image class="logo" src="/assets/images/logo.svg"></image>
-  <view class="title">秘信</view>
-  <view class="loading">{{message}}</view>
+  <view class="logo-area">
+    <image class="logo" src="/assets/images/logo.png" mode="aspectFit"></image>
+    <view class="app-name">蛐曲儿</view>
+    <view class="app-slogan">阅后即焚的聊天小程序</view>
+  </view>
+  
+  <view class="loading-area">
+    <view class="loading-spinner"></view>
+    <view class="loading-text">{{hasLogin ? '准备就绪，即将进入...' : '正在加载，请稍候...'}}</view>
+  </view>
+  
+  <!-- SharedArrayBuffer警告提示 -->
+  <view class="warning-message" wx:if="{{warning}}">
+    <text>{{warning}}</text>
+  </view>
+  
+  <view class="button-area" wx:if="{{!hasLogin}}">
+    <button class="login-button" bindtap="goToLogin">立即登录</button>
+  </view>
 </view> 

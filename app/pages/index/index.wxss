@@ -1,26 +1,84 @@
+/* 首页样式 */
 .container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background-color: #fff;
+  background-color: #f6f7fb;
+}
+
+.logo-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 60rpx;
 }
 
 .logo {
-  width: 200rpx;
-  height: 200rpx;
-  margin-bottom: 40rpx;
+  width: 180rpx;
+  height: 180rpx;
+  margin-bottom: 30rpx;
 }
 
-.title {
+.app-name {
   font-size: 48rpx;
   font-weight: bold;
   color: #333;
-  margin-bottom: 40rpx;
+  margin-bottom: 10rpx;
 }
 
-.loading {
-  font-size: 30rpx;
-  color: #999;
+.app-slogan {
+  font-size: 28rpx;
+  color: #666;
+}
+
+.loading-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 60rpx;
+}
+
+.loading-spinner {
+  width: 60rpx;
+  height: 60rpx;
+  border: 4rpx solid #f3f3f3;
+  border-top: 4rpx solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20rpx;
+}
+
+.loading-text {
+  font-size: 28rpx;
+  color: #666;
+}
+
+.warning-message {
+  background-color: #ffeecc;
+  color: #994400;
+  padding: 20rpx 30rpx;
+  border-radius: 8rpx;
+  font-size: 26rpx;
+  margin: 20rpx 40rpx;
+  max-width: 90%;
+  text-align: center;
+}
+
+.button-area {
+  margin-top: 40rpx;
+}
+
+.login-button {
+  background-color: #3498db;
+  color: white;
+  font-size: 32rpx;
+  padding: 20rpx 60rpx;
+  border-radius: 40rpx;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 } 
