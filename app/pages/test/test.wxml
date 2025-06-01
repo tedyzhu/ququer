@@ -1,0 +1,51 @@
+<!-- 邀请链接自动测试页面 -->
+<view class="container">
+  <view class="header">
+    <text class="title">秘信邀请链接自动测试</text>
+  </view>
+  
+  <view class="control-section">
+    <button type="primary" bindtap="startAutoTest" disabled="{{testing}}">
+      {{testing ? '测试中...' : '开始自动测试'}}
+    </button>
+    
+    <button type="warn" bindtap="testInfiniteLoop" class="test-btn">
+      检测无限循环
+    </button>
+    
+    <button type="default" bindtap="clearAllChatCache" class="test-btn">
+      清理聊天缓存
+    </button>
+    
+    <button type="default" bindtap="restartChatTest" class="test-btn">
+      重启聊天测试
+    </button>
+    
+    <button wx:if="{{success}}" type="default" bindtap="goToChat" class="chat-btn">
+      进入测试聊天
+    </button>
+  </view>
+  
+  <view class="log-section">
+    <view class="log-title">测试日志:</view>
+    <scroll-view scroll-y class="log-content">
+      <view wx:if="{{logs.length === 0}}" class="no-logs">
+        尚未开始测试，点击"开始自动测试"按钮执行
+      </view>
+      <view wx:for="{{logs}}" wx:key="index" class="log-item">
+        {{item}}
+      </view>
+    </scroll-view>
+  </view>
+  
+  <view class="info-section" wx:if="{{inviteId}}">
+    <view class="info-item">
+      <text class="info-label">邀请ID:</text>
+      <text class="info-value">{{inviteId}}</text>
+    </view>
+    <view class="info-item" wx:if="{{chatId}}">
+      <text class="info-label">聊天ID:</text>
+      <text class="info-value">{{chatId}}</text>
+    </view>
+  </view>
+</view> 

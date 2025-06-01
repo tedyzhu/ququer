@@ -1,0 +1,157 @@
+/* 调试页面样式 */
+.debug-container {
+  padding: 20rpx;
+  background: #f5f5f5;
+  min-height: 100vh;
+}
+
+.debug-header {
+  text-align: center;
+  margin-bottom: 30rpx;
+  padding: 20rpx;
+  background: #fff;
+  border-radius: 10rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0,0,0,0.1);
+}
+
+.debug-title {
+  display: block;
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 10rpx;
+}
+
+.debug-subtitle {
+  display: block;
+  font-size: 28rpx;
+  color: #666;
+}
+
+.debug-actions, .debug-tests {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20rpx;
+  margin-bottom: 30rpx;
+}
+
+.debug-btn {
+  flex: 1;
+  min-width: 200rpx;
+  height: 80rpx;
+  line-height: 80rpx;
+  text-align: center;
+  border-radius: 8rpx;
+  font-size: 28rpx;
+  border: none;
+}
+
+.debug-btn.primary {
+  background: #007aff;
+  color: #fff;
+}
+
+.debug-btn.secondary {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.debug-btn.test {
+  background: #ff9500;
+  color: #fff;
+}
+
+.debug-section-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 20rpx;
+  padding-bottom: 10rpx;
+  border-bottom: 2rpx solid #e0e0e0;
+}
+
+.debug-info {
+  margin-bottom: 30rpx;
+}
+
+.debug-section {
+  background: #fff;
+  border-radius: 10rpx;
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0,0,0,0.1);
+}
+
+.debug-item-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 15rpx;
+  padding-bottom: 10rpx;
+  border-bottom: 1rpx solid #e0e0e0;
+}
+
+.debug-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.debug-text {
+  font-size: 26rpx;
+  color: #666;
+  line-height: 1.5;
+  word-wrap: break-word;
+  word-break: break-all;
+}
+
+.debug-logs {
+  background: #fff;
+  border-radius: 10rpx;
+  padding: 20rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0,0,0,0.1);
+}
+
+.logs-container {
+  height: 600rpx;
+  border: 1rpx solid #e0e0e0;
+  border-radius: 8rpx;
+  padding: 10rpx;
+}
+
+.log-item {
+  padding: 15rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+  margin-bottom: 10rpx;
+}
+
+.log-item:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.log-time {
+  font-size: 24rpx;
+  color: #999;
+  margin-bottom: 5rpx;
+}
+
+.log-message {
+  font-size: 28rpx;
+  color: #333;
+  font-weight: bold;
+  margin-bottom: 5rpx;
+}
+
+.log-data {
+  font-size: 24rpx;
+  color: #666;
+  font-family: monospace;
+  background: #f5f5f5;
+  padding: 10rpx;
+  border-radius: 5rpx;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 400rpx;
+  overflow-y: auto;
+} 

@@ -1,0 +1,9 @@
+{
+  "name": "testJoin",
+  "version": "1.0.0",
+  "description": "测试云函数基本功能",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+} 

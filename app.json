@@ -11,7 +11,9 @@
     "pages/chat/chat",
     "pages/chat/detail",
     "pages/index/index",
-    "pages/share/share"
+    "pages/share/share",
+    "pages/test-share/test-share",
+    "pages/test-encoding/test-encoding"
   ],
   "window": {
     "backgroundTextStyle": "light",

@@ -1,0 +1,9 @@
+{
+  "name": "joinByInvite",
+  "version": "1.0.0",
+  "description": "joinByInvite cloud function",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

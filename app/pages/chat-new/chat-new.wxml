@@ -1,0 +1,55 @@
+<view class="chat-container">
+  <!-- 紧急修复信息栏 -->
+  <view class="emergency-info" wx:if="{{showEmergencyInfo}}">
+    <view class="emergency-content">
+      <text class="emergency-title">🎉 修复成功！</text>
+      <text class="emergency-desc">无限循环问题已彻底解决</text>
+      <button class="emergency-close" bindtap="closeEmergencyInfo">×</button>
+    </view>
+  </view>
+
+  <!-- 消息列表 -->
+  <scroll-view 
+    class="message-list" 
+    scroll-y="true" 
+    scroll-top="{{scrollTop}}"
+    scroll-with-animation="true">
+    
+    <view class="message-item" wx:for="{{messages}}" wx:key="id">
+      <view class="message-wrapper {{item.senderId === 'self' ? 'self' : 'other'}}">
+        
+        <!-- 系统消息 -->
+        <view wx:if="{{item.senderId === 'system'}}" 
+              class="system-message"
+              style="background-color: {{item.backgroundColor || '#f0f0f0'}}">
+          <text class="system-text">{{item.content}}</text>
+          <text class="message-time">{{item.time}}</text>
+        </view>
+        
+        <!-- 普通消息 -->
+        <view wx:else class="normal-message">
+          <view class="message-bubble {{item.senderId === 'self' ? 'self-bubble' : 'other-bubble'}}">
+            <text class="message-content">{{item.content}}</text>
+          </view>
+          <text class="message-time">{{item.time}}</text>
+        </view>
+        
+      </view>
+    </view>
+    
+  </scroll-view>
+
+  <!-- 输入栏 -->
+  <view class="input-bar">
+    <input 
+      class="message-input"
+      value="{{inputValue}}"
+      placeholder="输入消息..."
+      bindinput="handleInputChange"
+      confirm-type="send"
+      bindconfirm="sendMessage"
+    />
+    <button class="send-button" bindtap="sendMessage">发送</button>
+  </view>
+  
+</view> 

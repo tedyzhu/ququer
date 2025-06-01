@@ -8,7 +8,8 @@ App({
     conversations: [],
     cloudInitialized: false,
     launchOptions: null, // 存储启动参数
-    pendingInvite: null  // 存储待处理的邀请信息
+    pendingInvite: null,  // 存储待处理的邀请信息
+    ENCODING_FIX_APPLIED: false // 编码修复状态
   },
 
   /**
@@ -17,6 +18,15 @@ App({
    */
   onLaunch: function (options) {
     console.log('小程序启动，参数:', options);
+    
+    // 🚨 立即应用编码修复，防止btoa错误
+    try {
+      require('./fix-encoding-error.js');
+      this.globalData.ENCODING_FIX_APPLIED = true;
+      console.log('✅ 编码修复已应用');
+    } catch (e) {
+      console.warn('编码修复应用失败，但不影响正常功能:', e);
+    }
     
     // 初始化云环境
     this.initCloud();
@@ -127,9 +137,9 @@ App({
       return false;
     } else {
       try {
-        console.log('开始初始化云环境 cloud1-9gmp8bcn2dc3576a');
+        console.log('开始初始化云环境 ququer-env-6g35f0nv28c446e7');
         wx.cloud.init({
-          env: 'cloud1-9gmp8bcn2dc3576a',
+          env: 'ququer-env-6g35f0nv28c446e7',
           traceUser: true,
           // 增强安全相关配置，解决SharedArrayBuffer警告
           securityHeaders: {
@@ -145,7 +155,7 @@ App({
             }
           }
         });
-        console.log('云环境初始化成功: cloud1-9gmp8bcn2dc3576a');
+        console.log('云环境初始化成功: ququer-env-6g35f0nv28c446e7');
         this.globalData.cloudInitialized = true;
         return true;
       } catch (e) {
@@ -301,7 +311,9 @@ App({
   getChatUrlList: function(chatId, inviter) {
     if (!chatId) return [];
     
-    const encodedInviter = encodeURIComponent(inviter || '朋友');
+    // 使用安全编码，避免btoa错误
+    const encoding = require('./app/utils/encoding.js');
+    const encodedInviter = encoding.safeEncodeNickname(inviter || '朋友');
     
     // 统一使用inviter参数，不再使用name参数
     return [

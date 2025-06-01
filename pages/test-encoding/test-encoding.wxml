@@ -1,0 +1,38 @@
+<view class="container">
+  <view class="header">
+    <text class="title">编码功能测试</text>
+    <button class="clear-btn" bindtap="clearLogs">清空日志</button>
+  </view>
+  
+  <view class="test-results">
+    <view class="result-item">
+      <text class="result-label">中文编码:</text>
+      <text class="result-value {{testResults.chineseEncoding ? 'success' : 'fail'}}">
+        {{testResults.chineseEncoding ? '✅ 通过' : '❌ 失败'}}
+      </text>
+    </view>
+    
+    <view class="result-item">
+      <text class="result-label">Base64编码:</text>
+      <text class="result-value {{testResults.base64 ? 'success' : 'fail'}}">
+        {{testResults.base64 ? '✅ 通过' : '❌ 失败'}}
+      </text>
+    </view>
+    
+    <view class="result-item">
+      <text class="result-label">createInvite:</text>
+      <text class="result-value {{testResults.createInvite ? 'success' : 'fail'}}">
+        {{testResults.createInvite ? '✅ 通过' : '❌ 失败'}}
+      </text>
+    </view>
+  </view>
+  
+  <view class="logs">
+    <text class="logs-title">测试日志</text>
+    <scroll-view class="logs-container" scroll-y="true">
+      <view class="log-item" wx:for="{{logs}}" wx:key="index">
+        <text class="log-text">{{item}}</text>
+      </view>
+    </scroll-view>
+  </view>
+</view> 

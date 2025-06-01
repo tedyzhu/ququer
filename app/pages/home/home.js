@@ -467,8 +467,9 @@ Page({
           chatStarted: true
         });
         
-        // 获取跳转参数，确保格式一致
-        const nickname = encodeURIComponent(this.data.userInfo.nickName || '用户');
+        // 获取跳转参数，确保格式一致，使用安全编码
+        const encoding = require('../../utils/encoding.js');
+        const nickname = encoding.safeEncodeNickname(this.data.userInfo.nickName || '用户');
         
         console.log('[开始聊天] 当前用户昵称:', this.data.userInfo.nickName, '编码后:', nickname);
         

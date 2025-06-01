@@ -6,7 +6,7 @@ const cloud = require('wx-server-sdk');
 
 // 初始化云环境
 cloud.init({
-  env: 'cloud1-9gmp8bcn2dc3576a',
+  env: 'ququer-env-6g35f0nv28c446e7',
   // 添加安全相关配置
   securityHeaders: {
     enableCrossOriginIsolation: true,

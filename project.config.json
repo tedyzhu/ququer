@@ -49,7 +49,7 @@
   },
   "compileType": "miniprogram",
   "libVersion": "2.19.4",
-  "appid": "wxe5f52902cf4de896",
+  "appid": "wx1848888960aefcb5",
   "projectname": "ququer",
   "condition": {},
   "editorSetting": {
@@ -57,5 +57,11 @@
     "tabSize": 2
   },
   "simulatorPluginLibVersion": {},
-  "cloudfunctionTemplateRoot": "cloudfunctionTemplate/"
+  "cloudfunctionTemplateRoot": "cloudfunctionTemplate/",
+  "cloudfunctionRoot": "./cloudfunctions/",
+  "scripts": {},
+  "cloudbaseRoot": "./",
+  "watchOptions": {
+    "ignore": []
+  }
 }

@@ -1,0 +1,276 @@
+.container {
+  padding: 20rpx;
+  min-height: 100vh;
+  background-color: #f5f5f5;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 30rpx;
+  padding: 20rpx;
+  background: white;
+  border-radius: 10rpx;
+}
+
+.title {
+  display: block;
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 10rpx;
+}
+
+.subtitle {
+  display: block;
+  font-size: 28rpx;
+  color: #666;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  padding: 20rpx;
+  background: white;
+  border-radius: 10rpx;
+  margin-bottom: 20rpx;
+}
+
+.user-label {
+  font-size: 28rpx;
+  color: #666;
+  margin-right: 10rpx;
+}
+
+.user-name {
+  font-size: 28rpx;
+  color: #007aff;
+  font-weight: bold;
+}
+
+.controls {
+  background: white;
+  border-radius: 10rpx;
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.input-group {
+  margin-bottom: 20rpx;
+}
+
+.input-label {
+  display: block;
+  font-size: 28rpx;
+  color: #333;
+  margin-bottom: 10rpx;
+}
+
+.input {
+  width: 100%;
+  padding: 20rpx;
+  border: 2rpx solid #e0e0e0;
+  border-radius: 8rpx;
+  font-size: 28rpx;
+  background: #fafafa;
+}
+
+.button-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-bottom: 20rpx;
+}
+
+.btn {
+  flex: 1;
+  min-width: 200rpx;
+  padding: 20rpx;
+  border-radius: 8rpx;
+  font-size: 28rpx;
+  text-align: center;
+  border: none;
+}
+
+.btn-primary {
+  background-color: #007aff;
+  color: white;
+}
+
+.btn-primary[disabled] {
+  background-color: #ccc;
+  color: #999;
+}
+
+.btn-secondary {
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+.btn-outline {
+  background-color: transparent;
+  color: #007aff;
+  border: 2rpx solid #007aff;
+}
+
+.test-info {
+  background: white;
+  border-radius: 10rpx;
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.info-item {
+  display: flex;
+  margin-bottom: 10rpx;
+}
+
+.info-label {
+  font-size: 28rpx;
+  color: #666;
+  width: 150rpx;
+}
+
+.info-value {
+  flex: 1;
+  font-size: 28rpx;
+  color: #333;
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.progress {
+  background: white;
+  border-radius: 10rpx;
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.progress-text {
+  display: block;
+  font-size: 28rpx;
+  color: #333;
+  margin-bottom: 10rpx;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 10rpx;
+  background-color: #e0e0e0;
+  border-radius: 5rpx;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: #007aff;
+  transition: width 0.3s ease;
+}
+
+.logs {
+  background: white;
+  border-radius: 10rpx;
+  overflow: hidden;
+}
+
+.logs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rpx;
+  background: #f8f8f8;
+  border-bottom: 2rpx solid #e0e0e0;
+}
+
+.logs-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.logs-count {
+  font-size: 24rpx;
+  color: #666;
+}
+
+.logs-content {
+  height: 600rpx;
+  padding: 20rpx;
+}
+
+.log-item {
+  margin-bottom: 10rpx;
+  padding: 10rpx;
+  background: #fafafa;
+  border-radius: 5rpx;
+}
+
+.log-text {
+  font-size: 24rpx;
+  line-height: 1.4;
+  font-family: monospace;
+  color: #333;
+  word-break: break-all;
+}
+
+.log-text.success {
+  color: #52c41a;
+}
+
+.log-text.error {
+  color: #ff4d4f;
+}
+
+.log-text.warning {
+  color: #fa8c16;
+}
+
+.log-text.placeholder {
+  color: #999;
+  font-style: italic;
+}
+
+/* 聊天导航区域样式 */
+.chat-navigation {
+  background: linear-gradient(135deg, #52c41a, #389e0d);
+  border-radius: 15rpx;
+  padding: 30rpx;
+  margin-bottom: 20rpx;
+  text-align: center;
+  box-shadow: 0 8rpx 20rpx rgba(82, 196, 26, 0.3);
+}
+
+.nav-header {
+  margin-bottom: 20rpx;
+}
+
+.nav-title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: bold;
+  color: white;
+  margin-bottom: 10rpx;
+}
+
+.nav-subtitle {
+  display: block;
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.btn-success {
+  background-color: white;
+  color: #52c41a;
+  font-weight: bold;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
+}
+
+.btn-large {
+  padding: 25rpx 40rpx;
+  font-size: 30rpx;
+  border-radius: 12rpx;
+}
+
+.btn-success:active {
+  background-color: #f0f0f0;
+  transform: translateY(2rpx);
+} 

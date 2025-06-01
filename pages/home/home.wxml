@@ -1,4 +1,12 @@
 <view class="container">
+  <!-- 分享状态显示 -->
+  <view class="status-container" wx:if="{{shareStatus}}">
+    <view class="progress-bar">
+      <view class="progress-inner" style="width: {{shareProgress}}%;"></view>
+    </view>
+    <view class="status-text">{{shareStatus}}</view>
+  </view>
+
   <!-- 状态栏占位 -->
   <view class="status-bar" style="height:{{statusBarHeight}}px"></view>
 
@@ -15,11 +23,22 @@
     
     <view class="invite-status" wx:if="{{inviteSent}}">
       <text class="invite-status-text">已发出邀请，稍等一会儿～</text>
+      
+      <!-- 邀请已接受显示 -->
+      <view class="invite-success" wx:if="{{inviteeJoined}}">
+        <text class="success-text">好友已接受邀请！</text>
+        <view class="enter-chat-btn" bindtap="goToChat">进入聊天</view>
+      </view>
     </view>
     
     <view class="button-group">
       <view class="invite-button black" bindtap="onShareClick">
         <text class="invite-text">👋 邀请好友畅聊～</text>
+      </view>
+      
+      <!-- 测试分享功能按钮（开发期间使用） -->
+      <view class="test-share-button" bindtap="testShare">
+        <text class="test-share-text">🧪 测试分享功能</text>
       </view>
     </view>
   </view>

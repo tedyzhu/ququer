@@ -1,0 +1,79 @@
+<!--调试页面-->
+<view class="debug-container">
+  <!-- 标题 -->
+  <view class="debug-header">
+    <text class="debug-title">真机调试工具</text>
+    <text class="debug-subtitle">邀请链接参数诊断</text>
+  </view>
+
+  <!-- 操作按钮 -->
+  <view class="debug-actions">
+    <button class="debug-btn primary" bindtap="refreshDebugInfo">刷新信息</button>
+    <button class="debug-btn secondary" bindtap="clearStorage">清除存储</button>
+    <button class="debug-btn secondary" bindtap="copyDebugInfo">复制信息</button>
+  </view>
+
+  <!-- 测试按钮 -->
+  <view class="debug-tests">
+    <view class="debug-section-title">功能测试</view>
+    <button class="debug-btn test" bindtap="testCloudFunction">测试基础云函数</button>
+    <button class="debug-btn test" bindtap="testJoinByInviteFunction">测试joinByInvite云函数</button>
+    <button class="debug-btn test" bindtap="testCompleteInviteFlow">测试完整邀请流程</button>
+    <button class="debug-btn test" bindtap="testRealInviteLink">🔗 测试真实邀请链接</button>
+    <button class="debug-btn test" bindtap="testRealShareLink">📤 测试真实分享链接</button>
+    <button class="debug-btn test" bindtap="testSharerListening">👥 测试分享者监听</button>
+    <button class="debug-btn test" bindtap="testHomePageShare">🏠 测试首页分享</button>
+    <button class="debug-btn test" bindtap="testDirectShare">🎯 直接测试分享</button>
+    <button class="debug-btn test" bindtap="testInviteProcessing">测试邀请处理</button>
+    <button class="debug-btn test" bindtap="testNavigateToChat">测试跳转聊天</button>
+    <button class="debug-btn test" bindtap="testNavigateToHome">测试跳转首页</button>
+  </view>
+
+  <!-- 调试信息 -->
+  <view class="debug-info">
+    <view class="debug-section-title">调试信息</view>
+    
+    <!-- 全局数据 -->
+    <view class="debug-section">
+      <view class="debug-item-title">全局数据</view>
+      <view class="debug-item-content">
+        <text class="debug-text">启动参数: {{debugInfo.globalData.launchOptions}}</text>
+        <text class="debug-text">待处理邀请: {{debugInfo.globalData.pendingInvite}}</text>
+        <text class="debug-text">登录状态: {{debugInfo.globalData.hasLogin ? '已登录' : '未登录'}}</text>
+        <text class="debug-text">用户昵称: {{debugInfo.globalData.userInfo.nickName || '无'}}</text>
+      </view>
+    </view>
+
+    <!-- 本地存储 -->
+    <view class="debug-section">
+      <view class="debug-item-title">本地存储</view>
+      <view class="debug-item-content">
+        <text class="debug-text">pendingInvite: {{debugInfo.localStorage.pendingInvite}}</text>
+        <text class="debug-text">entryOptions: {{debugInfo.localStorage.entryOptions}}</text>
+        <text class="debug-text">用户信息: {{debugInfo.localStorage.userInfo}}</text>
+      </view>
+    </view>
+
+    <!-- 系统信息 -->
+    <view class="debug-section">
+      <view class="debug-item-title">系统信息</view>
+      <view class="debug-item-content">
+        <text class="debug-text">平台: {{debugInfo.systemInfo.platform}}</text>
+        <text class="debug-text">版本: {{debugInfo.systemInfo.version}}</text>
+        <text class="debug-text">SDK版本: {{debugInfo.systemInfo.SDKVersion}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 日志 -->
+  <view class="debug-logs">
+    <view class="debug-section-title">操作日志</view>
+    <scroll-view class="logs-container" scroll-y="true">
+      <view class="log-item" wx:for="{{logs}}" wx:key="time">
+        <view class="log-time">{{item.time}}</view>
+        <view class="log-message">{{item.message}}</view>
+        <view class="log-data" wx:if="{{item.data}}">{{item.data}}</view>
+      </view>
+    </scroll-view>
+  </view>
+</view> 

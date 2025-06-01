@@ -102,9 +102,9 @@ App({
       return false;
     } else {
       try {
-        console.log('开始初始化云环境 cloud1-9gmp8bcn2dc3576a');
+        console.log('开始初始化云环境 ququer-env-6g35f0nv28c446e7');
         wx.cloud.init({
-          env: 'cloud1-9gmp8bcn2dc3576a',
+          env: 'ququer-env-6g35f0nv28c446e7',
           traceUser: true,
           // 增强安全相关配置，解决SharedArrayBuffer警告
           securityHeaders: {
@@ -120,7 +120,7 @@ App({
             }
           }
         });
-        console.log('云环境初始化成功: cloud1-9gmp8bcn2dc3576a');
+        console.log('云环境初始化成功: ququer-env-6g35f0nv28c446e7');
         this.globalData.cloudInitialized = true;
         return true;
       } catch (e) {

@@ -14,7 +14,7 @@ function initCloud() {
   
   // 初始化云开发
   wx.cloud.init({
-    env: 'cloud1-9gmp8bcn2dc3576a', // 使用提供的云环境ID
+    env: 'ququer-env-6g35f0nv28c446e7', // 使用提供的云环境ID
     traceUser: true,
     // 添加安全相关配置，解决SharedArrayBuffer警告
     securityHeaders: {

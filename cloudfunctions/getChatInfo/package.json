@@ -1,0 +1,9 @@
+{
+  "name": "getChatInfo",
+  "version": "1.0.0",
+  "description": "获取聊天信息的云函数",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.4.0"
+  }
+} 

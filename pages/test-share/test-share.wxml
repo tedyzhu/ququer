@@ -1,0 +1,28 @@
+<view class="container">
+  <view class="header">
+    <text class="title">分享邀请功能测试</text>
+  </view>
+
+  <view class="progress-section">
+    <text class="progress-title">测试进度: {{testStep}}/5</text>
+    <view class="progress-bar">
+      <view class="progress-fill" style="width: {{testStep * 20}}%;"></view>
+    </view>
+    <text class="current-step">{{steps[testStep]}}</text>
+  </view>
+
+  <view class="buttons-section">
+    <button class="test-btn primary" bindtap="startFullTest">开始完整测试</button>
+    <button class="test-btn secondary" bindtap="testShareLink">测试分享链接</button>
+    <button class="test-btn clear" bindtap="clearLogs">清空日志</button>
+  </view>
+
+  <view class="logs-section">
+    <text class="logs-title">测试日志 ({{logs.length}}条)</text>
+    <scroll-view class="logs-container" scroll-y="true">
+      <view class="log-item" wx:for="{{logs}}" wx:key="index">
+        <text class="log-text">{{item}}</text>
+      </view>
+    </scroll-view>
+  </view>
+</view> 

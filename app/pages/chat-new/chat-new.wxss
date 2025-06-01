@@ -1,0 +1,174 @@
+/* 全新安全聊天页面样式 */
+
+.chat-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #f5f5f5;
+}
+
+/* 紧急修复信息栏 */
+.emergency-info {
+  background: linear-gradient(135deg, #4CAF50, #2196F3);
+  color: white;
+  padding: 12rpx 24rpx;
+  position: relative;
+  animation: slideDown 0.5s ease-out;
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+.emergency-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.emergency-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  margin-right: 16rpx;
+}
+
+.emergency-desc {
+  font-size: 24rpx;
+  flex: 1;
+}
+
+.emergency-close {
+  background: rgba(255,255,255,0.3);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 48rpx;
+  height: 48rpx;
+  font-size: 32rpx;
+  line-height: 1;
+  padding: 0;
+}
+
+/* 消息列表 */
+.message-list {
+  flex: 1;
+  padding: 20rpx;
+  overflow-y: auto;
+}
+
+.message-item {
+  margin-bottom: 24rpx;
+}
+
+.message-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.message-wrapper.self {
+  align-items: flex-end;
+}
+
+.message-wrapper.other {
+  align-items: flex-start;
+}
+
+/* 系统消息 */
+.system-message {
+  background-color: #e3f2fd;
+  border-radius: 16rpx;
+  padding: 16rpx 20rpx;
+  margin: 0 80rpx;
+  text-align: center;
+  border: 2rpx solid #2196F3;
+}
+
+.system-text {
+  color: #1976d2;
+  font-size: 28rpx;
+  font-weight: 500;
+  display: block;
+  margin-bottom: 8rpx;
+}
+
+/* 普通消息 */
+.normal-message {
+  display: flex;
+  flex-direction: column;
+  max-width: 70%;
+}
+
+.message-bubble {
+  padding: 16rpx 20rpx;
+  border-radius: 20rpx;
+  word-wrap: break-word;
+  position: relative;
+}
+
+.self-bubble {
+  background-color: #007aff;
+  color: white;
+  border-bottom-right-radius: 8rpx;
+}
+
+.other-bubble {
+  background-color: white;
+  color: #333;
+  border: 2rpx solid #e0e0e0;
+  border-bottom-left-radius: 8rpx;
+}
+
+.message-content {
+  font-size: 30rpx;
+  line-height: 1.4;
+}
+
+.message-time {
+  font-size: 22rpx;
+  color: #999;
+  margin-top: 8rpx;
+  text-align: center;
+}
+
+.self .message-time {
+  text-align: right;
+}
+
+.other .message-time {
+  text-align: left;
+}
+
+/* 输入栏 */
+.input-bar {
+  background-color: white;
+  padding: 20rpx;
+  display: flex;
+  align-items: center;
+  border-top: 2rpx solid #e0e0e0;
+  box-shadow: 0 -4rpx 8rpx rgba(0,0,0,0.1);
+}
+
+.message-input {
+  flex: 1;
+  border: 2rpx solid #e0e0e0;
+  border-radius: 24rpx;
+  padding: 16rpx 20rpx;
+  font-size: 28rpx;
+  margin-right: 16rpx;
+  background-color: #f8f8f8;
+}
+
+.send-button {
+  background-color: #007aff;
+  color: white;
+  border: none;
+  border-radius: 24rpx;
+  padding: 16rpx 32rpx;
+  font-size: 28rpx;
+  min-width: 120rpx;
+}
+
+.send-button:active {
+  background-color: #0056cc;
+} 

@@ -1,0 +1,90 @@
+<view class="container">
+  <view class="header">
+    <text class="title">邀请链接测试工具</text>
+    <text class="subtitle">测试被邀请者登录后的跳转流程</text>
+  </view>
+
+  <view class="user-info" wx:if="{{userInfo.nickName}}">
+    <text class="user-label">当前用户:</text>
+    <text class="user-name">{{userInfo.nickName}}</text>
+  </view>
+
+  <view class="controls">
+    <view class="input-group">
+      <text class="input-label">邀请ID (可选):</text>
+      <input class="input" 
+             value="{{inviteId}}" 
+             bindinput="onInviteIdInput" 
+             placeholder="留空将自动创建新邀请" />
+    </view>
+
+    <view class="button-group">
+      <button class="btn btn-primary" 
+              bindtap="startCompleteTest" 
+              disabled="{{testing}}">
+        {{testing ? '测试进行中...' : '开始完整测试'}}
+      </button>
+      
+      <button class="btn btn-secondary" 
+              bindtap="testCreateInviteOnly" 
+              disabled="{{testing}}">
+        仅测试创建邀请
+      </button>
+      
+      <button class="btn btn-secondary" 
+              bindtap="testJoinChatOnly" 
+              disabled="{{testing}}">
+        仅测试加入聊天
+      </button>
+    </view>
+
+    <view class="button-group">
+      <button class="btn btn-outline" bindtap="clearLogs">清除日志</button>
+      <button class="btn btn-outline" bindtap="resetTest">重置测试</button>
+    </view>
+  </view>
+
+  <view class="test-info" wx:if="{{inviteId || chatId}}">
+    <view class="info-item" wx:if="{{inviteId}}">
+      <text class="info-label">邀请ID:</text>
+      <text class="info-value">{{inviteId}}</text>
+    </view>
+    <view class="info-item" wx:if="{{chatId}}">
+      <text class="info-label">聊天ID:</text>
+      <text class="info-value">{{chatId}}</text>
+    </view>
+  </view>
+
+  <!-- 测试完成后的跳转按钮 -->
+  <view class="chat-navigation" wx:if="{{chatUrl}}">
+    <view class="nav-header">
+      <text class="nav-title">🎉 测试完成！</text>
+      <text class="nav-subtitle">点击下方按钮验证聊天页面</text>
+    </view>
+    <button class="btn btn-success btn-large" bindtap="navigateToChat">
+      🚀 跳转到聊天页面
+    </button>
+  </view>
+
+  <view class="progress" wx:if="{{testing}}">
+    <text class="progress-text">测试步骤 {{testStep}}/5</text>
+    <view class="progress-bar">
+      <view class="progress-fill" style="width: {{testStep * 20}}%"></view>
+    </view>
+  </view>
+
+  <view class="logs">
+    <view class="logs-header">
+      <text class="logs-title">测试日志</text>
+      <text class="logs-count">({{logs.length}}条)</text>
+    </view>
+    <scroll-view class="logs-content" scroll-y="true" scroll-top="{{999999}}">
+      <view class="log-item" wx:for="{{logs}}" wx:key="index">
+        <text class="log-text {{item.indexOf('❌') > -1 ? 'error' : item.indexOf('✅') > -1 ? 'success' : item.indexOf('⚠️') > -1 ? 'warning' : ''}}">{{item}}</text>
+      </view>
+      <view class="log-item" wx:if="{{logs.length === 0}}">
+        <text class="log-text placeholder">暂无日志，点击"开始完整测试"开始测试</text>
+      </view>
+    </scroll-view>
+  </view>
+</view> 

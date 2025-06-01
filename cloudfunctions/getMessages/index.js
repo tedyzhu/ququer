@@ -6,7 +6,7 @@ const crypto = require('crypto');
 
 // 初始化云开发环境
 cloud.init({
-  env: 'cloud1-9gmp8bcn2dc3576a'
+  env: 'ququer-env-6g35f0nv28c446e7'
 });
 
 /**

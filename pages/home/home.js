@@ -12,7 +12,9 @@ Page({
     inviteSent: false, // 是否已真正发出邀请
     statusBarHeight: 20, // 状态栏高度，默认值
     inviteeJoined: false, // 被邀请者是否已加入
-    _currentShareChatId: null // 保存当前的分享ID
+    _currentShareChatId: null, // 保存当前的分享ID
+    shareStatus: '', // 分享状态文本
+    shareProgress: 0 // 分享进度 0-100
   },
 
   /**
@@ -345,135 +347,375 @@ Page({
    * 点击邀请按钮时直接处理分享逻辑
    */
   onShareClick: function() {
-    // 确保有聊天ID
-    const chatId = this.data.chatId || this.createNewChatId();
-    
-    // 保存当前的分享ID到全局变量
-    this._currentShareChatId = chatId;
-    
-    // 标记为已发出邀请状态
-    this.setData({
-      inviteSent: true
+    wx.showModal({
+      title: '邀请好友',
+      content: '请点击右上角的"..."菜单，选择"转发"来邀请好友加入聊天',
+      showCancel: false,
+      confirmText: '我知道了'
     });
-    
-    // 启动轮询检查被邀请人是否已加入
-    this.startCheckingInviteeJoined(chatId);
-    
-    // 直接调用分享给朋友的API
-    if (wx.canIUse('shareAppMessage')) {
-      // 注意: 此API仅适用于特定场景，详见微信文档
-      // https://developers.weixin.qq.com/miniprogram/dev/api/share/wx.shareAppMessage.html
-      wx.shareAppMessage({
-        title: `${getApp().globalData.userInfo.nickName}邀请你加入秘密聊天`,
-        path: '/pages/index/index',
-        imageUrl: '/assets/images/logo.svg'
-      });
-    } else {
-      // 如果不支持直接分享，则提示用户使用右上角菜单
-      wx.showModal({
-        title: '邀请提示',
-        content: '请点击右上角"..."，选择"转发"来邀请好友',
-        showCancel: false
-      });
-    }
   },
   
   /**
-   * 开始检查被邀请人是否已加入
+   * 用户点击右上角分享
+   */
+  onShareAppMessage: function() {
+    console.log('🎯 用户点击右上角分享');
+    
+    const app = getApp();
+    const userInfo = app.globalData.userInfo || {};
+    const nickName = userInfo.nickName || '好友';
+    
+    // 创建新的聊天ID用于分享
+    const shareCreatedChatId = 'chat_share_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    
+    console.log('🎯 创建分享聊天ID:', shareCreatedChatId);
+    
+    // 更新状态 - 开始创建邀请
+    this.setData({
+      inviteSent: false,
+      chatId: shareCreatedChatId,
+      _currentShareChatId: shareCreatedChatId,
+      shareStatus: '正在创建邀请...',
+      shareProgress: 25
+    });
+    
+    // 立即调用云函数创建邀请
+    wx.cloud.callFunction({
+      name: 'createInvite',
+      data: {
+        chatId: shareCreatedChatId,
+        inviter: {
+          openId: app.globalData.openId || userInfo.openId,
+          nickName: nickName,
+          avatarUrl: userInfo.avatarUrl
+        }
+      },
+      success: (res) => {
+        console.log('🎯 创建邀请成功:', res.result);
+        
+        if (res.result && res.result.success) {
+          console.log('🎯 邀请创建成功，启动监听');
+          
+          // 标记为已发出邀请
+          this.setData({
+            inviteSent: true,
+            shareStatus: '邀请创建成功，等待好友加入...',
+            shareProgress: 50
+          });
+          
+          // 启动监听被邀请者加入
+          this.startCheckingInviteeJoined(shareCreatedChatId);
+        } else {
+          // 创建失败
+          this.setData({
+            shareStatus: '创建邀请失败，请重试',
+            shareProgress: 0
+          });
+        }
+      },
+      fail: (err) => {
+        console.error('🎯 创建邀请失败:', err);
+        this.setData({
+          shareStatus: '网络错误，请重试',
+          shareProgress: 0
+        });
+      }
+    });
+    
+    // 返回分享配置，直接传递聊天ID到分享页面
+    return {
+      title: `${nickName}邀请你进行私密聊天`,
+      path: `/pages/share/share?chatId=${shareCreatedChatId}&inviter=${encodeURIComponent(nickName)}&isInvitee=true`,
+      imageUrl: '/assets/images/logo.png',
+      success: (res) => {
+        console.log('🎯 分享成功！');
+        this.setData({
+          shareStatus: '分享成功，等待好友加入...',
+          shareProgress: 75
+        });
+        wx.showToast({
+          title: '分享成功！',
+          icon: 'success',
+          duration: 2000
+        });
+      },
+      fail: (err) => {
+        console.error('🎯 分享失败:', err);
+        this.setData({
+          inviteSent: false,
+          shareStatus: '分享失败，请重试',
+          shareProgress: 0
+        });
+      }
+    };
+  },
+
+  /**
+   * 开始检查被邀请人是否已加入（使用云数据库实时监听）
    */
   startCheckingInviteeJoined: function(chatId) {
-    // 每5秒检查一次聊天参与者状态
+    console.log('🎯 开始监听被邀请人加入:', chatId);
+    
+    // 清除之前的监听器
+    if (this.inviteeWatcher) {
+      this.inviteeWatcher.close();
+    }
+    
+    // 初始化分享开始时间
+    this.shareStartTime = Date.now();
+    
+    try {
+      // 使用云数据库实时监听
+      const db = wx.cloud.database();
+      this.inviteeWatcher = db.collection('conversations')
+        .doc(chatId)
+        .watch({
+          onChange: snapshot => {
+            console.log('🎯 监听到聊天状态变化:', snapshot);
+            
+            if (snapshot.docChanges && snapshot.docChanges.length > 0) {
+              const chatData = snapshot.docChanges[0].doc;
+              const participants = chatData.participants || [];
+              const chatStatus = chatData.status;
+              const chatStarted = chatData.chatStarted;
+              
+              console.log('🎯 状态检查:', {
+                participantsCount: participants.length,
+                chatStatus: chatStatus,
+                chatStarted: chatStarted
+              });
+              
+              // 🔥 如果聊天已开始或有多个参与者或状态为active
+              if (participants.length > 1 || chatStatus === 'active' || chatStarted === true) {
+                console.log('🎯 检测到聊天已开始');
+                
+                // 保存聊天状态到本地
+                try {
+                  const chatStartedInfo = {
+                    chatId: chatId,
+                    chatStarted: true,
+                    participants: participants,
+                    startedAt: new Date().toISOString()
+                  };
+                  wx.setStorageSync(`chat_info_${chatId}`, chatStartedInfo);
+                  console.log('🎯 聊天状态已保存到本地');
+                } catch (storageError) {
+                  console.error('🎯 保存聊天状态失败:', storageError);
+                }
+                
+                // 标记为已加入
+                this.setData({
+                  inviteeJoined: true,
+                  shareStatus: '好友已加入，即将进入聊天',
+                  shareProgress: 100
+                });
+                
+                // 关闭监听
+                this.inviteeWatcher.close();
+                this.inviteeWatcher = null;
+                
+                // 提示用户并自动跳转
+                wx.showToast({
+                  title: '好友已加入！',
+                  icon: 'success',
+                  duration: 1500
+                });
+                
+                setTimeout(() => {
+                  this.goToChat(chatId);
+                }, 1500);
+              } else {
+                // 更新等待时间
+                const elapsed = Math.floor((Date.now() - this.shareStartTime) / 1000);
+                if (elapsed > 5) {
+                  this.setData({
+                    shareStatus: `等待好友加入中 (${elapsed}秒)...`,
+                    shareProgress: 75
+                  });
+                }
+              }
+            }
+          },
+          onError: err => {
+            console.error('🎯 监听出错:', err);
+            // 出错时回退到轮询
+            this.fallbackToPolling(chatId);
+          }
+        });
+    } catch (err) {
+      console.error('🎯 设置监听失败:', err);
+      // 设置失败时回退到轮询
+      this.fallbackToPolling(chatId);
+    }
+  },
+
+  /**
+   * 回退到轮询机制
+   */
+  fallbackToPolling: function(chatId) {
+    console.log('🎯 回退到轮询机制');
+    
+    // 清除可能存在的定时器
+    if (this.checkInviteeInterval) {
+      clearInterval(this.checkInviteeInterval);
+    }
+    
+    // 每5秒检查一次
     this.checkInviteeInterval = setInterval(() => {
       this.checkInviteeJoined(chatId);
     }, 5000);
   },
-  
+
   /**
-   * 检查被邀请人是否已加入
+   * 检查被邀请人是否已加入（轮询方式）
    */
   checkInviteeJoined: function(chatId) {
-    const app = getApp();
+    console.log('🎯 轮询检查被邀请人状态:', chatId);
     
-    // 如果全局没有聊天数据，则跳过
-    if (!app.globalData.chats || !app.globalData.chats[chatId]) {
-      return;
-    }
-    
-    // 获取聊天参与者
-    const chatInfo = app.globalData.chats[chatId];
-    const participants = chatInfo.participants || [];
-    
-    // 如果参与者数量大于1，说明有人加入
-    if (participants.length > 1) {
-      // 清除定时器
-      if (this.checkInviteeInterval) {
-        clearInterval(this.checkInviteeInterval);
-      }
-      
-      // 标记为已加入
-      this.setData({
-        inviteeJoined: true
+    // 从云数据库查询最新状态
+    wx.cloud.database().collection('conversations')
+      .doc(chatId)
+      .get()
+      .then(res => {
+        if (res.data) {
+          const participants = res.data.participants || [];
+          const chatStatus = res.data.status;
+          const chatStarted = res.data.chatStarted;
+          
+          console.log('🎯 轮询状态检查:', {
+            participantsCount: participants.length,
+            chatStatus: chatStatus,
+            chatStarted: chatStarted
+          });
+          
+          if (participants.length > 1 || chatStatus === 'active' || chatStarted === true) {
+            console.log('🎯 轮询检测到聊天已开始');
+            
+            // 清除定时器
+            if (this.checkInviteeInterval) {
+              clearInterval(this.checkInviteeInterval);
+              this.checkInviteeInterval = null;
+            }
+            
+            // 标记为已加入
+            this.setData({
+              inviteeJoined: true
+            });
+            
+            // 提示并跳转
+            wx.showToast({
+              title: '好友已加入！',
+              icon: 'success',
+              duration: 1500
+            });
+            
+            setTimeout(() => {
+              this.goToChat(chatId);
+            }, 1500);
+          }
+        }
+      })
+      .catch(err => {
+        console.error('🎯 查询聊天状态失败:', err);
       });
-      
-      // 提示用户并自动跳转到聊天页面
-      wx.showToast({
-        title: '好友已加入，即将进入聊天',
-        icon: 'none',
-        duration: 1500
-      });
-      
-      // 延迟跳转到聊天页面
-      setTimeout(() => {
-        this.goToChat();
-      }, 1500);
-    }
   },
-  
+
   /**
    * 进入聊天页面
    */
-  goToChat: function() {
-    const chatId = this.data.chatId || this.createNewChatId();
+  goToChat: function(chatId) {
+    const targetChatId = chatId || this.data.chatId || this.data._currentShareChatId;
+    
+    if (!targetChatId) {
+      console.error('🎯 无效的聊天ID');
+      return;
+    }
+    
+    console.log('🎯 准备进入聊天:', targetChatId);
+    
+    // 清除分享状态
+    this.setData({
+      inviteSent: false,
+      inviteeJoined: false,
+      shareStatus: '',
+      shareProgress: 0
+    });
+    
+    // 清除监听器和定时器
+    if (this.inviteeWatcher) {
+      this.inviteeWatcher.close();
+      this.inviteeWatcher = null;
+    }
+    
+    if (this.checkInviteeInterval) {
+      clearInterval(this.checkInviteeInterval);
+      this.checkInviteeInterval = null;
+    }
     
     // 跳转到聊天页面
     wx.navigateTo({
-      url: `/pages/chat/chat?id=${chatId}&isNewChat=true`
+      url: `/pages/chat/chat?id=${targetChatId}&chatStarted=true`,
+      success: () => {
+        console.log('🎯 成功进入聊天');
+      },
+      fail: (err) => {
+        console.error('🎯 跳转聊天失败:', err);
+        // 备用方案
+        wx.redirectTo({
+          url: `/pages/chat/chat?id=${targetChatId}&chatStarted=true`
+        });
+      }
     });
+  },
+
+  /**
+   * 测试分享功能
+   */
+  testShare: function() {
+    console.log('🧪 测试分享功能');
+    
+    // 模拟分享过程
+    const testChatId = 'chat_test_' + Date.now();
+    
+    this.setData({
+      shareStatus: '测试分享功能...',
+      shareProgress: 50,
+      chatId: testChatId,
+      _currentShareChatId: testChatId
+    });
+    
+    // 3秒后模拟好友加入
+    setTimeout(() => {
+      this.setData({
+        inviteSent: true,
+        inviteeJoined: true,
+        shareStatus: '测试完成！好友已加入',
+        shareProgress: 100
+      });
+      
+      wx.showToast({
+        title: '测试成功！',
+        icon: 'success'
+      });
+    }, 3000);
   },
 
   /**
    * 页面卸载时清除定时器
    */
   onUnload: function() {
+    console.log('🎯 页面卸载，清理资源');
+    
+    // 清除定时器
     if (this.checkInviteeInterval) {
       clearInterval(this.checkInviteeInterval);
+      this.checkInviteeInterval = null;
+    }
+    
+    // 关闭数据库监听
+    if (this.inviteeWatcher) {
+      this.inviteeWatcher.close();
+      this.inviteeWatcher = null;
     }
   },
-
-  /**
-   * 用户点击右上角分享
-   */
-  onShareAppMessage: function () {
-    const app = getApp();
-    const userInfo = app.globalData.userInfo;
-    // 优先使用保存的分享ID，否则创建新的
-    const chatId = this._currentShareChatId || this.data.chatId || this.createNewChatId();
-    
-    console.log('分享聊天ID:', chatId);
-    
-    // 标记为已发出邀请
-    this.setData({
-      inviteSent: true
-    });
-    
-    // 启动轮询检查被邀请人是否已加入
-    this.startCheckingInviteeJoined(chatId);
-    
-    // 使用最简单的分享方式 - 入口页面
-    return {
-      title: `${userInfo.nickName}邀请你加入秘密聊天`,
-      path: '/pages/index/index',  // 使用主入口页面，避免任何参数传递
-      imageUrl: '/assets/images/logo.svg'
-    };
-  }
 }) 

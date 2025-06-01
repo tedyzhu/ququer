@@ -92,17 +92,46 @@ Page({
     }
     
     // 以下是已登录用户的处理逻辑
-    // 解码options中可能的编码参数
+    // 使用安全解码，避免btoa错误
     if (inviter) {
       try {
-        inviter = decodeURIComponent(inviter);
+        const encoding = require('../../app/utils/encoding.js');
+        inviter = encoding.safeDecodeNickname(inviter);
       } catch (e) {
         console.error('解码inviter失败:', e);
+        inviter = '朋友'; // 降级方案
       }
     }
     
     // 检查是否是从邀请链接进入
     const isFromInvite = !!inviter;
+    
+    // 🔥 检查是否已标记聊天开始
+    const urlChatStarted = options.chatStarted === 'true';
+    const fromInvite = options.fromInvite === 'true';
+    
+    // 尝试从本地存储获取聊天状态
+    let localChatStarted = false;
+    try {
+      const chatInfo = wx.getStorageSync(`chat_info_${chatId}`);
+      if (chatInfo && chatInfo.chatStarted) {
+        localChatStarted = true;
+        console.log('[邀请流程] 从本地存储检测到聊天已开始');
+      }
+    } catch (e) {
+      console.error('[邀请流程] 读取本地聊天状态失败:', e);
+    }
+    
+    // 如果URL参数或本地存储标记为已开始，则不进入等待状态
+    const chatAlreadyStarted = urlChatStarted || localChatStarted;
+    
+    console.log('[邀请流程] 聊天状态检查:', {
+      isFromInvite,
+      urlChatStarted,
+      fromInvite,
+      localChatStarted,
+      chatAlreadyStarted
+    });
     
     // 设置页面数据
     this.setData({
@@ -110,8 +139,9 @@ Page({
       isNewChat: options.isNewChat === 'true',
       contactName: inviter || options.name || '聊天',
       showWelcomeHint: false,
-      isCreatingChat: isFromInvite,
-      chatCreationStatus: isFromInvite ? '正在建立连接...' : ''
+      // 🔥 只有在真正需要等待时才显示创建状态
+      isCreatingChat: isFromInvite && !chatAlreadyStarted,
+      chatCreationStatus: (isFromInvite && !chatAlreadyStarted) ? '正在建立连接...' : ''
     });
     
     // 更新导航栏标题
