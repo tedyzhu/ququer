@@ -34,6 +34,27 @@ Page({
   onLoad: function (options) {
     console.log('[邀请流程] 聊天页onLoad，携带参数:', options);
     
+    // 🔥 优先检查是否从邀请链接进入
+    const fromInvite = options.fromInvite === 'true';
+    if (fromInvite) {
+      console.log('[邀请流程] 检测到从邀请链接进入');
+      // 保存邀请信息到更可靠的存储
+      const inviteData = {
+        chatId: options.id,
+        inviter: options.inviter ? decodeURIComponent(options.inviter) : '朋友',
+        fromInvite: true,
+        timestamp: Date.now()
+      };
+      
+      try {
+        wx.setStorageSync('current_invite', inviteData);
+        wx.setStorageSync('pending_chat_id', options.id);
+        console.log('[邀请流程] 邀请信息已保存:', inviteData);
+      } catch (e) {
+        console.error('[邀请流程] 保存邀请信息失败:', e);
+      }
+    }
+    
     // 获取app实例
     const app = getApp();
     
@@ -43,6 +64,12 @@ Page({
     // 解析聊天参数，优先使用options.id，如果没有则使用邀请信息
     let chatId = options.id;
     let inviter = options.inviter || '';
+    
+    // 🔥 检查并修复无效的聊天ID
+    if (typeof chatId !== 'string' || chatId === '[object Object]' || chatId === 'undefined' || chatId === 'null') {
+      console.error('[邀请流程] 检测到无效的聊天ID:', chatId, '类型:', typeof chatId);
+      chatId = null; // 重置为null以触发后续处理
+    }
     
     if (!chatId && inviteInfo && inviteInfo.inviteId) {
       chatId = inviteInfo.inviteId;
@@ -104,11 +131,10 @@ Page({
     }
     
     // 检查是否是从邀请链接进入
-    const isFromInvite = !!inviter;
+    const isFromInvite = !!inviter || options.fromInvite === 'true';
     
     // 🔥 检查是否已标记聊天开始
     const urlChatStarted = options.chatStarted === 'true';
-    const fromInvite = options.fromInvite === 'true';
     
     // 尝试从本地存储获取聊天状态
     let localChatStarted = false;
@@ -128,7 +154,6 @@ Page({
     console.log('[邀请流程] 聊天状态检查:', {
       isFromInvite,
       urlChatStarted,
-      fromInvite,
       localChatStarted,
       chatAlreadyStarted
     });
@@ -1014,9 +1039,18 @@ Page({
   },
   
   /**
-   * 销毁消息
+   * 销毁消息 - 临时禁用
    */
   destroyMessage: function(msgId) {
+    // 临时禁用销毁功能，专注于邀请功能测试
+    wx.showToast({
+      title: '销毁功能暂时禁用',
+      icon: 'none'
+    });
+    return;
+    
+    // 以下代码暂时注释
+    /*
     const { messages } = this.data;
     const messageIndex = messages.findIndex(msg => msg.id === msgId);
     
@@ -1048,6 +1082,7 @@ Page({
         });
       }
     }, 1000);
+    */
   },
   
   /**

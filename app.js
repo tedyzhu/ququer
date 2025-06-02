@@ -19,6 +19,31 @@ App({
   onLaunch: function (options) {
     console.log('小程序启动，参数:', options);
     
+    // 🔥 立即保存启动参数，确保分享链接信息不丢失
+    this.globalData.launchOptions = options;
+    
+    // 🔥 检查是否是分享链接启动
+    if (options.path && options.path.includes('share')) {
+      console.log('🔗 检测到分享链接启动，路径:', options.path);
+      console.log('🔗 分享链接参数:', options.query);
+      
+      // 保存分享信息到本地存储，确保不丢失
+      if (options.query) {
+        try {
+          const shareInfo = {
+            path: options.path,
+            query: options.query,
+            timestamp: Date.now(),
+            source: 'app_launch'
+          };
+          wx.setStorageSync('shareLaunchInfo', shareInfo);
+          console.log('🔗 分享启动信息已保存:', shareInfo);
+        } catch (e) {
+          console.error('🔗 保存分享启动信息失败:', e);
+        }
+      }
+    }
+    
     // 🚨 立即应用编码修复，防止btoa错误
     try {
       require('./fix-encoding-error.js');
@@ -387,28 +412,37 @@ App({
   handleInviteParams: function(options) {
     console.log('[邀请流程] 处理邀请参数:', options);
     
+    if (!options) {
+      console.log('[邀请流程] options为空，跳过处理');
+      return null;
+    }
+    
     let inviteId = null;
     let inviter = null;
     
-    // 直接提取options中的邀请信息
-    if (options.inviteId) {
+    // 🔥 直接提取options中的邀请信息，兼容chatId和inviteId
+    if (options.chatId) {
+      console.log('[邀请流程] 从直接参数中找到chatId:', options.chatId);
+      inviteId = options.chatId;
+      inviter = options.inviter ? decodeURIComponent(options.inviter) : '朋友';
+    } else if (options.inviteId) {
       console.log('[邀请流程] 从直接参数中找到邀请ID:', options.inviteId);
       inviteId = options.inviteId;
-      inviter = options.inviter;
+      inviter = options.inviter || '朋友';
     }
     // 从query中提取
-    else if (options.query && options.query.inviteId) {
-      console.log('[邀请流程] 从query参数中找到邀请ID:', options.query.inviteId);
-      inviteId = options.query.inviteId;
-      inviter = options.query.inviter;
+    else if (options.query && (options.query.chatId || options.query.inviteId)) {
+      console.log('[邀请流程] 从query参数中找到邀请ID');
+      inviteId = options.query.chatId || options.query.inviteId;
+      inviter = options.query.inviter ? decodeURIComponent(options.query.inviter) : '朋友';
     }
     // 从referrerInfo.extraData中提取
     else if (options.referrerInfo && options.referrerInfo.extraData) {
       const extraData = options.referrerInfo.extraData;
-      if (extraData.inviteId) {
-        console.log('[邀请流程] 从extraData中找到邀请ID:', extraData.inviteId);
-        inviteId = extraData.inviteId;
-        inviter = extraData.inviter;
+      if (extraData.chatId || extraData.inviteId) {
+        console.log('[邀请流程] 从extraData中找到邀请ID');
+        inviteId = extraData.chatId || extraData.inviteId;
+        inviter = extraData.inviter || '朋友';
       }
     }
     
@@ -423,7 +457,7 @@ App({
   
   /**
    * 保存邀请信息
-   * @param {String} inviteId - 邀请ID
+   * @param {String} inviteId - 邀请ID (chatId或inviteId)
    * @param {String} inviter - 邀请人
    * @returns {Object} 保存的邀请信息
    */
@@ -433,11 +467,13 @@ App({
     const inviterName = inviter || '朋友';
     console.log(`[邀请流程] 保存邀请信息: ID=${inviteId}, 邀请人=${inviterName}`);
     
-    // 创建邀请信息对象
+    // 🔥 创建邀请信息对象，同时保存为inviteId和chatId确保兼容性
     const inviteInfo = {
       inviteId: inviteId,
+      chatId: inviteId, // 🔥 兼容字段
       inviter: inviterName,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      source: 'app_level_handler'
     };
     
     // 保存到全局数据
@@ -461,8 +497,17 @@ App({
     
     // 检查本地存储
     const pendingInvite = wx.getStorageSync('pendingInvite');
-    if (pendingInvite && pendingInvite.inviteId) {
+    if (pendingInvite && (pendingInvite.inviteId || pendingInvite.chatId)) {
       console.log('[邀请流程] 检测到本地存储的邀请:', pendingInvite);
+      
+      // 🔥 确保兼容性，如果只有chatId没有inviteId，则复制chatId到inviteId
+      if (!pendingInvite.inviteId && pendingInvite.chatId) {
+        pendingInvite.inviteId = pendingInvite.chatId;
+      }
+      if (!pendingInvite.chatId && pendingInvite.inviteId) {
+        pendingInvite.chatId = pendingInvite.inviteId;
+      }
+      
       this.globalData.pendingInvite = pendingInvite;
       return pendingInvite;
     }
@@ -475,8 +520,10 @@ App({
       console.log('[邀请流程] 检测到旧格式邀请信息，邀请ID:', inviteId);
       const inviteInfo = {
         inviteId: inviteId,
+        chatId: inviteId, // 🔥 兼容字段
         inviter: '朋友',
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        source: 'legacy_format'
       };
       
       // 更新为新格式

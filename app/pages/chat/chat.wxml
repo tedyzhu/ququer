@@ -1,4 +1,11 @@
 <view class="container chat-container">
+  <!-- 🔥 调试信息 -->
+  <view class="debug-info" wx:if="{{isDebugMode}}">
+    <text>聊天ID: {{contactId}}</text>
+    <text>消息数: {{messages.length}}</text>
+    <text>用户ID: {{currentUser.openId}}</text>
+  </view>
+  
   <!-- 创建聊天状态覆盖层 -->
   <view class="creating-chat-overlay" wx:if="{{isCreatingChat}}">
     <view class="creating-chat-content">
@@ -26,14 +33,22 @@
       
       <!-- 消息列表 -->
       <block wx:for="{{messages}}" wx:key="id">
+        <!-- 系统消息 -->
+        <view wx:if="{{item.type === 'system'}}" class="message-item system-message">
+          <view class="system-message-content">
+            <text class="system-message-text">{{item.content}}</text>
+            <text class="system-message-time">{{item.time}}</text>
+          </view>
+        </view>
+        
         <!-- 已销毁的消息 -->
-        <view wx:if="{{item.destroyed}}" class="message-item destroyed-message">
+        <view wx:elif="{{item.destroyed}}" class="message-item destroyed-message">
           <view class="message-destroyed-notice">消息已销毁</view>
         </view>
         
-        <!-- 未销毁的消息 -->
+        <!-- 未销毁的普通消息 -->
         <view 
-          wx:elif="{{!item.destroyed}}" 
+          wx:else
           class="message-item {{item.senderId === 'self' ? 'message-self' : 'message-other'}}"
           bindtap="handleMessageTap"
           data-messageid="{{item.id}}">

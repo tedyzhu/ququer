@@ -39,11 +39,11 @@ function decryptMessage(encryptedContent, key) {
 exports.main = async (event, context) => {
   console.log('获取消息云函数被调用', event);
   
-  // 参数验证
-  if (!event.conversationId && !event.targetUserId) {
+  // 🔥 修改参数验证：支持chatId参数
+  if (!event.conversationId && !event.targetUserId && !event.chatId) {
     return {
       success: false,
-      error: '参数不完整'
+      error: '参数不完整，需要conversationId、targetUserId或chatId其中之一'
     };
   }
   
@@ -56,11 +56,18 @@ exports.main = async (event, context) => {
   const messagesCollection = db.collection('messages');
   
   try {
-    // 查询条件：当前用户与目标用户之间的聊天记录
+    // 🔥 查询条件：支持多种查询方式
     let queryCondition;
     
-    if (event.targetUserId) {
-      // 如果提供了目标用户ID，查询与该用户的对话
+    if (event.chatId) {
+      // 🔥 如果提供了chatId，直接按chatId查询
+      console.log('按chatId查询消息:', event.chatId);
+      queryCondition = {
+        chatId: event.chatId
+      };
+    } else if (event.targetUserId) {
+      // 如果提供了目标用户ID，查询与该用户的对话（兼容旧模式）
+      console.log('按targetUserId查询消息:', event.targetUserId);
       queryCondition = _.or([
         {
           senderId: userId,
@@ -73,6 +80,7 @@ exports.main = async (event, context) => {
       ]);
     } else if (event.conversationId) {
       // 如果提供了会话ID，验证用户是否有权限访问该会话
+      console.log('按conversationId查询消息:', event.conversationId);
       const conversationParts = event.conversationId.split('_');
       if (!conversationParts.includes(userId)) {
         return {
@@ -94,7 +102,7 @@ exports.main = async (event, context) => {
       ]);
     }
     
-    // 查询消息（不包括已销毁的）
+    // 🔥 查询消息（不包括已销毁的）
     let messagesQuery = messagesCollection
       .where(queryCondition)
       .orderBy('sendTime', 'desc');
@@ -108,6 +116,7 @@ exports.main = async (event, context) => {
     
     // 执行查询
     const messagesResult = await messagesQuery.get();
+    console.log(`查询到 ${messagesResult.data.length} 条消息`);
     
     // 对消息内容进行解密处理
     const encryptionKey = '0123456789abcdef0123456789abcdef'; // 32位密钥
@@ -115,17 +124,20 @@ exports.main = async (event, context) => {
       // 创建一个新对象以避免修改原始数据
       const processedMsg = { ...msg };
       
-      // 如果消息未销毁且有加密内容，则解密
-      if (!msg.destroyed && msg.type === 'text') {
+      // 🔥 如果消息未销毁且有加密内容，则解密
+      if (!msg.destroyed && msg.type === 'text' && msg.content) {
         try {
           processedMsg.content = decryptMessage(msg.content, encryptionKey);
         } catch (err) {
           console.error('解密消息失败', err);
-          processedMsg.content = '[加密消息]';
+          processedMsg.content = msg.content; // 🔥 如果解密失败，返回原内容
         }
       } else if (msg.destroyed) {
         // 已销毁的消息内容置空
         processedMsg.content = '';
+      } else if (msg.type === 'system') {
+        // 🔥 系统消息不需要解密
+        processedMsg.content = msg.content;
       }
       
       return processedMsg;
@@ -136,13 +148,15 @@ exports.main = async (event, context) => {
     
     return {
       success: true,
-      messages: messages
+      messages: messages,
+      count: messages.length,
+      queryType: event.chatId ? 'chatId' : (event.targetUserId ? 'targetUserId' : 'conversationId')
     };
   } catch (err) {
     console.error('获取消息列表出错', err);
     return {
       success: false,
-      error: err
+      error: err.message || '获取消息失败'
     };
   }
 }; 

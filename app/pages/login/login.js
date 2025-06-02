@@ -30,11 +30,82 @@ Page({
       console.log('云环境已初始化');
     }
 
+    // 🔥 检查启动参数中是否包含分享链接信息
+    this.checkShareLinkParams();
+
     // 处理可能存在的邀请参数
     this.handleInviteParams(options);
     
     // 检查是否开启调试模式
     this.checkDebugMode();
+  },
+
+  /**
+   * 检查分享链接参数
+   */
+  checkShareLinkParams: function() {
+    try {
+      const app = getApp();
+      const launchOptions = app.globalData.launchOptions;
+      
+      console.log('[邀请流程] 检查启动参数中的分享信息:', launchOptions);
+      
+      if (launchOptions && launchOptions.path) {
+        // 检查是否是分享链接但被重定向到登录页
+        if (launchOptions.path.includes('share') && launchOptions.query) {
+          console.log('[邀请流程] 检测到分享链接被重定向，提取参数:', launchOptions.query);
+          
+          // 从query字符串中提取参数
+          const queryParams = this.parseQueryString(launchOptions.query);
+          
+          if (queryParams.chatId && queryParams.inviter) {
+            console.log('[邀请流程] 成功提取分享参数:', queryParams);
+            
+            // 保存邀请信息
+            const inviteInfo = {
+              chatId: queryParams.chatId,
+              inviter: decodeURIComponent(queryParams.inviter),
+              isInvitee: queryParams.isInvitee === 'true',
+              timestamp: Date.now(),
+              source: 'share_link_redirect'
+            };
+            
+            wx.setStorageSync('pendingInvite', inviteInfo);
+            
+            this.setData({
+              inviteId: inviteInfo.chatId,
+              inviter: inviteInfo.inviter,
+              isInvited: true
+            });
+            
+            console.log('[邀请流程] 已保存重定向的分享邀请信息:', inviteInfo);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[邀请流程] 检查分享链接参数失败:', error);
+    }
+  },
+
+  /**
+   * 解析query字符串
+   */
+  parseQueryString: function(queryString) {
+    const params = {};
+    // 🔥 检查queryString是否为字符串
+    if (queryString && typeof queryString === 'string') {
+      const pairs = queryString.split('&');
+      pairs.forEach(pair => {
+        const [key, value] = pair.split('=');
+        if (key && value) {
+          params[key] = value;
+        }
+      });
+    } else if (queryString && typeof queryString === 'object') {
+      // 🔥 如果queryString已经是对象，直接返回
+      return queryString;
+    }
+    return params;
   },
   
   /**
@@ -61,17 +132,48 @@ Page({
   handleInviteParams: function(options) {
     console.log('[邀请流程] 处理可能的邀请参数:', options);
     
-    const app = getApp();
-    const inviteInfo = app.handleInviteParams(options);
+    // 🔥 直接处理分享链接传来的参数
+    const chatId = options.chatId || options.inviteId;
+    const inviter = options.inviter;
+    const isInvitee = options.isInvitee === 'true';
     
-    if (inviteInfo) {
+    if (chatId && inviter) {
+      console.log('[邀请流程] 检测到分享邀请参数，保存到本地');
+      
+      // 保存邀请信息
+      const inviteInfo = {
+        chatId: chatId,
+        inviter: decodeURIComponent(inviter),
+        isInvitee: isInvitee,
+        timestamp: Date.now(),
+        source: 'login_page_direct'
+      };
+      
+      wx.setStorageSync('pendingInvite', inviteInfo);
+      
       this.setData({
-        inviteId: inviteInfo.inviteId,
+        inviteId: chatId,
         inviter: inviteInfo.inviter,
         isInvited: true
       });
       
       console.log('[邀请流程] 登录页面已记录邀请信息:', inviteInfo);
+    } else {
+      // 尝试使用app级别的处理方法
+      const app = getApp();
+      if (app.handleInviteParams) {
+        const appInviteInfo = app.handleInviteParams(options);
+        
+        if (appInviteInfo) {
+          this.setData({
+            inviteId: appInviteInfo.inviteId || appInviteInfo.chatId,
+            inviter: appInviteInfo.inviter,
+            isInvited: true
+          });
+          
+          console.log('[邀请流程] 登录页面已记录邀请信息(App级别):', appInviteInfo);
+        }
+      }
     }
   },
   
@@ -267,90 +369,86 @@ Page({
         
         // 根据是否是被邀请用户决定跳转逻辑
         setTimeout(() => {
-          // 从app全局获取最新的邀请信息
-          const inviteInfo = app.getStoredInviteInfo();
-          
-          if (inviteInfo && inviteInfo.inviteId) {
-            console.log('[邀请流程] 被邀请用户登录成功，直接进入聊天，邀请ID:', inviteInfo.inviteId);
+          // 🔥 优先检查分享启动信息
+          this.checkAndProcessShareLaunch(() => {
+            // 如果没有分享启动信息，再检查常规邀请信息
+            const inviteInfo = app.getStoredInviteInfo();
             
-            // 使用app全局方法进行跳转
-            app.tryNavigateToChat(inviteInfo.inviteId, inviteInfo.inviter, 
-              // 成功回调
-              () => {
-                // 延迟清除邀请信息
-                setTimeout(() => {
-                  app.clearInviteInfo();
-                }, 5000);
-              }, 
-              // 失败回调
-              () => {
-                // 所有跳转都失败的后备方案
-                wx.showModal({
-                  title: '跳转失败',
-                  content: '无法进入聊天页面，即将进入首页',
-                  showCancel: false,
-                  success: () => {
-                    // 尝试跳转到首页
-                    wx.reLaunch({
-                      url: '/app/pages/home/home',
-                      fail: () => {
-                        wx.reLaunch({
-                          url: '../home/home',
-                          fail: () => {
-                            wx.showModal({
-                              title: '无法跳转',
-                              content: '请重启小程序',
-                              showCancel: false
-                            });
-                          }
-                        });
-                      }
-                    });
-                  }
-                });
-              }
-            );
-          } else {
-            // 普通用户登录，跳转到首页
-            console.log('普通用户登录成功，尝试跳转到首页');
-            // 先尝试绝对路径
-            wx.reLaunch({
-              url: '/app/pages/home/home',
-              success: () => {
-                console.log('使用绝对路径成功跳转到首页');
-              },
-              fail: (err) => {
-                console.error('绝对路径跳转到首页失败:', err);
-                // 尝试相对路径
-                wx.reLaunch({
-                  url: '../home/home',
-                  success: () => {
-                    console.log('使用相对路径成功跳转到首页');
-                  },
-                  fail: (err2) => {
-                    console.error('相对路径跳转到首页也失败:', err2);
-                    // 最后尝试传统路径
-                    wx.reLaunch({
-                      url: '/pages/home/home',
-                      success: () => {
-                        console.log('使用传统路径成功跳转到首页');
-                      },
-                      fail: (err3) => {
-                        // 弹窗提示跳转失败
-                        wx.showModal({
-                          title: '跳转失败',
-                          content: '无法进入首页，请重启小程序',
-                          showCancel: false
-                        });
-                      }
-                    });
-                  }
-                });
-              }
-            });
-          }
+            if (inviteInfo && inviteInfo.inviteId) {
+              console.log('[邀请流程] 被邀请用户登录成功，直接进入聊天，邀请ID:', inviteInfo.inviteId);
+              
+              // 使用app全局方法进行跳转
+              app.tryNavigateToChat(inviteInfo.inviteId, inviteInfo.inviter, 
+                // 成功回调
+                () => {
+                  // 延迟清除邀请信息
+                  setTimeout(() => {
+                    app.clearInviteInfo();
+                  }, 5000);
+                }, 
+                // 失败回调
+                () => {
+                  // 所有跳转都失败的后备方案
+                  wx.showModal({
+                    title: '跳转失败',
+                    content: '无法进入聊天页面，即将进入首页',
+                    showCancel: false,
+                    success: () => {
+                      // 尝试跳转到首页
+                      wx.reLaunch({
+                        url: '/app/pages/home/home',
+                        fail: () => {
+                          wx.reLaunch({
+                            url: '../home/home',
+                            fail: () => {
+                              wx.showModal({
+                                title: '无法跳转',
+                                content: '请重启小程序',
+                                showCancel: false
+                              });
+                            }
+                          });
+                        }
+                      });
+                    }
+                  });
+                }
+              );
+            } else {
+              // 普通用户登录，创建新聊天并直接进入聊天页面
+              console.log('普通用户登录成功，创建新聊天并进入聊天页面');
+              
+              // 创建新的聊天ID
+              const newChatId = 'chat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+              console.log('为新用户创建聊天ID:', newChatId);
+              
+              // 跳转到聊天页面
+              wx.reLaunch({
+                url: `/app/pages/chat/chat?id=${newChatId}&isNewChat=true&userName=${encodeURIComponent(userInfo.nickName)}`,
+                success: () => {
+                  console.log('新用户成功进入聊天页面');
+                },
+                fail: (err) => {
+                  console.error('跳转到聊天页面失败:', err);
+                  // 备用方案：跳转到首页
+                  wx.reLaunch({
+                    url: '/app/pages/home/home',
+                    fail: (err2) => {
+                      console.error('备用方案也失败:', err2);
+                      wx.showModal({
+                        title: '跳转失败',
+                        content: '无法进入页面，请重启小程序',
+                        showCancel: false
+                      });
+                    }
+                  });
+                }
+              });
+            }
+          });
         }, 1000);
       },
+      
       fail: err => {
         console.error('登录云函数调用失败，错误信息:', err);
         wx.showModal({
@@ -365,6 +463,61 @@ Page({
         });
       }
     });
+  },
+
+  /**
+   * 检查并处理分享启动
+   */
+  checkAndProcessShareLaunch: function(fallbackCallback) {
+    try {
+      // 检查是否有分享启动信息
+      const shareLaunchInfo = wx.getStorageSync('shareLaunchInfo');
+      
+      if (shareLaunchInfo && shareLaunchInfo.query) {
+        console.log('[邀请流程] 发现分享启动信息:', shareLaunchInfo);
+        
+        // 解析query参数
+        const queryParams = this.parseQueryString(shareLaunchInfo.query);
+        
+        if (queryParams.chatId && queryParams.inviter) {
+          console.log('[邀请流程] 成功解析分享参数，准备进入聊天:', queryParams);
+          
+          // 清除分享启动信息
+          wx.removeStorageSync('shareLaunchInfo');
+          
+          // 直接跳转到聊天页面
+          const chatUrl = `/app/pages/chat/chat?id=${queryParams.chatId}&inviter=${queryParams.inviter}&chatStarted=true&fromInvite=true`;
+          
+          wx.reLaunch({
+            url: chatUrl,
+            success: () => {
+              console.log('[邀请流程] 分享邀请用户成功进入聊天页面');
+            },
+            fail: (err) => {
+              console.error('[邀请流程] 分享邀请跳转失败:', err);
+              // 如果跳转失败，执行fallback
+              if (typeof fallbackCallback === 'function') {
+                fallbackCallback();
+              }
+            }
+          });
+          
+          return; // 成功处理了分享启动，不执行fallback
+        }
+      }
+      
+      // 没有分享启动信息，执行fallback
+      if (typeof fallbackCallback === 'function') {
+        fallbackCallback();
+      }
+      
+    } catch (error) {
+      console.error('[邀请流程] 检查分享启动失败:', error);
+      // 出错时执行fallback
+      if (typeof fallbackCallback === 'function') {
+        fallbackCallback();
+      }
+    }
   },
   
   /**

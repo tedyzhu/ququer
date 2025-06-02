@@ -422,10 +422,10 @@ Page({
       }
     });
     
-    // 返回分享配置，直接传递聊天ID到分享页面
+    // 返回分享配置，直接传递聊天ID到聊天页面（简化流程）
     return {
       title: `${nickName}邀请你进行私密聊天`,
-      path: `/pages/share/share?chatId=${shareCreatedChatId}&inviter=${encodeURIComponent(nickName)}&isInvitee=true`,
+      path: `/pages/chat/chat?id=${shareCreatedChatId}&inviter=${encodeURIComponent(nickName)}&fromInvite=true`,
       imageUrl: '/assets/images/logo.png',
       success: (res) => {
         console.log('🎯 分享成功！');
@@ -618,6 +618,47 @@ Page({
       .catch(err => {
         console.error('🎯 查询聊天状态失败:', err);
       });
+  },
+
+  /**
+   * 按钮点击进入聊天（处理点击事件）
+   */
+  enterChat: function(e) {
+    console.log('🎯 点击进入聊天按钮');
+    console.log('🎯 当前页面数据状态:', {
+      chatId: this.data.chatId,
+      _currentShareChatId: this.data._currentShareChatId,
+      inviteSent: this.data.inviteSent,
+      inviteeJoined: this.data.inviteeJoined
+    });
+    
+    // 从数据中获取聊天ID
+    const targetChatId = this.data.chatId || this.data._currentShareChatId;
+    
+    if (!targetChatId) {
+      console.error('🎯 无效的聊天ID，数据状态:', {
+        chatId: this.data.chatId,
+        _currentShareChatId: this.data._currentShareChatId
+      });
+      wx.showToast({
+        title: '聊天ID获取失败',
+        icon: 'error'
+      });
+      return;
+    }
+    
+    // 验证聊天ID的有效性
+    if (typeof targetChatId !== 'string' || targetChatId.length < 5) {
+      console.error('🎯 聊天ID格式无效:', targetChatId);
+      wx.showToast({
+        title: '聊天ID格式错误',
+        icon: 'error'
+      });
+      return;
+    }
+    
+    console.log('🎯 使用聊天ID进入聊天:', targetChatId);
+    this.goToChat(targetChatId);
   },
 
   /**

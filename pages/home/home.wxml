@@ -27,7 +27,7 @@
       <!-- 邀请已接受显示 -->
       <view class="invite-success" wx:if="{{inviteeJoined}}">
         <text class="success-text">好友已接受邀请！</text>
-        <view class="enter-chat-btn" bindtap="goToChat">进入聊天</view>
+        <view class="enter-chat-btn" bindtap="enterChat">进入聊天</view>
       </view>
     </view>
     

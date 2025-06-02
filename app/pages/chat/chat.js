@@ -21,7 +21,15 @@ Page({
     // 最大重试次数
     maxRetryCount: 5,
     // 聊天创建状态
-    chatCreationStatus: ''
+    chatCreationStatus: '',
+    // 是否为新创建的聊天
+    isNewChat: false,
+    // 当前用户信息
+    currentUser: null,
+    // 聊天参与者列表
+    participants: [],
+    // 🔥 调试模式
+    isDebugMode: false
   },
 
   /**
@@ -29,10 +37,11 @@ Page({
    * @param {Object} options - 页面参数
    */
   onLoad: function (options) {
-    console.log('[邀请流程] 聊天页面加载，携带参数:', options);
+    console.log('[聊天页面] 页面加载，携带参数:', options);
     
     // 获取应用实例
     const app = getApp();
+    const userInfo = app.globalData.userInfo;
     
     // 使用全局统一的邀请参数处理
     const inviteInfo = app.handleInviteParams(options);
@@ -40,11 +49,13 @@ Page({
     // 如果没有chatId参数，尝试从邀请信息中获取
     let chatId = options.id;
     let inviter = options.inviter || '';
+    let isNewChat = options.isNewChat === 'true';
+    let userName = options.userName ? decodeURIComponent(options.userName) : '';
     
     if (!chatId && inviteInfo && inviteInfo.inviteId) {
       chatId = inviteInfo.inviteId;
       inviter = inviteInfo.inviter;
-      console.log('[邀请流程] 使用邀请信息作为聊天参数:', inviteInfo);
+      console.log('[聊天页面] 使用邀请信息作为聊天参数:', inviteInfo);
     }
     
     // 检查必要的id参数
@@ -54,14 +65,9 @@ Page({
         content: '聊天ID不存在，无法加载聊天',
         showCancel: false,
         success: () => {
-          // 返回首页
+          // 返回登录页
           wx.reLaunch({
-            url: '../home/home',
-            fail: () => {
-              wx.reLaunch({
-                url: '/app/pages/home/home'
-              });
-            }
+            url: '/app/pages/login/login'
           });
         }
       });
@@ -71,16 +77,29 @@ Page({
     // 检查是否来自邀请链接
     const isFromInvite = !!inviter;
     
+    // 设置聊天标题
+    let chatTitle = '秘信聊天';
+    if (isNewChat) {
+      chatTitle = `${userName || userInfo.nickName}的聊天`;
+    } else if (inviter) {
+      chatTitle = `与${decodeURIComponent(inviter)}的聊天`;
+    }
+    
     this.setData({
       contactId: chatId,
-      contactName: decodeURIComponent(inviter || '聊天'), // 统一使用inviter参数
-      isCreatingChat: isFromInvite, // 如果是从邀请链接进入，显示创建聊天状态
-      chatCreationStatus: isFromInvite ? '正在建立连接...' : ''
+      contactName: chatTitle,
+      isCreatingChat: isFromInvite,
+      chatCreationStatus: isFromInvite ? '正在建立连接...' : '',
+      isNewChat: isNewChat,
+      currentUser: userInfo,
+      participants: [userInfo], // 初始化参与者列表，包含当前用户
+      // 🔥 在开发环境开启调试模式
+      isDebugMode: wx.getSystemInfoSync().platform === 'devtools'
     });
 
     // 设置导航栏标题
     wx.setNavigationBarTitle({
-      title: this.data.contactName
+      title: chatTitle
     });
     
     // 检查用户登录状态
@@ -116,6 +135,11 @@ Page({
     } else {
       // 否则直接获取聊天记录
       this.fetchMessages();
+      
+      // 如果是新创建的聊天，添加欢迎消息
+      if (isNewChat) {
+        this.addSystemMessage('开始您的私密聊天，点击右上角菜单邀请好友加入');
+      }
     }
     
     // 标记为已处理邀请，在5秒后清理邀请信息
@@ -124,6 +148,131 @@ Page({
         app.clearInviteInfo();
       }, 5000);
     }
+  },
+
+  /**
+   * 用户点击右上角分享
+   */
+  onShareAppMessage: function() {
+    console.log('🎯 聊天页面分享');
+    
+    const app = getApp();
+    const userInfo = app.globalData.userInfo || {};
+    const nickName = userInfo.nickName || '好友';
+    const chatId = this.data.contactId;
+    
+    console.log('🎯 分享聊天ID:', chatId);
+    
+    // 调用创建邀请云函数
+    wx.cloud.callFunction({
+      name: 'createInvite',
+      data: {
+        chatId: chatId,
+        inviter: {
+          openId: app.globalData.openId || userInfo.openId,
+          nickName: nickName,
+          avatarUrl: userInfo.avatarUrl
+        }
+      },
+      success: (res) => {
+        console.log('🎯 创建邀请成功:', res.result);
+        
+        if (res.result && res.result.success) {
+          console.log('🎯 邀请创建成功');
+          
+          // 启动监听被邀请者加入
+          this.startWatchingForNewParticipants(chatId);
+        }
+      },
+      fail: (err) => {
+        console.error('🎯 创建邀请失败:', err);
+      }
+    });
+    
+    // 返回分享配置
+    return {
+      title: `${nickName}邀请你进行私密聊天`,
+      path: `/app/pages/share/share?chatId=${chatId}&inviter=${encodeURIComponent(nickName)}&isInvitee=true`,
+      imageUrl: '/assets/images/logo.png'
+    };
+  },
+
+  /**
+   * 监听新参与者加入
+   */
+  startWatchingForNewParticipants: function(chatId) {
+    console.log('🎯 开始监听新参与者加入:', chatId);
+    
+    try {
+      const db = wx.cloud.database();
+      this.participantWatcher = db.collection('conversations')
+        .doc(chatId)
+        .watch({
+          onChange: snapshot => {
+            console.log('🎯 监听到聊天状态变化:', snapshot);
+            
+            if (snapshot.docChanges && snapshot.docChanges.length > 0) {
+              const chatData = snapshot.docChanges[0].doc;
+              const participants = chatData.participants || [];
+              
+              // 检查是否有新参与者加入
+              if (participants.length > this.data.participants.length) {
+                console.log('🎯 检测到新参与者加入');
+                
+                // 找出新加入的参与者
+                const currentParticipantIds = this.data.participants.map(p => p.openId);
+                const newParticipants = participants.filter(p => !currentParticipantIds.includes(p.openId));
+                
+                // 更新参与者列表
+                this.setData({
+                  participants: participants
+                });
+                
+                // 为每个新参与者添加系统消息
+                newParticipants.forEach(participant => {
+                  this.addInviteSystemMessage(participant.nickName);
+                });
+                
+                // 关闭监听器
+                if (this.participantWatcher) {
+                  this.participantWatcher.close();
+                  this.participantWatcher = null;
+                }
+              }
+            }
+          },
+          onError: err => {
+            console.error('🎯 监听出错:', err);
+          }
+        });
+    } catch (err) {
+      console.error('🎯 设置监听失败:', err);
+    }
+  },
+
+  /**
+   * 添加邀请系统消息
+   */
+  addInviteSystemMessage: function(participantName) {
+    const systemMessage = {
+      id: 'system_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+      type: 'system',
+      content: `你邀请${participantName}加入了聊天`,
+      time: this.formatTime(new Date()),
+      senderId: 'system'
+    };
+    
+    const messages = this.data.messages;
+    messages.push(systemMessage);
+    
+    this.setData({
+      messages: messages
+    });
+    
+    // 滚动到底部
+    this.scrollToBottom();
+    
+    console.log('🎯 已添加邀请系统消息:', systemMessage);
   },
 
   /**
@@ -141,31 +290,34 @@ Page({
   fetchMessages: function () {
     const that = this;
     
+    console.log('🔍 获取聊天记录，chatId:', that.data.contactId);
+    
     // 显示加载状态
     wx.showLoading({
       title: '加载消息中',
       mask: true
     });
     
-    // 使用云函数获取消息
+    // 🔥 使用云函数获取消息 - 传递chatId而不是targetUserId
     wx.cloud.callFunction({
       name: 'getMessages',
       data: {
-        targetUserId: that.data.contactId
+        chatId: that.data.contactId // 🔥 使用chatId参数
       },
       success: res => {
-        console.log('获取消息成功', res);
+        console.log('🔍 获取消息成功', res);
         wx.hideLoading();
         
         if (res.result && res.result.success) {
           // 处理消息数据
           const messages = res.result.messages.map(msg => {
-            // 确定消息发送者是否为自己
-            const isSelf = msg.senderId === getApp().globalData.userInfo.openId;
+            // 🔥 确定消息发送者是否为自己
+            const currentUserOpenId = getApp().globalData.userInfo.openId || getApp().globalData.openId;
+            const isSelf = msg.senderId === currentUserOpenId;
             
             return {
               id: msg._id,
-              senderId: isSelf ? 'self' : 'other',
+              senderId: isSelf ? 'self' : (msg.type === 'system' ? 'system' : 'other'),
               content: msg.content,
               type: msg.type,
               time: that.formatTime(new Date(msg.sendTime)),
@@ -176,6 +328,8 @@ Page({
             };
           });
           
+          console.log(`🔍 处理后的消息数据 ${messages.length} 条:`, messages);
+          
           that.setData({
             messages: messages,
             isLoading: false
@@ -184,12 +338,13 @@ Page({
           // 滚动到底部
           that.scrollToBottom();
         } else {
+          console.log('🔍 获取消息失败，使用模拟数据');
           // 获取失败时使用模拟数据
           that.showMockMessages();
         }
       },
       fail: err => {
-        console.error('获取消息失败', err);
+        console.error('🔍 获取消息失败', err);
         wx.hideLoading();
         
         // 显示错误提示
@@ -298,6 +453,8 @@ Page({
     const content = this.data.inputValue.trim();
     if (!content) return;
 
+    console.log('📤 发送消息到chatId:', this.data.contactId, '内容:', content);
+
     // 创建新消息对象
     const newMessage = {
       id: Date.now().toString(),
@@ -322,17 +479,17 @@ Page({
     // 滚动到底部
     this.scrollToBottom();
 
-    // 使用云函数发送消息
+    // 🔥 使用云函数发送消息 - 传递chatId而不是receiverId
     wx.cloud.callFunction({
       name: 'sendMessage',
       data: {
-        receiverId: this.data.contactId,
+        chatId: this.data.contactId, // 🔥 使用chatId参数
         content: content,
         type: 'text',
         destroyTimeout: this.data.destroyTimeout
       },
       success: res => {
-        console.log('发送消息成功', res);
+        console.log('📤 发送消息成功', res);
         if (res.result && res.result.success) {
           // 更新本地消息状态为已发送
           const updatedMessages = this.data.messages.map(msg => {
@@ -350,15 +507,15 @@ Page({
             messages: updatedMessages
           });
 
-          // 模拟对方查看了消息
-          this.simulateMessageRead();
+          // 🔥 去掉模拟消息读取，让实际用户看到真实消息
+          console.log('📤 消息发送成功，等待对方回复');
         } else {
           // 发送失败
           this.showMessageError(newMessage.id);
         }
       },
       fail: err => {
-        console.error('发送消息失败', err);
+        console.error('📤 发送消息失败', err);
         // 发送失败
         this.showMessageError(newMessage.id);
       }
@@ -756,5 +913,110 @@ Page({
         }
       }
     });
+  },
+
+  /**
+   * 页面卸载
+   */
+  onUnload: function () {
+    console.log('🎯 聊天页面卸载，清理资源');
+    
+    // 清除定时器
+    if (this.chatCreationTimer) {
+      clearInterval(this.chatCreationTimer);
+      this.chatCreationTimer = null;
+    }
+    
+    // 清除参与者监听器
+    if (this.participantWatcher) {
+      this.participantWatcher.close();
+      this.participantWatcher = null;
+    }
+    
+    // 🔥 清除消息监听器
+    this.stopMessageListener();
+  },
+
+  /**
+   * 生命周期函数--监听页面显示
+   */
+  onShow: function () {
+    console.log('[邀请流程] 聊天页面显示');
+    
+    // 🔥 页面显示时启动实时消息监听
+    this.startMessageListener();
+  },
+
+  /**
+   * 🔥 启动实时消息监听
+   */
+  startMessageListener: function() {
+    const chatId = this.data.contactId;
+    if (!chatId) return;
+    
+    console.log('🔔 启动实时消息监听，chatId:', chatId);
+    
+    try {
+      // 如果已有监听器，先关闭
+      if (this.messageWatcher) {
+        this.messageWatcher.close();
+        this.messageWatcher = null;
+      }
+      
+      const db = wx.cloud.database();
+      this.messageWatcher = db.collection('messages')
+        .where({
+          chatId: chatId
+        })
+        .orderBy('sendTime', 'desc')
+        .limit(1)
+        .watch({
+          onChange: snapshot => {
+            console.log('🔔 监听到消息变化:', snapshot);
+            
+            if (snapshot.type === 'init') {
+              console.log('🔔 消息监听器初始化');
+              return;
+            }
+            
+            // 检查是否有新消息
+            if (snapshot.docChanges && snapshot.docChanges.length > 0) {
+              const changes = snapshot.docChanges;
+              let hasNewMessage = false;
+              
+              changes.forEach(change => {
+                if (change.queueType === 'enqueue') {
+                  console.log('🔔 检测到新消息:', change.doc);
+                  hasNewMessage = true;
+                }
+              });
+              
+              if (hasNewMessage) {
+                console.log('🔔 刷新聊天记录以显示新消息');
+                // 延迟一下再刷新，确保消息已写入
+                setTimeout(() => {
+                  this.fetchMessages();
+                }, 500);
+              }
+            }
+          },
+          onError: err => {
+            console.error('🔔 消息监听出错:', err);
+          }
+        });
+    } catch (err) {
+      console.error('🔔 设置消息监听失败:', err);
+    }
+  },
+
+  /**
+   * 🔥 停止实时消息监听
+   */
+  stopMessageListener: function() {
+    if (this.messageWatcher) {
+      console.log('🔔 停止消息监听');
+      this.messageWatcher.close();
+      this.messageWatcher = null;
+    }
   }
 }) 
