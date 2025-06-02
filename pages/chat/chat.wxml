@@ -54,7 +54,13 @@
           <view class="message-content {{item.isDestroying ? 'destroying' : ''}} {{item.isDestroyed ? 'destroyed' : ''}}"
           >
             <view class="message-text">{{item.content}}</view>
-            <view class="message-time">{{item.time}}</view>
+            <view class="message-meta">
+              <view class="message-time">{{item.time}}</view>
+              <!-- 销毁倒计时提示 -->
+              <view wx:if="{{item.isDestroying && item.destroyCountdown}}" class="destroy-countdown">
+                {{item.destroyCountdown}}s后销毁
+              </view>
+            </view>
           </view>
         </view>
       </block>

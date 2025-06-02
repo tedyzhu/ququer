@@ -118,26 +118,18 @@ exports.main = async (event, context) => {
     const messagesResult = await messagesQuery.get();
     console.log(`查询到 ${messagesResult.data.length} 条消息`);
     
-    // 对消息内容进行解密处理
-    const encryptionKey = '0123456789abcdef0123456789abcdef'; // 32位密钥
+    // 🔥 直接返回消息内容，不进行加密/解密处理
     const messages = messagesResult.data.map(msg => {
       // 创建一个新对象以避免修改原始数据
       const processedMsg = { ...msg };
       
-      // 🔥 如果消息未销毁且有加密内容，则解密
-      if (!msg.destroyed && msg.type === 'text' && msg.content) {
-        try {
-          processedMsg.content = decryptMessage(msg.content, encryptionKey);
-        } catch (err) {
-          console.error('解密消息失败', err);
-          processedMsg.content = msg.content; // 🔥 如果解密失败，返回原内容
-        }
-      } else if (msg.destroyed) {
-        // 已销毁的消息内容置空
-        processedMsg.content = '';
-      } else if (msg.type === 'system') {
-        // 🔥 系统消息不需要解密
-        processedMsg.content = msg.content;
+      // 🔥 直接返回原始内容，不进行解密
+      if (msg.destroyed) {
+        // 已销毁的消息内容显示为已销毁
+        processedMsg.content = '[已销毁]';
+      } else {
+        // 🔥 所有未销毁的消息都直接返回原始内容
+        processedMsg.content = msg.content || '';
       }
       
       return processedMsg;

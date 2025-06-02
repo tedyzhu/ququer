@@ -24,7 +24,8 @@ Page({
     isCreatingChat: false, // 是否正在创建聊天
     createChatRetryCount: 0, // 聊天创建重试次数
     maxRetryCount: 5, // 最大重试次数
-    chatCreationStatus: '' // 聊天创建状态
+    chatCreationStatus: '', // 聊天创建状态
+    messageTimers: {} // 存储每个消息的倒计时器
   },
 
   /**
@@ -846,12 +847,13 @@ Page({
         isSelf: false,
         isSystem: true,
         isDestroying: false,
-        isDestroyed: false
+        isDestroyed: false,
+        destroyCountdown: null
       }];
     }
     
     // 否则返回模拟消息数据
-    return [
+    const mockMessages = [
       {
         id: 'msg-1',
         userId: 'system',
@@ -861,7 +863,8 @@ Page({
         isSelf: false,
         isSystem: true,
         isDestroying: false,
-        isDestroyed: false
+        isDestroyed: false,
+        destroyCountdown: null
       },
       {
         id: 'msg-2',
@@ -871,7 +874,8 @@ Page({
         time: '18:31',
         isSelf: false,
         isDestroying: false,
-        isDestroyed: false
+        isDestroyed: false,
+        destroyCountdown: null
       },
       {
         id: 'msg-3',
@@ -881,9 +885,21 @@ Page({
         time: '18:32',
         isSelf: true,
         isDestroying: false,
-        isDestroyed: false
+        isDestroyed: false,
+        destroyCountdown: null
       }
     ];
+    
+    // 🔥 为非系统消息的对方消息自动启动销毁倒计时
+    setTimeout(() => {
+      mockMessages.forEach(msg => {
+        if (!msg.isSelf && !msg.isSystem) {
+          this.startAutoDestroy(msg.id, this.data.destroyTimeout);
+        }
+      });
+    }, 2000); // 2秒后开始销毁倒计时
+    
+    return mockMessages;
   },
 
   /**
@@ -918,7 +934,8 @@ Page({
       time: this.getCurrentTime(),
       isSelf: true,
       isDestroying: false,
-      isDestroyed: false
+      isDestroyed: false,
+      destroyCountdown: null
     };
     
     // 添加消息到列表
@@ -983,7 +1000,8 @@ Page({
         time: this.getCurrentTime(),
         isSelf: false,
         isDestroying: false,
-        isDestroyed: false
+        isDestroyed: false,
+        destroyCountdown: null
       };
       
       // 添加消息到列表
@@ -993,6 +1011,9 @@ Page({
         messages: updatedMessages,
         scrollIntoView: `msg-${updatedMessages.length - 1}`
       });
+      
+      // 🔥 对方消息显示后自动启动销毁倒计时
+      this.startAutoDestroy(replyMessage.id, this.data.destroyTimeout);
     }, replyDelay);
   },
   
@@ -1039,34 +1060,60 @@ Page({
   },
   
   /**
-   * 销毁消息 - 临时禁用
+   * 销毁消息 - 支持手动销毁
    */
   destroyMessage: function(msgId) {
-    // 临时禁用销毁功能，专注于邀请功能测试
-    wx.showToast({
-      title: '销毁功能暂时禁用',
-      icon: 'none'
-    });
-    return;
-    
-    // 以下代码暂时注释
-    /*
-    const { messages } = this.data;
+    this.startMessageDestroy(msgId, this.data.destroyTimeout);
+  },
+  
+  /**
+   * 启动消息自动销毁倒计时
+   * @param {String} msgId - 消息ID
+   * @param {Number} destroyTimeout - 销毁倒计时（秒）
+   */
+  startAutoDestroy: function(msgId, destroyTimeout = 10) {
+    console.log('🔥 启动自动销毁倒计时:', msgId, '倒计时:', destroyTimeout);
+    // 延迟1秒后开始倒计时，让用户看到消息内容
+    setTimeout(() => {
+      this.startMessageDestroy(msgId, destroyTimeout);
+    }, 1000);
+  },
+  
+  /**
+   * 启动消息销毁倒计时
+   * @param {String} msgId - 消息ID
+   * @param {Number} destroyTimeout - 销毁倒计时（秒）
+   */
+  startMessageDestroy: function(msgId, destroyTimeout = 10) {
+    const { messages, messageTimers } = this.data;
     const messageIndex = messages.findIndex(msg => msg.id === msgId);
     
     if (messageIndex === -1) return;
     
-    // 开始销毁倒计时
-    let seconds = this.data.destroyTimeout;
-    const message = {...messages[messageIndex], isDestroying: true};
+    // 如果已经在销毁中，跳过
+    if (messages[messageIndex].isDestroying || messages[messageIndex].isDestroyed) {
+      return;
+    }
     
-    messages[messageIndex] = message;
+    // 清除可能存在的旧计时器
+    if (messageTimers[msgId]) {
+      clearInterval(messageTimers[msgId]);
+    }
+    
+    // 开始销毁倒计时
+    let seconds = destroyTimeout;
+    const updatedMessages = [...messages];
+    updatedMessages[messageIndex] = {
+      ...messages[messageIndex], 
+      isDestroying: true,
+      destroyCountdown: seconds
+    };
     
     this.setData({
-      messages: messages,
-      showDestroyTimer: true,
-      destroyTimerText: `消息将在 ${seconds} 秒后销毁`
+      messages: updatedMessages
     });
+    
+    console.log('🔥 开始销毁倒计时:', msgId, '初始秒数:', seconds);
     
     // 开始倒计时
     const timer = setInterval(() => {
@@ -1075,14 +1122,30 @@ Page({
       if (seconds <= 0) {
         // 销毁完成
         clearInterval(timer);
+        delete messageTimers[msgId];
         this.completeDestroy(msgId);
       } else {
-        this.setData({
-          destroyTimerText: `消息将在 ${seconds} 秒后销毁`
-        });
+        // 更新倒计时显示
+        const currentMessages = [...this.data.messages];
+        const msgIndex = currentMessages.findIndex(msg => msg.id === msgId);
+        if (msgIndex !== -1) {
+          currentMessages[msgIndex] = {
+            ...currentMessages[msgIndex],
+            destroyCountdown: seconds
+          };
+          
+          this.setData({
+            messages: currentMessages
+          });
+        }
       }
     }, 1000);
-    */
+    
+    // 保存计时器引用
+    messageTimers[msgId] = timer;
+    this.setData({
+      messageTimers: messageTimers
+    });
   },
   
   /**
@@ -1092,21 +1155,22 @@ Page({
     const { messages } = this.data;
     const updatedMessages = messages.map(msg => {
       if (msg.id === msgId) {
-        return {...msg, isDestroying: false, isDestroyed: true, content: '[已销毁]'};
+        return {
+          ...msg, 
+          isDestroying: false, 
+          isDestroyed: true, 
+          content: '[已销毁]',
+          destroyCountdown: null
+        };
       }
       return msg;
     });
     
     this.setData({
-      messages: updatedMessages,
-      showDestroyTimer: false,
-      destroyTimerText: ''
+      messages: updatedMessages
     });
     
-    wx.showToast({
-      title: '消息已销毁',
-      icon: 'success'
-    });
+    console.log('✅ 消息已销毁:', msgId);
   },
   
   /**
@@ -1214,8 +1278,31 @@ Page({
     
     return {
       title: '加入我的秘密聊天',
-      path: `/app/pages/home/home?inviteId=${this.data.chatId}&inviter=${encodeURIComponent(userInfo.nickName)}`,
+      path: `/pages/chat/chat?id=${this.data.chatId}&inviter=${encodeURIComponent(userInfo.nickName)}&fromInvite=true`,
       imageUrl: '/assets/images/logo.svg'
     };
+  },
+  
+  /**
+   * 页面卸载时清理计时器
+   */
+  onUnload: function() {
+    console.log('🧹 聊天页面卸载，清理计时器');
+    
+    // 清理所有消息销毁计时器
+    const { messageTimers } = this.data;
+    if (messageTimers) {
+      Object.values(messageTimers).forEach(timer => {
+        if (timer) {
+          clearInterval(timer);
+        }
+      });
+    }
+    
+    // 清理聊天创建检查计时器
+    if (this.chatCreationTimer) {
+      clearInterval(this.chatCreationTimer);
+      this.chatCreationTimer = null;
+    }
   }
 }) 

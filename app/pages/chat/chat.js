@@ -609,16 +609,28 @@ Page({
    * 调用云函数销毁消息
    */
   destroyMessage: function(messageId) {
-    wx.cloud.callFunction({
-      name: 'destroyMessage',
-      data: { messageId },
-      success: res => {
-        console.log('销毁消息成功', res);
-      },
-      fail: err => {
-        console.error('销毁消息失败', err);
+    console.log('🔥 开始销毁消息:', messageId);
+    
+    // 🔥 改用本地处理，不调用云函数，避免"云函数不存在"错误
+    const { messages } = this.data;
+    const updatedMessages = messages.map(msg => {
+      if (msg.id === messageId) {
+        return {
+          ...msg,
+          destroyed: true,
+          content: '[已销毁]',
+          destroying: false,
+          remainTime: 0
+        };
       }
+      return msg;
     });
+    
+    this.setData({
+      messages: updatedMessages
+    });
+    
+    console.log('✅ 消息已本地销毁:', messageId);
   },
 
   /**
