@@ -2,7 +2,7 @@
 const cloud = require('wx-server-sdk')
 
 cloud.init({
-  env: 'ququer-env-6g35f0nv28c446e7'
+  env: cloud.DYNAMIC_CURRENT_ENV
 })
 
 const db = cloud.database()
@@ -254,7 +254,7 @@ exports.main = async (event, context) => {
       data: {
         chatId: event.chatId,
         type: 'system',
-        content: `${userName} 加入了聊天`,
+        content: `${userName}加入了私密聊天`,
         sendTime: db.serverDate(),
         status: 'sent'
       }
@@ -262,24 +262,17 @@ exports.main = async (event, context) => {
     
     console.log('[云函数] 系统消息添加完成');
     
-    // 🔥 通知邀请者（如果有邀请者信息）
-    if (chat.inviter && chat.inviter.openId) {
-      console.log('[云函数] 准备通知邀请者:', chat.inviter.openId);
-      
-      try {
-        await cloud.callFunction({
-          name: 'notifyInviter',
-          data: {
-            chatId: event.chatId,
-            joinerName: userName,
-            inviterOpenId: chat.inviter.openId || chat.inviter.id
-          }
-        });
-        console.log('[云函数] 邀请者通知发送成功');
-      } catch (notifyError) {
-        console.log('[云函数] 邀请者通知发送失败:', notifyError.message);
-      }
-    }
+    // 🔥 强制触发数据库更新事件，确保监听器能捕获到变化
+    await db.collection('conversations')
+      .doc(event.chatId)
+      .update({
+        data: {
+          lastActivity: db.serverDate(),
+          lastJoiner: userName
+        }
+      });
+    
+    console.log('[云函数] 触发监听更新完成');
     
     // 返回完整的聊天信息，包括所有参与者
     const result = {

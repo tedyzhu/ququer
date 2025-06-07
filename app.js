@@ -22,27 +22,8 @@ App({
     // 🔥 立即保存启动参数，确保分享链接信息不丢失
     this.globalData.launchOptions = options;
     
-    // 🔥 检查是否是分享链接启动
-    if (options.path && options.path.includes('share')) {
-      console.log('🔗 检测到分享链接启动，路径:', options.path);
-      console.log('🔗 分享链接参数:', options.query);
-      
-      // 保存分享信息到本地存储，确保不丢失
-      if (options.query) {
-        try {
-          const shareInfo = {
-            path: options.path,
-            query: options.query,
-            timestamp: Date.now(),
-            source: 'app_launch'
-          };
-          wx.setStorageSync('shareLaunchInfo', shareInfo);
-          console.log('🔗 分享启动信息已保存:', shareInfo);
-        } catch (e) {
-          console.error('🔗 保存分享启动信息失败:', e);
-        }
-      }
-    }
+    // 🔥 优先检查和保存分享邀请信息
+    this.checkAndSaveShareInvite(options);
     
     // 🚨 立即应用编码修复，防止btoa错误
     try {
@@ -368,6 +349,75 @@ App({
     this.tryNavigateToUrls(urls, 0, onSuccess, onFail);
   },
   
+  /**
+   * 检查并保存分享邀请信息
+   * @param {Object} options - 启动参数
+   */
+  checkAndSaveShareInvite: function(options) {
+    console.log('[邀请流程] 检查分享邀请信息:', options);
+    
+    // 检查是否是分享链接启动
+    if (options.path && options.path.includes('share')) {
+      console.log('[邀请流程] 检测到分享链接启动');
+      
+      if (options.query && (options.query.chatId || options.query.inviteId)) {
+        const chatId = options.query.chatId || options.query.inviteId;
+        const inviter = options.query.inviter || '朋友';
+        
+        console.log('[邀请流程] 分享链接包含邀请信息:', { chatId, inviter });
+        
+        // 立即保存邀请信息
+        const inviteInfo = {
+          inviteId: chatId,
+          chatId: chatId,
+          inviter: inviter,
+          timestamp: Date.now(),
+          source: 'share_link_launch',
+          isInvitee: true
+        };
+        
+        // 保存到全局和本地存储
+        this.globalData.pendingInvite = inviteInfo;
+        wx.setStorageSync('pendingInvite', inviteInfo);
+        
+        // 同时保存分享启动信息，以备后用
+        wx.setStorageSync('shareLaunchInfo', {
+          path: options.path,
+          query: options.query,
+          timestamp: Date.now()
+        });
+        
+        console.log('[邀请流程] 分享邀请信息已保存:', inviteInfo);
+        return inviteInfo;
+      }
+    }
+    
+    // 检查query中是否直接包含邀请参数（兼容其他分享方式）
+    if (options.query && (options.query.chatId || options.query.inviteId)) {
+      const chatId = options.query.chatId || options.query.inviteId;
+      const inviter = options.query.inviter || '朋友';
+      
+      console.log('[邀请流程] 直接参数包含邀请信息:', { chatId, inviter });
+      
+      const inviteInfo = {
+        inviteId: chatId,
+        chatId: chatId,
+        inviter: inviter,
+        timestamp: Date.now(),
+        source: 'direct_params',
+        isInvitee: true
+      };
+      
+      this.globalData.pendingInvite = inviteInfo;
+      wx.setStorageSync('pendingInvite', inviteInfo);
+      
+      console.log('[邀请流程] 直接邀请信息已保存:', inviteInfo);
+      return inviteInfo;
+    }
+    
+    return null;
+  },
+
   /**
    * 递归尝试URL列表
    * @param {Array} urls - URL列表

@@ -412,7 +412,7 @@ Page({
       name: 'createChat',
       data: {
         chatId: this.data.conversationId,
-        message: `${this.data.userInfo.nickName || '用户'} 加入了聊天`
+        message: `${this.data.userInfo.nickName || '用户'}加入了私密聊天`
       },
       success: res => {
         console.log('[创建聊天] 创建聊天结果:', JSON.stringify(res.result));
@@ -664,8 +664,8 @@ Page({
       const userNickname = app.globalData.userInfo.nickName || '用户';
   const shareTitle = `${userNickname}邀请你加入蛐曲儿私密聊天`;
   
-  // 确保参数使用inviter而非name，保证与聊天跳转参数一致
-  const sharePath = `/pages/home/home?inviteId=${conversationId}&inviter=${encodeURIComponent(userNickname)}`;
+  // 🔥 修复：直接跳转到新版聊天页面，简化分享流程
+  const sharePath = `/app/pages/chat/chat?id=${conversationId}&inviter=${encodeURIComponent(userNickname)}&fromInvite=true`;
   
   console.log('[分享] 分享链接:', {
     title: shareTitle, 

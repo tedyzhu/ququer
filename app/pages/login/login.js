@@ -30,6 +30,9 @@ Page({
       console.log('云环境已初始化');
     }
 
+    // 🔥 优先检查是否有已保存的邀请信息
+    this.checkSavedInviteInfo();
+
     // 🔥 检查启动参数中是否包含分享链接信息
     this.checkShareLinkParams();
 
@@ -38,6 +41,52 @@ Page({
     
     // 检查是否开启调试模式
     this.checkDebugMode();
+  },
+
+  /**
+   * 检查已保存的邀请信息
+   */
+  checkSavedInviteInfo: function() {
+    console.log('[邀请流程] 检查已保存的邀请信息');
+    
+    try {
+      // 检查app级别的邀请信息
+      const app = getApp();
+      const appInviteInfo = app.getStoredInviteInfo();
+      
+      if (appInviteInfo && appInviteInfo.inviteId) {
+        console.log('[邀请流程] 发现app级别的邀请信息:', appInviteInfo);
+        
+        this.setData({
+          inviteId: appInviteInfo.inviteId,
+          inviter: appInviteInfo.inviter || '朋友',
+          isInvited: true
+        });
+        
+        return appInviteInfo;
+      }
+      
+      // 检查本地存储的邀请信息
+      const localInviteInfo = wx.getStorageSync('pendingInvite');
+      if (localInviteInfo && localInviteInfo.inviteId) {
+        console.log('[邀请流程] 发现本地存储的邀请信息:', localInviteInfo);
+        
+        this.setData({
+          inviteId: localInviteInfo.inviteId,
+          inviter: localInviteInfo.inviter || '朋友',
+          isInvited: true
+        });
+        
+        return localInviteInfo;
+      }
+      
+      console.log('[邀请流程] 未发现已保存的邀请信息');
+      return null;
+      
+    } catch (error) {
+      console.error('[邀请流程] 检查已保存的邀请信息失败:', error);
+      return null;
+    }
   },
 
   /**
@@ -415,35 +464,31 @@ Page({
                 }
               );
             } else {
-              // 普通用户登录，创建新聊天并直接进入聊天页面
-              console.log('普通用户登录成功，创建新聊天并进入聊天页面');
+              // 🔥 再次检查是否有邀请信息（可能在页面加载后才保存）
+              const lastCheckInviteInfo = app.getStoredInviteInfo();
               
-              // 创建新的聊天ID
-              const newChatId = 'chat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-              console.log('为新用户创建聊天ID:', newChatId);
-              
-              // 跳转到聊天页面
-              wx.reLaunch({
-                url: `/app/pages/chat/chat?id=${newChatId}&isNewChat=true&userName=${encodeURIComponent(userInfo.nickName)}`,
-                success: () => {
-                  console.log('新用户成功进入聊天页面');
-                },
-                fail: (err) => {
-                  console.error('跳转到聊天页面失败:', err);
-                  // 备用方案：跳转到首页
-                  wx.reLaunch({
-                    url: '/app/pages/home/home',
-                    fail: (err2) => {
-                      console.error('备用方案也失败:', err2);
-                      wx.showModal({
-                        title: '跳转失败',
-                        content: '无法进入页面，请重启小程序',
-                        showCancel: false
-                      });
-                    }
-                  });
-                }
-              });
+              if (lastCheckInviteInfo && lastCheckInviteInfo.inviteId) {
+                console.log('[邀请流程] 最后检查发现邀请信息，进入邀请聊天:', lastCheckInviteInfo);
+                
+                // 使用app全局方法进行跳转
+                app.tryNavigateToChat(lastCheckInviteInfo.inviteId, lastCheckInviteInfo.inviter, 
+                  // 成功回调
+                  () => {
+                    // 延迟清除邀请信息
+                    setTimeout(() => {
+                      app.clearInviteInfo();
+                    }, 5000);
+                  }, 
+                  // 失败回调
+                  () => {
+                    // 跳转失败，创建新聊天
+                    this.createAndEnterNewChat(userInfo);
+                  }
+                );
+              } else {
+                // 普通用户登录，创建新聊天
+                this.createAndEnterNewChat(userInfo);
+              }
             }
           });
         }, 1000);
@@ -520,6 +565,41 @@ Page({
     }
   },
   
+  /**
+   * 创建并进入新聊天
+   * @param {Object} userInfo - 用户信息
+   */
+  createAndEnterNewChat: function(userInfo) {
+    console.log('[邀请流程] 普通用户登录成功，创建新聊天并进入聊天页面');
+    
+    // 创建新的聊天ID
+    const newChatId = 'chat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    console.log('[邀请流程] 为新用户创建聊天ID:', newChatId);
+    
+    // 跳转到聊天页面
+    wx.reLaunch({
+      url: `/app/pages/chat/chat?id=${newChatId}&isNewChat=true&userName=${encodeURIComponent(userInfo.nickName)}`,
+      success: () => {
+        console.log('[邀请流程] 新用户成功进入聊天页面');
+      },
+      fail: (err) => {
+        console.error('[邀请流程] 跳转到聊天页面失败:', err);
+        // 备用方案：跳转到首页
+        wx.reLaunch({
+          url: '/app/pages/home/home',
+          fail: (err2) => {
+            console.error('[邀请流程] 备用方案也失败:', err2);
+            wx.showModal({
+              title: '跳转失败',
+              content: '无法进入页面，请重启小程序',
+              showCancel: false
+            });
+          }
+        });
+      }
+    });
+  },
+
   /**
    * 尝试按顺序导航到URL列表中的一个URL
    * @param {Array} urls - URL列表

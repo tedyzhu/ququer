@@ -8,20 +8,7 @@ const cloud = require('wx-server-sdk');
 
 // 初始化云环境
 cloud.init({
-  env: 'ququer-env-6g35f0nv28c446e7',
-  // 添加安全相关配置
-  securityHeaders: {
-    enableCrossOriginIsolation: true,
-    crossOriginOpenerPolicy: {
-      value: 'same-origin'
-    },
-    crossOriginEmbedderPolicy: {
-      value: 'require-corp'
-    },
-    crossOriginResourcePolicy: {
-      value: 'same-origin'
-    }
-  }
+  env: cloud.DYNAMIC_CURRENT_ENV
 });
 
 // 获取数据库引用
@@ -131,7 +118,7 @@ exports.main = async (event, context) => {
         createdBy: userId,
         createdAt: timestamp,
         updatedAt: timestamp,
-        lastMessage: event.message || '创建了聊天',
+        lastMessage: event.message || '您创建了私密聊天，可点击右上角菜单分享链接邀请朋友加入',
         lastMessageTime: timestamp,
         status: 'active'
       }

@@ -1,0 +1,45 @@
+<!--pages/test-share-fix/test-share-fix.wxml-->
+<view class="container">
+  <view class="header">
+    <text class="title">🔧 分享连接修复测试</text>
+    <text class="subtitle">验证分享邀请流程是否正常工作</text>
+  </view>
+
+  <view class="test-controls">
+    <button class="btn primary" bindtap="retestShareFix">重新测试</button>
+    <button class="btn secondary" bindtap="simulateShare">模拟分享</button>
+  </view>
+
+  <view class="test-results">
+    <view class="result-header">
+      <text>测试日志</text>
+    </view>
+    <scroll-view class="log-container" scroll-y="true" scroll-top="{{logs.length * 40}}">
+      <view 
+        class="log-item {{item.indexOf('✅') >= 0 ? 'success' : item.indexOf('❌') >= 0 ? 'error' : item.indexOf('🎉') >= 0 ? 'celebration' : ''}}"
+        wx:for="{{logs}}" 
+        wx:key="index"
+      >
+        {{item}}
+      </view>
+    </scroll-view>
+  </view>
+
+  <view class="test-summary" wx:if="{{shareTestResults.newChat}}">
+    <view class="summary-header">
+      <text>分享路径对比</text>
+    </view>
+    <view class="path-item">
+      <text class="path-label">新版聊天页面:</text>
+      <text class="path-value">{{shareTestResults.newChat}}</text>
+    </view>
+    <view class="path-item">
+      <text class="path-label">老版聊天页面:</text>
+      <text class="path-value">{{shareTestResults.oldChat}}</text>
+    </view>
+    <view class="path-item">
+      <text class="path-label">首页分享:</text>
+      <text class="path-value">{{shareTestResults.home}}</text>
+    </view>
+  </view>
+</view> 

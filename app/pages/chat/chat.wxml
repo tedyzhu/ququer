@@ -1,12 +1,27 @@
-<view class="container chat-container">
-  <!-- 🔥 调试信息 -->
-  <view class="debug-info" wx:if="{{isDebugMode}}">
-    <text>聊天ID: {{contactId}}</text>
-    <text>消息数: {{messages.length}}</text>
-    <text>用户ID: {{currentUser.openId}}</text>
+<view class="chat-container">
+  <!-- 自定义标题栏 -->
+  <view class="custom-navbar">
+    <view class="navbar-left">
+      <!-- 去掉返回箭头 -->
+    </view>
+    <view class="navbar-center">
+      <view class="chat-title">{{dynamicTitle || '标题加载中...'}}</view>
+      <!-- 调试信息 -->
+      <view wx:if="{{isDebugMode}}" style="font-size: 24rpx; color: #999;">
+        DEBUG: {{dynamicTitle ? 'HAS_TITLE' : 'NO_TITLE'}}
+      </view>
+    </view>
+    <view class="navbar-right" bindtap="showChatMenu">
+      <text class="more-icon">⋯</text>
+    </view>
+  </view>
+
+  <!-- 销毁计时器 -->
+  <view class="destroy-timer" wx:if="{{showDestroyTimer}}">
+    <view class="timer-text">{{destroyTimerText}}</view>
   </view>
   
-  <!-- 创建聊天状态覆盖层 -->
+  <!-- 创建聊天状态 -->
   <view class="creating-chat-overlay" wx:if="{{isCreatingChat}}">
     <view class="creating-chat-content">
       <view class="creating-chat-spinner"></view>
@@ -14,96 +29,98 @@
     </view>
   </view>
   
-  <!-- 聊天消息区域 -->
-  <scroll-view 
-    id="scroll-view"
-    scroll-y="true" 
-    class="message-list" 
-    scroll-top="{{scrollTop}}"
-    scroll-with-animation="true"
-    enhanced="true"
-    show-scrollbar="false">
+  <!-- 聊天内容区域 -->
+  <scroll-view
+    class="messages-container"
+    scroll-y="true"
+    scroll-into-view="{{scrollIntoView}}"
+    enable-flex="true"
+  >
+    <!-- 正在加载 -->
+    <view wx:if="{{isLoading}}" class="loading-container">
+      <view class="loading"></view>
+      <text>加载中...</text>
+    </view>
     
-    <view id="message-container" class="messages-container">
-      <!-- 加载中 -->
-      <view wx:if="{{isLoading}}" class="loading-container">
-        <view class="loading-spinner"></view>
-        <view class="loading-text">加载中...</view>
-      </view>
-      
-      <!-- 消息列表 -->
+    <!-- 消息列表 -->
+    <view wx:else class="messages-list">
       <block wx:for="{{messages}}" wx:key="id">
         <!-- 系统消息 -->
-        <view wx:if="{{item.type === 'system'}}" class="message-item system-message">
-          <view class="system-message-content">
-            <text class="system-message-text">{{item.content}}</text>
-            <text class="system-message-time">{{item.time}}</text>
+        <view 
+          wx:if="{{item.isSystem}}"
+          id="sys-{{index}}"
+          class="message-wrapper system"
+        >
+          <view class="system-message">
+            <view class="message-text">{{item.content}}</view>
           </view>
         </view>
         
-        <!-- 已销毁的消息 -->
-        <view wx:elif="{{item.destroyed}}" class="message-item destroyed-message">
-          <view class="message-destroyed-notice">消息已销毁</view>
-        </view>
-        
-        <!-- 未销毁的普通消息 -->
+        <!-- 普通消息 - 微信原生样式 -->
         <view 
           wx:else
-          class="message-item {{item.senderId === 'self' ? 'message-self' : 'message-other'}}"
-          bindtap="handleMessageTap"
-          data-messageid="{{item.id}}">
+          id="msg-{{index}}"
+          class="message-item {{item.isSelf ? 'message-self' : 'message-other'}}"
+          bindlongpress="onMessageLongTap"
+          data-msgid="{{item.id}}"
+        >
+          <!-- 时间显示 -->
+          <view wx:if="{{item.showTime}}" class="message-time-divider">
+            <text class="time-text">{{item.timeDisplay}}</text>
+          </view>
           
-          <!-- 消息气泡 -->
-          <view class="message-bubble {{item.destroying ? 'destroying' : ''}}">
-            <!-- 消息内容 -->
-            <view class="message-content">{{item.content}}</view>
-            
-            <!-- 销毁倒计时 -->
-            <view wx:if="{{item.destroying}}" class="destroy-countdown">
-              {{item.remainTime}}s后销毁
+          <view class="message-row">
+            <!-- 对方消息：头像在左侧 -->
+            <view wx:if="{{!item.isSelf}}" class="message-avatar">
+              <image class="avatar-img" src="{{item.avatar}}" mode="aspectFill"></image>
             </view>
             
-            <!-- 消息时间和状态 -->
-            <view class="message-meta">
-              <text class="message-time">{{item.time}}</text>
-              <text wx:if="{{item.senderId === 'self' && item.status !== 'received'}}" class="message-status">
-                {{item.status === 'sending' ? '发送中' : '已发送'}}
-              </text>
+            <!-- 消息气泡 -->
+            <view class="message-bubble-wrapper {{item.isSelf ? 'self-bubble' : 'other-bubble'}}">
+              <view class="message-bubble {{item.isDestroying ? 'destroying' : ''}} {{item.isDestroyed ? 'destroyed' : ''}}">
+                <view class="bubble-content">{{item.content}}</view>
+                <!-- 销毁倒计时提示 -->
+                <view wx:if="{{item.isDestroying && item.destroyCountdown}}" class="destroy-countdown">
+                  {{item.destroyCountdown}}s后销毁
+                </view>
+              </view>
+            </view>
+            
+            <!-- 自己消息：头像在右侧 -->
+            <view wx:if="{{item.isSelf}}" class="message-avatar">
+              <image class="avatar-img" src="{{item.avatar}}" mode="aspectFill"></image>
             </view>
           </view>
         </view>
       </block>
     </view>
   </scroll-view>
-
+  
   <!-- 底部输入区域 -->
-  <view class="input-area">
-    <view class="input-box">
-      <input 
-        class="text-input" 
-        value="{{inputValue}}"
-        bindinput="handleInputChange"
-        confirm-type="send"
-        bindconfirm="sendMessage"
-        placeholder="输入消息..."
-        disabled="{{isCreatingChat}}" />
-      
-      <view class="toolbar">
-        <view class="tool-button emotions-button">
-          <image class="tool-icon" src="/assets/images/emoji.png" mode="aspectFit"></image>
-        </view>
-        
-        <view class="tool-button photo-button">
-          <image class="tool-icon" src="/assets/images/photo.png" mode="aspectFit"></image>
-        </view>
-      </view>
+  <view class="input-container">
+    <view class="voice-btn" bindtap="toggleVoiceInput">
+      <image class="icon" src="/assets/images/mic.png" mode="aspectFit"></image>
     </view>
     
-    <button 
-      class="send-button {{inputValue ? 'active' : ''}}" 
-      bindtap="sendMessage"
-      disabled="{{!inputValue || isCreatingChat}}">
-      发送
-    </button>
+    <input
+      class="message-input"
+      type="text"
+      placeholder="输入消息..."
+      value="{{inputValue}}"
+      bindinput="onInputChange"
+      confirm-type="send"
+      bindconfirm="sendMessage"
+      disabled="{{isCreatingChat}}"
+    />
+    
+    <view class="emoji-btn" bindtap="openEmojiPicker">
+      <image class="icon" src="/assets/images/emoji.png" mode="aspectFit"></image>
+    </view>
+    
+    <view class="more-btn" bindtap="openMoreFunctions">
+      <image class="icon" src="/assets/images/more.png" mode="aspectFit"></image>
+    </view>
+    
+    <view class="send-btn" bindtap="sendMessage" wx:if="{{inputValue.length > 0}}">发送</view>
   </view>
 </view> 

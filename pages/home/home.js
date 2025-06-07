@@ -422,10 +422,10 @@ Page({
       }
     });
     
-    // 返回分享配置，直接传递聊天ID到聊天页面（简化流程）
+    // 🔥 修复：统一跳转到新版聊天页面，确保连接建立
     return {
       title: `${nickName}邀请你进行私密聊天`,
-      path: `/pages/chat/chat?id=${shareCreatedChatId}&inviter=${encodeURIComponent(nickName)}&fromInvite=true`,
+      path: `/app/pages/chat/chat?id=${shareCreatedChatId}&inviter=${encodeURIComponent(nickName)}&fromInvite=true`,
       imageUrl: '/assets/images/logo.png',
       success: (res) => {
         console.log('🎯 分享成功！');

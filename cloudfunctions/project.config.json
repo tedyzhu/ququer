@@ -17,6 +17,70 @@
       "runtime": "Nodejs16.13", 
       "memorySize": 256,
       "handler": "index.main"
+    },
+    {
+      "name": "getChatParticipants",
+      "timeout": 5,
+      "envVariables": {},
+      "runtime": "Nodejs16.13",
+      "memorySize": 256,
+      "handler": "index.main"
+    },
+    {
+      "name": "getMessages",
+      "timeout": 5,
+      "envVariables": {},
+      "runtime": "Nodejs16.13",
+      "memorySize": 256,
+      "handler": "index.main"
+    },
+    {
+      "name": "sendMessage",
+      "timeout": 5,
+      "envVariables": {},
+      "runtime": "Nodejs16.13",
+      "memorySize": 256,
+      "handler": "index.main"
+    },
+    {
+      "name": "destroyMessage",
+      "timeout": 5,
+      "envVariables": {},
+      "runtime": "Nodejs16.13",
+      "memorySize": 256,
+      "handler": "index.main"
+    },
+    {
+      "name": "login",
+      "timeout": 5,
+      "envVariables": {},
+      "runtime": "Nodejs16.13",
+      "memorySize": 256,
+      "handler": "index.main"
+    },
+    {
+      "name": "joinByInvite",
+      "timeout": 5,
+      "envVariables": {},
+      "runtime": "Nodejs16.13",
+      "memorySize": 256,
+      "handler": "index.main"
+    },
+    {
+      "name": "getConversations",
+      "timeout": 5,
+      "envVariables": {},
+      "runtime": "Nodejs16.13",
+      "memorySize": 256,
+      "handler": "index.main"
+    },
+    {
+      "name": "createChat",
+      "timeout": 5,
+      "envVariables": {},
+      "runtime": "Nodejs16.13",
+      "memorySize": 256,
+      "handler": "index.main"
     }
   ]
 } 
