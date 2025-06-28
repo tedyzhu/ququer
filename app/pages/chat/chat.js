@@ -2543,7 +2543,8 @@ Page({
         chatId: this.data.contactId, // 🔥 使用chatId参数
         content: content,
         type: 'text',
-        destroyTimeout: this.data.destroyTimeout
+        destroyTimeout: this.data.destroyTimeout,
+        senderId: currentUser?.openId // 🔥 修复：明确传递发送方ID
       },
       success: res => {
         console.log('📤 发送消息成功', res);
@@ -3492,12 +3493,15 @@ Page({
                 }
               });
               
+              // 🔥 【调试】始终打印身份判断信息，便于诊断
+              const currentUser = this.data.currentUser;
+              const isFromInvite = this.data.isFromInvite;
+              const isSender = !isFromInvite; // 🔥 修复：使用更准确的身份判断
+              
+              console.log('🔔 [身份判断] isFromInvite:', isFromInvite, 'isSender:', isSender, 'hasNewMessage:', hasNewMessage);
+              
               if (hasNewMessage) {
                 console.log('🔔 刷新聊天记录以显示新消息');
-                
-                // 🔥 【HOTFIX-v1.3.10】智能处理新消息显示
-                const currentUser = this.data.currentUser;
-                const isSender = currentUser && currentUser.nickName === '向冬';
                 
                 if (isSender) {
                   console.log('🔔 [智能消息处理] 发送方检测到新消息，直接添加到界面而不获取历史消息');
@@ -3682,9 +3686,12 @@ Page({
       // 🔥 【HOTFIX-v1.3.5】发送方永远不轮询消息，保持阅后即焚原则
       const currentUser = this.data.currentUser;
       const participants = this.data.participants || [];
+      const isFromInvite = this.data.isFromInvite;
       
-      // 🔥 检查是否为发送方：通过用户昵称判断
-      const isSender = currentUser && currentUser.nickName === '向冬';
+      // 🔥 检查是否为发送方：使用更准确的身份判断
+      const isSender = !isFromInvite;
+      
+      console.log('🔔 [轮询身份判断] isFromInvite:', isFromInvite, 'isSender:', isSender);
       
       if (isSender) {
         console.log('🔔 发送方身份检测到，跳过轮询避免获取历史消息');
@@ -5780,7 +5787,8 @@ Page({
         
         // 🔥 【HOTFIX-v1.3.6】智能获取对方真实昵称
         const currentUser = this.data.currentUser;
-        const isSender = currentUser && currentUser.nickName === '向冬';
+        const isFromInvite = this.data.isFromInvite;
+        const isSender = !isFromInvite; // 🔥 修复：使用准确的身份判断
         
         console.log('🔧 [参与者去重] 当前用户身份:', isSender ? '发送方' : '接收方');
         console.log('🔧 [参与者去重] 对方参与者原始信息:', otherParticipant);
