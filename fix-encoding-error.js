@@ -5,13 +5,82 @@
 
 console.log('🔧 启动编码错误修复...');
 
-// 1. 重写全局的btoa和atob函数，使其支持Unicode（小程序环境兼容）
+// 1. 修复__global访问错误
+try {
+  if (typeof global === 'undefined' && typeof window !== 'undefined') {
+    // 在浏览器环境中创建global对象
+    window.global = window;
+  }
+  
+  // 确保__global存在
+  const globalObj = (typeof window !== 'undefined') ? window : 
+                   (typeof global !== 'undefined') ? global : 
+                   (typeof globalThis !== 'undefined') ? globalThis : {};
+  
+  if (!globalObj.__global) {
+    globalObj.__global = globalObj;
+  }
+  
+  console.log('🔧 __global访问修复完成');
+} catch (e) {
+  console.warn('__global修复失败:', e);
+}
+
+// 2. 应用系统信息API修复
+try {
+  if (typeof require === 'function') {
+    const systemInfoFix = require('./utils/system-info-fix.js');
+    systemInfoFix.applySystemInfoFix();
+  } else {
+    console.log('🔧 直接应用系统信息API修复...');
+    
+    if (typeof wx !== 'undefined' && wx.getSystemInfoSync) {
+      const originalGetSystemInfoSync = wx.getSystemInfoSync;
+      
+      wx.getSystemInfoSync = function() {
+        console.warn('[已弃用] wx.getSystemInfoSync，建议使用wx.getDeviceInfo等新API');
+        try {
+          // 尝试使用新API的同步版本
+          const deviceInfo = wx.getDeviceInfo ? wx.getDeviceInfo() : {};
+          const windowInfo = wx.getWindowInfo ? wx.getWindowInfo() : {};
+          const appBaseInfo = wx.getAppBaseInfo ? wx.getAppBaseInfo() : {};
+          
+          return {
+            ...deviceInfo,
+            ...windowInfo,
+            ...appBaseInfo,
+            // 添加兼容性字段
+            model: deviceInfo.model || '未知设备',
+            pixelRatio: windowInfo.pixelRatio || 1,
+            windowWidth: windowInfo.windowWidth || 375,
+            windowHeight: windowInfo.windowHeight || 667,
+            platform: deviceInfo.platform || 'unknown',
+            system: deviceInfo.system || '未知系统',
+            version: appBaseInfo.version || '1.0.0',
+            SDKVersion: appBaseInfo.SDKVersion || '1.0.0'
+          };
+        } catch (error) {
+          console.warn('新API获取失败，使用原始API:', error);
+          return originalGetSystemInfoSync.call(this);
+        }
+      };
+      
+      console.log('✅ 系统信息API修复完成');
+    }
+  }
+} catch (e) {
+  console.warn('系统信息API修复失败:', e);
+}
+
+// 3. 重写全局的btoa和atob函数，使其支持Unicode（小程序环境兼容）
 if (typeof btoa !== 'undefined') {
   const originalBtoa = btoa;
   const originalAtob = atob;
   
   // 检查是否在小程序环境中
-  const globalObj = (typeof window !== 'undefined') ? window : global;
+  const globalObj = (typeof window !== 'undefined') ? window : 
+                   (typeof global !== 'undefined') ? global :
+                   (typeof globalThis !== 'undefined') ? globalThis : {};
   
   // 安全的btoa替换
   const safeBtoa = function(str) {
@@ -57,13 +126,15 @@ if (typeof btoa !== 'undefined') {
   }
 }
 
-// 2. 重写encodeURIComponent和decodeURIComponent（小程序环境兼容）
+// 4. 重写encodeURIComponent和decodeURIComponent（小程序环境兼容）
 if (typeof encodeURIComponent !== 'undefined') {
   const originalEncodeURIComponent = encodeURIComponent;
   const originalDecodeURIComponent = decodeURIComponent;
   
   // 检查是否在小程序环境中（没有window对象）
-  const globalObj = (typeof window !== 'undefined') ? window : global;
+  const globalObj = (typeof window !== 'undefined') ? window : 
+                   (typeof global !== 'undefined') ? global :
+                   (typeof globalThis !== 'undefined') ? globalThis : {};
   if (typeof globalObj !== 'undefined') {
     globalObj.encodeURIComponent = function(str) {
       try {
@@ -117,7 +188,7 @@ if (typeof encodeURIComponent !== 'undefined') {
   }
 }
 
-// 3. 如果存在小程序环境，修复wx对象中可能的编码问题
+// 5. 如果存在小程序环境，修复wx对象中可能的编码问题
 if (typeof wx !== 'undefined') {
   console.log('🔧 修复微信小程序环境的编码问题...');
   
@@ -148,11 +219,11 @@ if (typeof wx !== 'undefined') {
   };
 }
 
-// 4. 设置全局标记，表示修复已应用
+// 6. 设置全局标记，表示修复已应用
 if (typeof getApp === 'function') {
   try {
     const app = getApp();
-    if (app.globalData) {
+    if (app && app.globalData) {
       app.globalData.ENCODING_FIX_APPLIED = true;
       console.log('✅ 编码修复已应用到全局数据');
     }

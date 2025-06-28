@@ -17,8 +17,19 @@
 }
 
 .navbar-left {
-  width: 30rpx;
+  width: 80rpx;
   height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 50%;
+  transition: background-color 0.2s ease;
+}
+
+.navbar-left:active {
+  background-color: rgba(0, 0, 0, 0.1);
 }
 
 .navbar-right {
@@ -43,7 +54,7 @@
   text-align: center;
 }
 
-.back-icon, .more-icon {
+.back-icon, .more-icon, .menu-icon {
   font-size: 40rpx;
   color: #000000;
   font-weight: 300;
@@ -57,6 +68,29 @@
 .more-icon {
   font-size: 32rpx;
   letter-spacing: 2rpx;
+}
+
+.menu-icon {
+  font-size: 32rpx;
+  letter-spacing: 2rpx;
+  padding: 15rpx;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 50%;
+  display: block;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+.menu-icon:active {
+  opacity: 0.6;
+  background-color: rgba(0, 0, 0, 0.1);
+  transform: scale(0.95);
 }
 
 .chat-container {
@@ -396,4 +430,128 @@
   display: flex;
   flex-direction: column;
   background-color: #f5f5f5;
+}
+
+/* 🔥 阅后即焚增强样式 */
+
+/* 已销毁消息的内容样式 */
+.destroyed-content {
+  background: linear-gradient(135deg, #ff6b6b, #ee5a5a);
+  color: #ffffff !important;
+  text-align: center;
+  padding: 16rpx 24rpx;
+  border-radius: 12rpx;
+  font-weight: 500;
+}
+
+.destroyed-text {
+  font-size: 28rpx;
+  display: block;
+}
+
+/* 点击查看提示 */
+.tap-to-read {
+  margin-top: 8rpx;
+  padding: 6rpx 16rpx;
+  background-color: rgba(0, 0, 0, 0.05);
+  border-radius: 16rpx;
+  text-align: center;
+}
+
+.tap-hint {
+  font-size: 22rpx;
+  color: #666666;
+  font-style: italic;
+}
+
+/* 增强的销毁倒计时样式 */
+.destroy-countdown .countdown-text {
+  font-size: 22rpx;
+  color: #ff4757;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+}
+
+/* 销毁中消息的动画优化 */
+.message-bubble.destroying {
+  background: linear-gradient(135deg, #ffecb3, #fff3c4) !important;
+  animation: destroying-pulse 1.5s ease-in-out infinite;
+  border: 2rpx solid #ffa726;
+}
+
+@keyframes destroying-pulse {
+  0% { 
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 167, 38, 0.7);
+  }
+  50% { 
+    transform: scale(1.02);
+    box-shadow: 0 0 0 20rpx rgba(255, 167, 38, 0);
+  }
+  100% { 
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 167, 38, 0);
+  }
+}
+
+/* 已销毁消息的最终样式 */
+.message-bubble.destroyed {
+  background: linear-gradient(135deg, #f8f9fa, #e9ecef) !important;
+  border: 2rpx dashed #dee2e6;
+  opacity: 0.8;
+}
+
+/* 在线状态指示器（可选） */
+.online-indicator {
+  position: absolute;
+  top: -4rpx;
+  right: -4rpx;
+  width: 20rpx;
+  height: 20rpx;
+  background-color: #52c41a;
+  border-radius: 50%;
+  border: 3rpx solid #ffffff;
+  animation: online-pulse 2s infinite;
+}
+
+@keyframes online-pulse {
+  0% { 
+    box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.7);
+  }
+  70% { 
+    box-shadow: 0 0 0 20rpx rgba(82, 196, 26, 0);
+  }
+  100% { 
+    box-shadow: 0 0 0 0 rgba(82, 196, 26, 0);
+  }
+}
+
+/* 消息点击反馈 */
+.message-bubble:active {
+  transform: scale(0.98);
+  transition: transform 0.1s ease;
+}
+
+/* 特殊提示文字 */
+.burn-after-reading-hint {
+  position: absolute;
+  top: -30rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: #ffffff;
+  padding: 8rpx 16rpx;
+  border-radius: 16rpx;
+  font-size: 20rpx;
+  white-space: nowrap;
+  opacity: 0;
+  animation: hint-fade-in-out 3s ease-in-out;
+}
+
+@keyframes hint-fade-in-out {
+  0%, 100% { opacity: 0; transform: translateX(-50%) translateY(10rpx); }
+  20%, 80% { opacity: 1; transform: translateX(-50%) translateY(0); }
 } 

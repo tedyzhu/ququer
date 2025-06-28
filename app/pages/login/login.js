@@ -578,7 +578,7 @@ Page({
     
     // 跳转到聊天页面
     wx.reLaunch({
-      url: `/app/pages/chat/chat?id=${newChatId}&isNewChat=true&userName=${encodeURIComponent(userInfo.nickName)}`,
+      url: `/app/pages/chat/chat?id=${newChatId}&isNewChat=true&userName=${encodeURIComponent(userInfo.nickName)}&action=create`,
       success: () => {
         console.log('[邀请流程] 新用户成功进入聊天页面');
       },

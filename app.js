@@ -9,7 +9,9 @@ App({
     cloudInitialized: false,
     launchOptions: null, // 存储启动参数
     pendingInvite: null,  // 存储待处理的邀请信息
-    ENCODING_FIX_APPLIED: false // 编码修复状态
+    ENCODING_FIX_APPLIED: false, // 编码修复状态
+    CLOUD_FIX_APPLIED: false, // 云函数错误修复状态
+    SAFE_CLOUD_FIX_APPLIED: false // 安全的云函数错误修复状态
   },
 
   /**
@@ -34,6 +36,24 @@ App({
       console.warn('编码修复应用失败，但不影响正常功能:', e);
     }
     
+    // 🚨 应用云函数错误修复
+    try {
+      require('./fix-cloud-function-errors.js');
+      this.globalData.CLOUD_FIX_APPLIED = true;
+      console.log('✅ 云函数错误修复已应用');
+    } catch (e) {
+      console.warn('云函数错误修复应用失败:', e);
+    }
+    
+    // 🚨 应用安全的云函数错误修复
+    try {
+      require('./fix-cloud-function-errors-safe.js');
+      this.globalData.SAFE_CLOUD_FIX_APPLIED = true;
+      console.log('✅ 安全的云函数错误修复已应用');
+    } catch (e) {
+      console.warn('安全的云函数错误修复应用失败:', e);
+    }
+    
     // 初始化云环境
     this.initCloud();
     
@@ -50,15 +70,8 @@ App({
       });
     });
     
-    // 设置web-view安全隔离，解决SharedArrayBuffer警告
-    if (wx.setWebViewSecurity) {
-      wx.setWebViewSecurity({
-        enable: true,
-        complete: (res) => {
-          console.log('设置web-view安全隔离结果:', res);
-        }
-      });
-    }
+    // 🔧 修复：设置安全标头，解决SharedArrayBuffer警告
+    this.setupSecurityHeaders();
     
     // 监听网络状态变化
     wx.onNetworkStatusChange((res) => {
@@ -118,6 +131,9 @@ App({
     // 更新启动参数
     this.globalData.launchOptions = options;
     
+    // 🔗 每次显示时检查邀请参数（支持普通模式的分享链接）
+    this.handleInviteParams(options);
+    
     // 每次显示时检查登录状态
     if (!this.globalData.hasLogin) {
       // 直接调用检查登录状态方法，不使用catch链
@@ -125,6 +141,40 @@ App({
     }
   },
   
+  /**
+   * 设置安全标头，解决SharedArrayBuffer相关警告
+   * @private
+   */
+  setupSecurityHeaders: function() {
+    try {
+      // 设置跨域隔离配置
+      if (wx.setCustomRequestConfig) {
+        wx.setCustomRequestConfig({
+          crossOriginIsolation: true,
+          headers: {
+            'Cross-Origin-Opener-Policy': 'same-origin',
+            'Cross-Origin-Embedder-Policy': 'require-corp',
+            'Cross-Origin-Resource-Policy': 'same-origin'
+          }
+        });
+      }
+      
+      // 如果支持WebView安全配置
+      if (wx.setWebViewSecurity) {
+        wx.setWebViewSecurity({
+          enable: true,
+          complete: (res) => {
+            console.log('🔧 WebView安全配置设置结果:', res);
+          }
+        });
+      }
+      
+      console.log('🔧 安全标头配置完成');
+    } catch (e) {
+      console.warn('安全标头配置失败，但不影响正常功能:', e);
+    }
+  },
+
   /**
    * 初始化云环境
    * @returns {boolean} 初始化是否成功
@@ -147,19 +197,9 @@ App({
         wx.cloud.init({
           env: 'ququer-env-6g35f0nv28c446e7',
           traceUser: true,
-          // 增强安全相关配置，解决SharedArrayBuffer警告
-          securityHeaders: {
-            enableCrossOriginIsolation: true,
-            crossOriginOpenerPolicy: {
-              value: 'same-origin'
-            },
-            crossOriginEmbedderPolicy: {
-              value: 'require-corp'
-            },
-            crossOriginResourcePolicy: {
-              value: 'same-origin'
-            }
-          }
+          // 🔧 移除无效的安全配置（小程序云开发不支持这些配置）
+          timeout: 10000, // 设置超时时间为10秒
+          retry: 3        // 设置重试次数
         });
         console.log('云环境初始化成功: ququer-env-6g35f0nv28c446e7');
         this.globalData.cloudInitialized = true;
@@ -247,20 +287,57 @@ App({
    * @param {Object} userInfo - 用户信息
    */
   updateUserLoginTime: function(userInfo) {
-    // 确保云环境已初始化
+    // 调用云函数更新登录时间
     if (!this.globalData.cloudInitialized) {
-      this.initCloud();
+      console.log('云环境未初始化，延迟更新登录时间');
+      // 延迟重试
+      setTimeout(() => {
+        if (this.globalData.cloudInitialized) {
+          this.updateUserLoginTime(userInfo);
+        }
+      }, 2000);
+      return;
     }
     
-    // 调用云函数更新登录时间
+    console.log('调用云函数更新登录时间');
     wx.cloud.callFunction({
       name: 'login',
       data: { userInfo },
+      timeout: 10000, // 设置超时时间
       success: res => {
         console.log('更新登录时间成功', res);
+        
+        // 如果返回了openId，保存起来
+        if (res.result && res.result.openId) {
+          this.globalData.openId = res.result.openId;
+          
+          // 存储到本地以便下次使用
+          wx.setStorage({
+            key: 'openId',
+            data: res.result.openId
+          });
+          
+          // 确保用户信息中也包含openId
+          if (this.globalData.userInfo && !this.globalData.userInfo.openId) {
+            this.globalData.userInfo.openId = res.result.openId;
+            
+            // 更新存储
+            wx.setStorage({
+              key: 'userInfo',
+              data: this.globalData.userInfo
+            });
+          }
+        }
       },
       fail: err => {
         console.error('更新登录时间失败', err);
+        
+        // 如果是-404006错误，尝试重新初始化云环境
+        if (err.errCode === -404006) {
+          console.log('检测到-404006错误，重新初始化云环境');
+          this.globalData.cloudInitialized = false;
+          this.initCloud();
+        }
       }
     });
   },
@@ -469,25 +546,72 @@ App({
     
     let inviteId = null;
     let inviter = null;
+    let fromInvite = false;
+    
+    // 🔗 检查path中是否包含邀请参数（普通模式下的分享链接）
+    if (options.path && options.path.includes('chat')) {
+      console.log('[邀请流程] 检测到聊天页面路径，解析参数:', options.path);
+      
+      // 解析path中的参数（例如：app/pages/chat/chat?id=xxx&inviter=xxx&fromInvite=true）
+      const pathParts = options.path.split('?');
+      if (pathParts.length > 1) {
+        const queryString = pathParts[1];
+        const urlParams = new URLSearchParams(queryString);
+        
+        console.log('[邀请流程] 解析到的URL参数:', queryString);
+        
+        if (urlParams.get('id')) {
+          inviteId = urlParams.get('id');
+          console.log('[邀请流程] 从path解析到聊天ID:', inviteId);
+        }
+        
+        if (urlParams.get('inviter')) {
+          try {
+            // 🔧 处理双重编码
+            inviter = decodeURIComponent(decodeURIComponent(urlParams.get('inviter')));
+            console.log('[邀请流程] 从path解析到邀请者:', inviter);
+          } catch (e) {
+            inviter = decodeURIComponent(urlParams.get('inviter'));
+            console.log('[邀请流程] 单次解码邀请者:', inviter);
+          }
+        }
+        
+        if (urlParams.get('fromInvite') === 'true') {
+          fromInvite = true;
+          console.log('[邀请流程] 确认来自邀请链接');
+        }
+      }
+    }
     
     // 🔥 直接提取options中的邀请信息，兼容chatId和inviteId
-    if (options.chatId) {
+    if (!inviteId && options.chatId) {
       console.log('[邀请流程] 从直接参数中找到chatId:', options.chatId);
       inviteId = options.chatId;
       inviter = options.inviter ? decodeURIComponent(options.inviter) : '朋友';
-    } else if (options.inviteId) {
+    } else if (!inviteId && options.inviteId) {
       console.log('[邀请流程] 从直接参数中找到邀请ID:', options.inviteId);
       inviteId = options.inviteId;
       inviter = options.inviter || '朋友';
     }
     // 从query中提取
-    else if (options.query && (options.query.chatId || options.query.inviteId)) {
+    else if (!inviteId && options.query && (options.query.chatId || options.query.inviteId || options.query.id)) {
       console.log('[邀请流程] 从query参数中找到邀请ID');
-      inviteId = options.query.chatId || options.query.inviteId;
-      inviter = options.query.inviter ? decodeURIComponent(options.query.inviter) : '朋友';
+      inviteId = options.query.chatId || options.query.inviteId || options.query.id;
+      if (options.query.inviter) {
+        try {
+          inviter = decodeURIComponent(decodeURIComponent(options.query.inviter));
+        } catch (e) {
+          inviter = decodeURIComponent(options.query.inviter);
+        }
+      } else {
+        inviter = '朋友';
+      }
+      if (options.query.fromInvite === 'true') {
+        fromInvite = true;
+      }
     }
     // 从referrerInfo.extraData中提取
-    else if (options.referrerInfo && options.referrerInfo.extraData) {
+    else if (!inviteId && options.referrerInfo && options.referrerInfo.extraData) {
       const extraData = options.referrerInfo.extraData;
       if (extraData.chatId || extraData.inviteId) {
         console.log('[邀请流程] 从extraData中找到邀请ID');
@@ -498,7 +622,32 @@ App({
     
     // 如果找到邀请ID，保存邀请信息
     if (inviteId) {
-      return this.saveInviteInfo(inviteId, inviter);
+      const saveInfo = this.saveInviteInfo(inviteId, inviter, fromInvite);
+      
+      // 🔗 如果是来自邀请链接，直接导航到聊天页面
+      if (fromInvite && options.path && options.path.includes('chat')) {
+        console.log('[邀请流程] 检测到普通模式下的邀请链接，准备导航到聊天页面');
+        // 延迟一点时间确保app初始化完成
+        setTimeout(() => {
+          const chatUrl = `/${options.path}`;
+          console.log('[邀请流程] 导航到聊天页面:', chatUrl);
+          wx.reLaunch({
+            url: chatUrl,
+            success: () => {
+              console.log('[邀请流程] 成功导航到聊天页面');
+            },
+            fail: (err) => {
+              console.error('[邀请流程] 导航失败，尝试备用方案:', err);
+              // 备用方案：使用相对路径
+              wx.reLaunch({
+                url: `app/pages/chat/chat?id=${inviteId}&inviter=${encodeURIComponent(inviter)}&fromInvite=true`
+              });
+            }
+          });
+        }, 1000);
+      }
+      
+      return saveInfo;
     }
     
     // 检查是否有待处理的邀请信息
@@ -509,19 +658,21 @@ App({
    * 保存邀请信息
    * @param {String} inviteId - 邀请ID (chatId或inviteId)
    * @param {String} inviter - 邀请人
+   * @param {Boolean} fromInvite - 是否来自邀请链接
    * @returns {Object} 保存的邀请信息
    */
-  saveInviteInfo: function(inviteId, inviter) {
+  saveInviteInfo: function(inviteId, inviter, fromInvite = false) {
     if (!inviteId) return null;
     
     const inviterName = inviter || '朋友';
-    console.log(`[邀请流程] 保存邀请信息: ID=${inviteId}, 邀请人=${inviterName}`);
+    console.log(`[邀请流程] 保存邀请信息: ID=${inviteId}, 邀请人=${inviterName}, 来自邀请=${fromInvite}`);
     
     // 🔥 创建邀请信息对象，同时保存为inviteId和chatId确保兼容性
     const inviteInfo = {
       inviteId: inviteId,
       chatId: inviteId, // 🔥 兼容字段
       inviter: inviterName,
+      fromInvite: fromInvite,
       timestamp: Date.now(),
       source: 'app_level_handler'
     };

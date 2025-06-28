@@ -1,8 +1,8 @@
 <view class="chat-container">
   <!-- 自定义标题栏 -->
   <view class="custom-navbar">
-    <view class="navbar-left">
-      <!-- 去掉返回箭头 -->
+    <view class="navbar-left" bindtap="showChatMenu">
+      <text class="menu-icon">⋯</text>
     </view>
     <view class="navbar-center">
       <view class="chat-title">{{dynamicTitle || '标题加载中...'}}</view>
@@ -11,8 +11,8 @@
         DEBUG: {{dynamicTitle ? 'HAS_TITLE' : 'NO_TITLE'}}
       </view>
     </view>
-    <view class="navbar-right" bindtap="showChatMenu">
-      <text class="more-icon">⋯</text>
+    <view class="navbar-right">
+      <!-- 右侧留空，避免与小程序关闭按钮冲突 -->
     </view>
   </view>
 
@@ -52,7 +52,7 @@
           class="message-wrapper system"
         >
           <view class="system-message">
-            <view class="message-text">{{item.content}}</view>
+            <text class="message-text">{{item.content}}</text>
           </view>
         </view>
         
@@ -61,6 +61,7 @@
           wx:else
           id="msg-{{index}}"
           class="message-item {{item.isSelf ? 'message-self' : 'message-other'}}"
+          bindtap="onMessageTap"
           bindlongpress="onMessageLongTap"
           data-msgid="{{item.id}}"
         >
@@ -78,10 +79,20 @@
             <!-- 消息气泡 -->
             <view class="message-bubble-wrapper {{item.isSelf ? 'self-bubble' : 'other-bubble'}}">
               <view class="message-bubble {{item.isDestroying ? 'destroying' : ''}} {{item.isDestroyed ? 'destroyed' : ''}}">
-                <view class="bubble-content">{{item.content}}</view>
-                <!-- 销毁倒计时提示 -->
-                <view wx:if="{{item.isDestroying && item.destroyCountdown}}" class="destroy-countdown">
-                  {{item.destroyCountdown}}s后销毁
+                <!-- 🔥 消息内容：已销毁的消息显示特殊样式 -->
+                <view class="bubble-content" wx:if="{{!item.isDestroyed}}">{{item.content}}</view>
+                <view class="bubble-content destroyed-content" wx:else>
+                  <text class="destroyed-text">🔥 消息已销毁</text>
+                </view>
+                
+                <!-- 🔥 销毁倒计时提示 -->
+                <view wx:if="{{item.isDestroying && item.remainTime}}" class="destroy-countdown">
+                  <text class="countdown-text">🔥 {{item.remainTime}}s后自动销毁</text>
+                </view>
+                
+                <!-- 🔥 点击查看提示（针对对方消息） -->
+                <view wx:if="{{!item.isSelf && !item.isDestroyed && !item.isDestroying}}" class="tap-to-read">
+                  <text class="tap-hint">点击查看（阅后即焚）</text>
                 </view>
               </view>
             </view>

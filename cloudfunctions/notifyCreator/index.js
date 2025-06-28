@@ -78,7 +78,7 @@ exports.main = async (event, context) => {
       data: {
         chatId: event.chatId,
         type: 'system',
-        content: `${joinerName} 已加入聊天，聊天开始`,
+        content: `${joinerName}加入了你的聊天！`,
         sendTime: db.serverDate(),
         status: 'sent',
         important: true // 标记为重要消息，确保在UI中高亮显示

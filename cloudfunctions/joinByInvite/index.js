@@ -60,7 +60,11 @@ exports.main = async (event, context) => {
     const userName = event.joiner?.nickName || event.userName || '用户';
     const userAvatar = event.joiner?.avatarUrl || event.userAvatar || '/assets/images/avatar1.png';
     
-    console.log('[云函数] 用户信息:', { userName, userAvatar });
+    // 🔧 获取邀请者昵称信息
+    const inviterNickName = event.inviterNickName;
+    console.log('[云函数] 邀请者昵称:', inviterNickName);
+    
+    console.log('[云函数] 用户信息:', { userName, userAvatar, inviterNickName });
     
     // 检查必要参数
     if (!event.chatId) {
@@ -185,9 +189,12 @@ exports.main = async (event, context) => {
     if (participants.length > 0) {
       updatedParticipants = participants.map(p => {
         if (typeof p === 'object') {
+          // 🔧 如果有邀请者昵称，且这是创建者，使用邀请者昵称
+          const shouldUseInviterName = p.isCreator && inviterNickName && inviterNickName !== '用户';
           return {
             ...p,
-            nickName: p.nickName || p.name || '用户',
+            nickName: shouldUseInviterName ? inviterNickName : (p.nickName || p.name || '用户'),
+            name: shouldUseInviterName ? inviterNickName : (p.name || p.nickName || '用户'),
             avatarUrl: p.avatarUrl || p.avatar || '/assets/images/default-avatar.png',
             isCreator: p.isCreator === undefined ? true : p.isCreator
           };
@@ -195,30 +202,104 @@ exports.main = async (event, context) => {
           // 处理可能存在的非对象参与者
           return {
             id: p,
-            name: '用户',
-            nickName: '用户',
+            name: inviterNickName || '用户',
+            nickName: inviterNickName || '用户',
             avatarUrl: '/assets/images/default-avatar.png',
             isCreator: true
           };
         }
       });
     } else {
-      // 如果没有参与者，创建一个默认的创建者
-      updatedParticipants = [{
-        id: chat.creator || 'creator_' + Date.now(),
-        name: chat.creatorName || '用户',
-        nickName: chat.creatorName || '用户',
-        avatarUrl: chat.creatorAvatar || '/assets/images/default-avatar.png',
-        isCreator: true
-      }];
+      // 🔥 如果没有参与者，从users集合中查找创建者的真实信息
+      console.log('[云函数] 没有现有参与者，查找创建者信息');
+      
+      try {
+        // 尝试从conversations记录中获取创建者信息
+        const creatorId = chat.creator || chat.createdBy;
+        console.log('[云函数] 创建者ID:', creatorId);
+        
+        if (creatorId) {
+          // 从users集合查找创建者的真实信息
+          const creatorResult = await db.collection('users')
+            .where({ openId: creatorId })
+            .limit(1)
+            .get();
+          
+          let creatorInfo = null;
+          if (creatorResult.data && creatorResult.data.length > 0) {
+            const userData = creatorResult.data[0];
+            // 🔧 优先使用邀请者昵称，如果没有再使用数据库中的信息
+            const finalNickName = inviterNickName || userData.nickName || userData.userInfo?.nickName || '用户';
+            creatorInfo = {
+              id: creatorId,
+              name: finalNickName,
+              nickName: finalNickName,
+              avatarUrl: userData.avatarUrl || userData.userInfo?.avatarUrl || '/assets/images/default-avatar.png',
+              isCreator: true
+            };
+            console.log('[云函数] 找到创建者真实信息:', creatorInfo);
+          } else {
+            // 如果users集合中没有找到，使用conversation中的信息或邀请者昵称
+            const finalNickName = inviterNickName || chat.creatorName || '用户';
+            creatorInfo = {
+              id: creatorId,
+              name: finalNickName,
+              nickName: finalNickName, 
+              avatarUrl: chat.creatorAvatar || '/assets/images/default-avatar.png',
+              isCreator: true
+            };
+            console.log('[云函数] 使用conversation中的创建者信息:', creatorInfo);
+          }
+          
+          updatedParticipants = [creatorInfo];
+        } else {
+                  // 完全没有创建者信息的后备方案
+        updatedParticipants = [{
+          id: 'creator_' + Date.now(),
+          name: inviterNickName || '用户',
+          nickName: inviterNickName || '用户',
+          avatarUrl: '/assets/images/default-avatar.png',
+          isCreator: true
+        }];
+        console.log('[云函数] 使用默认创建者信息');
+        }
+      } catch (error) {
+        console.error('[云函数] 查找创建者信息失败:', error);
+        // 错误时使用默认信息
+        const finalNickName = inviterNickName || chat.creatorName || '用户';
+        updatedParticipants = [{
+          id: chat.creator || 'creator_' + Date.now(),
+          name: finalNickName,
+          nickName: finalNickName,
+          avatarUrl: chat.creatorAvatar || '/assets/images/default-avatar.png',
+          isCreator: true
+        }];
+      }
     }
     
     console.log('[云函数] 处理后的现有参与者:', updatedParticipants);
     
-    // 添加新用户到参与者列表
-    const newParticipants = [...updatedParticipants, userInfo];
+    // 🔥 添加新用户到参与者列表前，严格去重
+    const tempParticipants = [...updatedParticipants, userInfo];
     
-    console.log('[云函数] 新的参与者列表:', newParticipants);
+    // 🔧 按openId/id去重，确保没有重复参与者
+    const uniqueParticipants = [];
+    const seenIds = new Set();
+    
+    for (const participant of tempParticipants) {
+      const participantId = participant.id || participant.openId;
+      if (!seenIds.has(participantId)) {
+        seenIds.add(participantId);
+        uniqueParticipants.push(participant);
+        console.log('[云函数] 添加唯一参与者:', participantId, participant.nickName);
+      } else {
+        console.log('[云函数] 跳过重复参与者:', participantId);
+      }
+    }
+    
+    const newParticipants = uniqueParticipants;
+    
+    console.log('[云函数] 去重后的参与者列表:', newParticipants.length, '人');
     
     // 更新后的聊天数据
     const updatedChat = {
@@ -249,12 +330,17 @@ exports.main = async (event, context) => {
     
     console.log('[云函数] 添加系统消息');
     
+    // 🔧 获取创建者的真实昵称用于系统消息
+    const creatorInfo = updatedParticipants.find(p => p.isCreator);
+    const creatorName = inviterNickName || creatorInfo?.nickName || creatorInfo?.name || '用户';
+    console.log('[云函数] 创建者昵称:', creatorName);
+    
     // 添加系统消息
     await db.collection('messages').add({
       data: {
         chatId: event.chatId,
         type: 'system',
-        content: `${userName}加入了私密聊天`,
+        content: `成功加入${creatorName}的聊天！`, // 🔧 修复系统消息内容
         sendTime: db.serverDate(),
         status: 'sent'
       }

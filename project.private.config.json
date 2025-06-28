@@ -15,11 +15,46 @@
     "miniprogram": {
       "list": [
         {
+          "name": "app/pages/login/login",
+          "pathName": "app/pages/chat/chat",
+          "query": "id=chat_1749398786612_xgygmck4b&inviter=%E5%90%91%E5%86%AC&fromInvite=true",
+          "scene": 1007,
+          "launchMode": "default"
+        },
+        {
+          "name": "接收方测试",
+          "pathName": "app/pages/login/login",
+          "query": "/app/pages/chat/chat?id=chat_1749397850916_3yd8407mq&inviter=%E5%90%91%E5%86%AC&fromInvite=true",
+          "launchMode": "default",
+          "scene": null
+        },
+        {
+          "name": "app/pages/chat/chat",
+          "pathName": "app/pages/chat/chat",
+          "query": "id=chat_1749382091040_cgeks262w&inviter=向冬&fromInvite=true",
+          "launchMode": "default",
+          "scene": null
+        },
+        {
+          "name": "app/pages/chat/chat",
+          "pathName": "app/pages/chat/chat",
+          "query": "id=chat_1749382091040_cgeks262w&inviter=向冬&fromInvite=true",
+          "launchMode": "default",
+          "scene": null
+        },
+        {
+          "name": "app/pages/chat/chat",
+          "pathName": "app/pages/chat/chat",
+          "query": "id=chat_1749373388847_fdyipuryh&inviter=向冬&fromInvite=true",
+          "launchMode": "default",
+          "scene": null
+        },
+        {
           "name": "测试页面",
           "pathName": "pages/test-share/test-share",
           "query": "",
-          "scene": null,
-          "launchMode": "default"
+          "launchMode": "default",
+          "scene": null
         }
       ]
     }
