@@ -323,15 +323,33 @@
   100% { opacity: 1; }
 }
 
-/* 销毁中的消息 */
+/* 销毁中的消息 - 停留阶段（无视觉变化） */
 .message-bubble.destroying {
-  background-color: #ffecb3 !important;
-  animation: pulse 1s infinite alternate;
+  /* 停留阶段保持原始状态，无特殊样式 */
 }
 
-@keyframes pulse {
-  0% { opacity: 1; }
-  100% { opacity: 0.7; }
+/* 渐变销毁的消息 - 透明度变化阶段 */
+.message-bubble.fading {
+  transition: opacity 1s ease-in-out;
+  animation: none; /* 停止脉冲动画 */
+}
+
+/* 销毁倒计时提示 */
+.destroy-countdown {
+  position: absolute;
+  top: -25rpx;
+  right: 10rpx;
+  background-color: rgba(255, 87, 34, 0.9);
+  color: white;
+  padding: 2rpx 6rpx;
+  border-radius: 8rpx;
+  font-size: 20rpx;
+  z-index: 10;
+}
+
+.countdown-text {
+  font-size: 20rpx;
+  font-weight: bold;
 }
 
 /* 已销毁的消息 */
@@ -475,26 +493,9 @@
   gap: 8rpx;
 }
 
-/* 销毁中消息的动画优化 */
+/* 销毁中消息的动画优化 - 已移除停留阶段的视觉效果 */
 .message-bubble.destroying {
-  background: linear-gradient(135deg, #ffecb3, #fff3c4) !important;
-  animation: destroying-pulse 1.5s ease-in-out infinite;
-  border: 2rpx solid #ffa726;
-}
-
-@keyframes destroying-pulse {
-  0% { 
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(255, 167, 38, 0.7);
-  }
-  50% { 
-    transform: scale(1.02);
-    box-shadow: 0 0 0 20rpx rgba(255, 167, 38, 0);
-  }
-  100% { 
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(255, 167, 38, 0);
-  }
+  /* 停留阶段保持原始外观，无特殊动画 */
 }
 
 /* 已销毁消息的最终样式 */

@@ -78,20 +78,20 @@
             
             <!-- 消息气泡 -->
             <view class="message-bubble-wrapper {{item.isSelf ? 'self-bubble' : 'other-bubble'}}">
-              <view class="message-bubble {{item.isDestroying ? 'destroying' : ''}} {{item.isDestroyed ? 'destroyed' : ''}}">
-                <!-- 🔥 消息内容：已销毁的消息显示特殊样式 -->
-                <view class="bubble-content" wx:if="{{!item.isDestroyed}}">{{item.content}}</view>
+              <view 
+                class="message-bubble {{item.destroying ? 'destroying' : ''}} {{item.fading ? 'fading' : ''}} {{item.destroyed ? 'destroyed' : ''}}"
+                style="opacity: {{item.opacity !== undefined ? item.opacity : 1}}"
+              >
+                <!-- 🔥 消息内容：已销毁的消息隐藏内容 -->
+                <view class="bubble-content" wx:if="{{!item.destroyed}}">{{item.content}}</view>
                 <view class="bubble-content destroyed-content" wx:else>
-                  <text class="destroyed-text">🔥 消息已销毁</text>
+                  <!-- 已销毁的消息不显示任何内容 -->
                 </view>
                 
-                <!-- 🔥 销毁倒计时提示 -->
-                <view wx:if="{{item.isDestroying && item.remainTime}}" class="destroy-countdown">
-                  <text class="countdown-text">🔥 {{item.remainTime}}s后自动销毁</text>
-                </view>
+                <!-- 🔥 销毁倒计时提示 - 已移除所有倒计时显示 -->
                 
                 <!-- 🔥 点击查看提示（针对对方消息） -->
-                <view wx:if="{{!item.isSelf && !item.isDestroyed && !item.isDestroying}}" class="tap-to-read">
+                <view wx:if="{{!item.isSelf && !item.destroyed && !item.destroying && !item.fading}}" class="tap-to-read">
                   <text class="tap-hint">点击查看（阅后即焚）</text>
                 </view>
               </view>
