@@ -90,10 +90,7 @@
                 
                 <!-- 🔥 销毁倒计时提示 - 已移除所有倒计时显示 -->
                 
-                <!-- 🔥 点击查看提示（针对对方消息） -->
-                <view wx:if="{{!item.isSelf && !item.destroyed && !item.destroying && !item.fading}}" class="tap-to-read">
-                  <text class="tap-hint">点击查看（阅后即焚）</text>
-                </view>
+                <!-- 🔥 点击查看提示 - 已移除，现在采用自动销毁方式 -->
               </view>
             </view>
             

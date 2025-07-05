@@ -8721,47 +8721,50 @@ cleanupStaleData: function() {
       });
     };
 
-    // 🔥 【HOTFIX-v1.3.25】增强智能身份匹配，支持多种ID格式
+    // 🔥 【修复消息身份判断】基于角色身份的准确判断，避免错误映射
     this.isMessageFromCurrentUser = function(senderId, currentUserId) {
       if (!senderId || !currentUserId) {
         console.warn('🔥 [ID匹配] 无效的ID参数:', { senderId, currentUserId });
         return false;
       }
 
-      // 1. 直接匹配
+      // 1. 直接匹配 - 最准确的判断
       if (senderId === currentUserId) {
         console.log('🔥 [ID匹配] 精确匹配成功:', senderId);
         return true;
       }
 
-      // 2. 检查映射关系
-      if (this.chatUserMapping && this.chatUserMapping.has(senderId)) {
-        const mappedUser = this.chatUserMapping.get(senderId);
-        if (mappedUser.localId === currentUserId || mappedUser.remoteId === currentUserId) {
-          console.log('🔥 [ID匹配] 通过映射匹配成功:', senderId, '->', currentUserId);
-          return true;
+      // 🔥 【关键修复】基于用户身份角色判断，避免错误的自动映射
+      const isFromInvite = this.data.isFromInvite;
+      const currentUserOpenId = this.data.currentUser?.openId;
+      
+      console.log('🔥 [ID匹配] 身份判断:', {
+        senderId: senderId,
+        currentUserId: currentUserId,
+        isFromInvite: isFromInvite,
+        currentUserOpenId: currentUserOpenId
+      });
+      
+      // 🔥 对于b端（接收方），如果senderId不是自己的ID，那就是对方发送的消息
+      if (isFromInvite) {
+        // b端接收方：只有当senderId完全匹配自己的ID时，才认为是自己发送的
+        const isMyMessage = senderId === currentUserOpenId;
+        console.log('🔥 [ID匹配] b端判断结果:', isMyMessage ? '自己发送' : '对方发送');
+        return isMyMessage;
+      } else {
+        // a端发送方：使用原有逻辑
+        // 2. 检查映射关系
+        if (this.chatUserMapping && this.chatUserMapping.has(senderId)) {
+          const mappedUser = this.chatUserMapping.get(senderId);
+          if (mappedUser.localId === currentUserId || mappedUser.remoteId === currentUserId) {
+            console.log('🔥 [ID匹配] 通过映射匹配成功:', senderId, '->', currentUserId);
+            return true;
+          }
         }
+        
+        console.log('🔥 [ID匹配] a端匹配失败:', senderId, '!=', currentUserId);
+        return false;
       }
-
-      // 3. 格式匹配
-      const isLocalId = id => id.startsWith('local_');
-      const isWechatId = id => id.length > 20 && !isLocalId(id);
-
-      if ((isLocalId(senderId) && isWechatId(currentUserId)) || 
-          (isWechatId(senderId) && isLocalId(currentUserId))) {
-        console.log('🔥 [ID匹配] 检测到不同格式ID:', senderId, '!=', currentUserId);
-        // 立即建立映射关系
-        this.establishUserMapping(
-          isLocalId(senderId) ? senderId : currentUserId,
-          isWechatId(senderId) ? senderId : currentUserId,
-          this.data.currentUser.nickName
-        );
-        // 重新检查映射
-        return this.isMessageFromCurrentUser(senderId, currentUserId);
-      }
-
-      console.log('🔥 [ID匹配] 匹配失败:', senderId, '!=', currentUserId);
-      return false;
     };
     
     // 🔥 【HOTFIX-v1.3.23】提取ID中的数字部分
