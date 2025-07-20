@@ -387,22 +387,28 @@ Page({
           return;
         }
         
-        // 提取openId - 尝试多种方式获取
+        // 🔥 【HOTFIX-v1.3.23】统一ID获取逻辑，确保使用云函数返回的ID
         let openId = null;
         
+        console.log('🔥 [ID统一] 云函数返回结果详情:', res.result);
+        
         // 检查所有可能的位置
-        if (res.result.openId) {
+        if (res.result && res.result.openId) {
           // 直接从结果中获取
           openId = res.result.openId;
-          console.log('从结果中直接获取到openId:', openId);
-        } else if (res.result.tcbContext && res.result.tcbContext.OPENID) {
+          console.log('🔥 [ID统一] 从result.openId中获取到openId:', openId);
+        } else if (res.result && res.result.tcbContext && res.result.tcbContext.OPENID) {
           // 从tcbContext中获取
           openId = res.result.tcbContext.OPENID;
-          console.log('从tcbContext中获取到openId:', openId);
+          console.log('🔥 [ID统一] 从tcbContext中获取到openId:', openId);
         } else {
-          // 如果没有找到，生成一个本地ID
+          // 🔥 【HOTFIX-v1.3.23】如果云函数没有返回ID，记录详细信息并生成本地ID
+          console.warn('🔥 [ID统一] 云函数未返回有效openId，可能影响消息收发');
+          console.log('🔥 [ID统一] 完整云函数响应:', JSON.stringify(res, null, 2));
+          
+          // 生成本地ID
           openId = 'local_' + Date.now();
-          console.log('无法从服务器获取openId，生成本地ID:', openId);
+          console.log('🔥 [ID统一] 无法从服务器获取openId，生成本地ID:', openId);
         }
         
         // 存储用户信息和ID
