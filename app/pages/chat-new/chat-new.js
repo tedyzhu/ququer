@@ -9,13 +9,30 @@ Page({
     messages: [],
     inputValue: '',
     scrollTop: 0,
-    showEmergencyInfo: true
+    showEmergencyInfo: true,
+    // 🔥 软键盘自适应
+    keyboardHeight: 0,
+    extraBottomPaddingPx: 0
   },
 
   /**
    * 页面加载事件
    */
   onLoad: function (options) {
+    // 🔥 软键盘高度监听
+    try {
+      if (wx.onKeyboardHeightChange) {
+        wx.onKeyboardHeightChange(res => {
+          const height = res && res.height ? res.height : 0;
+          this.setData({
+            keyboardHeight: height,
+            extraBottomPaddingPx: height > 0 ? height : 0
+          });
+        });
+      }
+    } catch (e) {
+      console.log('⚠️ 键盘高度监听不可用:', e);
+    }
     console.log('🆕 全新安全聊天页面加载！参数:', options);
     
     // 设置基本数据
@@ -32,6 +49,36 @@ Page({
 
     // 显示修复成功消息
     this.showWelcomeMessages();
+
+    // 🔥 软键盘高度监听
+    try {
+      if (wx.onKeyboardHeightChange) {
+        wx.onKeyboardHeightChange(res => {
+          const height = res && res.height ? res.height : 0;
+          this.setData({
+            keyboardHeight: height,
+            extraBottomPaddingPx: height > 0 ? height : 0
+          });
+          try {
+            if (height > 0) {
+              this.setData({ scrollTop: 999999 });
+            }
+          } catch (e) {}
+        });
+      }
+    } catch (e) {
+      console.log('⚠️ 键盘高度监听不可用:', e);
+    }
+  },
+
+  /**
+   * 输入框聚焦/失焦：优化滚动与吸底表现
+   */
+  onInputFocus: function() {
+    try { this.setData({ scrollTop: 999999 }); } catch (e) {}
+  },
+  onInputBlur: function() {
+    try { this.setData({ keyboardHeight: 0, extraBottomPaddingPx: 0 }); } catch (e) {}
   },
 
   /**
@@ -191,6 +238,8 @@ Page({
    */
   onHide: function () {
     console.log('🆕 安全聊天页面隐藏');
+    // 🔥 解绑键盘监听避免重复注册
+    try { if (wx.offKeyboardHeightChange) { wx.offKeyboardHeightChange(); } } catch (e) {}
   },
 
   /**

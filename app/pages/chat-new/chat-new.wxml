@@ -13,7 +13,8 @@
     class="message-list" 
     scroll-y="true" 
     scroll-top="{{scrollTop}}"
-    scroll-with-animation="true">
+    scroll-with-animation="true"
+    style="padding-bottom: calc(160rpx + {{extraBottomPaddingPx}}px + constant(safe-area-inset-bottom)); padding-bottom: calc(160rpx + {{extraBottomPaddingPx}}px + env(safe-area-inset-bottom));">
     
     <view class="message-item" wx:for="{{messages}}" wx:key="id">
       <view class="message-wrapper {{item.senderId === 'self' ? 'self' : 'other'}}">
@@ -29,7 +30,7 @@
         <!-- 普通消息 -->
         <view wx:else class="normal-message">
           <view class="message-bubble {{item.senderId === 'self' ? 'self-bubble' : 'other-bubble'}}">
-            <text class="message-content">{{item.content}}</text>
+            <view class="message-content">{{item.content}}</view>
           </view>
           <text class="message-time">{{item.time}}</text>
         </view>
@@ -37,17 +38,23 @@
       </view>
     </view>
     
+    <!-- 底部锚点：键盘弹起时滚动定位 -->
+    <view id="bottom-anchor" style="height: 1rpx;"></view>
   </scroll-view>
 
   <!-- 输入栏 -->
-  <view class="input-bar">
+  <view class="input-bar" style="bottom: {{keyboardHeight}}px;">
     <input 
       class="message-input"
       value="{{inputValue}}"
       placeholder="输入消息..."
       bindinput="handleInputChange"
+      bindfocus="onInputFocus"
+      bindblur="onInputBlur"
       confirm-type="send"
       bindconfirm="sendMessage"
+      cursor-spacing="16"
+      adjust-position="false"
     />
     <button class="send-button" bindtap="sendMessage">发送</button>
   </view>

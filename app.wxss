@@ -92,3 +92,63 @@ page {
   width: 100%;
   margin: 10rpx 0;
 } 
+
+/* 🔥 全局强制去除消息气泡小尾巴 - 最高优先级 */
+.message-bubble,
+.message-content,
+.bubble-content,
+.message-bubble::before,
+.message-bubble::after,
+.message-content::before,
+.message-content::after,
+.bubble-content::before,
+.bubble-content::after,
+.other-bubble .message-bubble,
+.self-bubble .message-bubble,
+.message-other .message-bubble,
+.message-self .message-bubble,
+.normal-message .message-bubble,
+.other .message-content,
+.self .message-content {
+  border-radius: 16rpx !important;
+  border-top-left-radius: 16rpx !important;
+  border-top-right-radius: 16rpx !important;
+  border-bottom-left-radius: 16rpx !important;
+  border-bottom-right-radius: 16rpx !important;
+  border: none !important;
+  outline: none !important;
+}
+
+/* 🔥 全局禁用所有可能的伪元素小尾巴 */
+.message-bubble::before,
+.message-bubble::after,
+.message-content::before,
+.message-content::after,
+.bubble-content::before,
+.bubble-content::after,
+.other-bubble::before,
+.other-bubble::after,
+.self-bubble::before,
+.self-bubble::after,
+.message-other::before,
+.message-other::after,
+.message-self::before,
+.message-self::after,
+.other::before,
+.other::after,
+.self::before,
+.self::after {
+  border: none !important;
+}
+
+/* 🔥 特别针对可能创建小尾巴的伪元素 */
+[class*="message"]::before,
+[class*="message"]::after,
+[class*="bubble"]::before,
+[class*="bubble"]::after {
+  display: none !important;
+  content: none !important;
+  border: none !important;
+  width: 0 !important;
+  height: 0 !important;
+} 

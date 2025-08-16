@@ -70,7 +70,7 @@ exports.main = async (event, context) => {
         data: {
           chatId: event.chatId,
           type: 'system',
-          content: `${userName}加入了私密聊天`,
+          content: `${userName}加入了聊天`,
           sendTime: db.serverDate(),
           status: 'sent'
         }

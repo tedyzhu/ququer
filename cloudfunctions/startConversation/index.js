@@ -177,7 +177,7 @@ exports.main = async (event, context) => {
     const messageResult = await db.collection('messages').add({
       data: {
         chatId: conversationId,
-        content: `${userName || '用户'} 开始了聊天`,
+        content: `${userName || '用户'}加入了聊天`,
         senderId: 'system',
         type: 'system',
         sendTime: db.serverDate(),

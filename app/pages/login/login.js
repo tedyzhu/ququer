@@ -426,14 +426,101 @@ Page({
         setTimeout(() => {
           // 🔥 优先检查分享启动信息
           this.checkAndProcessShareLaunch(() => {
-            // 如果没有分享启动信息，再检查常规邀请信息
-            const inviteInfo = app.getStoredInviteInfo();
+          // 如果没有分享启动信息，再检查常规邀请信息
+          const inviteInfo = app.getStoredInviteInfo();
+          
+          if (inviteInfo && inviteInfo.inviteId) {
+            // 新增：仅在“确认为邀请启动”时才自动进入聊天，避免A端普通登录被误判为B端
+            /**
+             * 判断是否应当基于本地邀请信息自动进入聊天
+             * 条件满足其一：
+             * 1) inviteInfo.fromInvite === true（明确来自邀请链接）
+             * 2) 小程序启动参数包含 fromInvite=true 或 action=join 或 URL中包含 inviter
+             */
+            const launchOptions = (typeof wx.getLaunchOptionsSync === 'function') ? wx.getLaunchOptionsSync() : {};
+            const launchQuery = (launchOptions && launchOptions.query) || {};
+            const launchPath = (launchOptions && launchOptions.path) || '';
+            const launchedByInvite = (
+              inviteInfo.fromInvite === true ||
+              launchQuery.fromInvite === 'true' || launchQuery.fromInvite === true || launchQuery.fromInvite === '1' ||
+              launchQuery.action === 'join' ||
+              (!!launchQuery.inviter) ||
+              (typeof launchPath === 'string' && launchPath.includes('/chat') && (launchQuery.fromInvite === 'true' || !!launchQuery.inviter))
+            );
+            // ✅ 最严格策略：只有“明确邀请启动”才允许邀请跳转；否则一律当作普通登录
+            const allowInviteNavigation = launchedByInvite;
+
+            if (!allowInviteNavigation) {
+              console.log('[邀请流程] 未检测到明确邀请启动，作为普通登录处理');
+              try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e) {}
+              this.createAndEnterNewChat(userInfo);
+              return;
+            }
+
+            if (!inviteInfo.fromInvite) {
+              console.log('[邀请流程] 缺少fromInvite明确标记，但检测到明确邀请启动，进行一次云端二次校验');
+              const currentOpenId = app.globalData && app.globalData.openId;
+              if (!currentOpenId) {
+                console.log('[邀请流程] 缺少当前openId，走普通登录流程');
+                try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e) {}
+                this.createAndEnterNewChat(userInfo);
+                return;
+              }
+              wx.cloud.callFunction({
+                name: 'getChatParticipants',
+                data: { chatId: inviteInfo.inviteId },
+                success: (res) => {
+                  try {
+                    const participants = (res.result && res.result.participants) || [];
+                    console.log('[邀请流程] 二次校验参与者结果:', participants);
+                    // 过滤出他人
+                    const others = participants.filter(p => (p.openId || p.id) && (p.openId || p.id) !== currentOpenId);
+                    const hasOtherOnly = participants.length >= 1 && others.length >= 1;
+
+                    // 额外保护：若当前用户即为创建者，则不按邀请跳转
+                    const normalized = participants.map(p => ({
+                      id: p.openId || p.id,
+                      isCreator: !!p.isCreator
+                    }));
+                    const meIsCreator = normalized.some(p => p.isCreator && p.id === currentOpenId);
+
+                    if (meIsCreator) {
+                      console.log('[邀请流程] 检测到当前用户是该聊天创建者，跳过邀请跳转，走普通登录流程');
+                      try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e) {}
+                      this.createAndEnterNewChat(userInfo);
+                      return;
+                    }
+
+                    if (hasOtherOnly) {
+                      console.log('[邀请流程] 二次校验通过，判定为邀请进入，直接进入聊天');
+                      app.tryNavigateToChat(inviteInfo.inviteId, inviteInfo.inviter,
+                        () => { setTimeout(() => { try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e) {} }, 5000); },
+                        () => { this.createAndEnterNewChat(userInfo); }
+                      );
+                    } else {
+                      console.log('[邀请流程] 二次校验不通过，走普通登录流程');
+                      try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e) {}
+                      this.createAndEnterNewChat(userInfo);
+                    }
+                  } catch (e) {
+                    console.warn('[邀请流程] 二次校验解析异常，走普通登录流程', e);
+                    try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e2) {}
+                    this.createAndEnterNewChat(userInfo);
+                  }
+                },
+                fail: (err) => {
+                  console.warn('[邀请流程] 二次校验失败，走普通登录流程', err);
+                  try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e) {}
+                  this.createAndEnterNewChat(userInfo);
+                }
+              });
+              return;
+            }
+
+            console.log('[邀请流程] 被邀请用户登录成功，直接进入聊天，邀请ID:', inviteInfo.inviteId);
             
-            if (inviteInfo && inviteInfo.inviteId) {
-              console.log('[邀请流程] 被邀请用户登录成功，直接进入聊天，邀请ID:', inviteInfo.inviteId);
-              
-              // 使用app全局方法进行跳转
-              app.tryNavigateToChat(inviteInfo.inviteId, inviteInfo.inviter, 
+            // 使用app全局方法进行跳转
+            app.tryNavigateToChat(inviteInfo.inviteId, inviteInfo.inviter, 
                 // 成功回调
                 () => {
                   // 延迟清除邀请信息

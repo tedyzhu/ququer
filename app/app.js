@@ -106,19 +106,7 @@ App({
         wx.cloud.init({
           env: 'ququer-env-6g35f0nv28c446e7',
           traceUser: true,
-          // 增强安全相关配置，解决SharedArrayBuffer警告
-          securityHeaders: {
-            enableCrossOriginIsolation: true,
-            crossOriginOpenerPolicy: {
-              value: 'same-origin'
-            },
-            crossOriginEmbedderPolicy: {
-              value: 'require-corp'
-            },
-            crossOriginResourcePolicy: {
-              value: 'same-origin'
-            }
-          }
+          timeout: 10000
         });
         console.log('云环境初始化成功: ququer-env-6g35f0nv28c446e7');
         this.globalData.cloudInitialized = true;
@@ -370,11 +358,11 @@ App({
     
     const encodedInviter = encodeURIComponent(inviter || '朋友');
     
-    // 按优先级排序的跳转URL列表
+    // 按优先级排序的跳转URL列表（强化邀请标识）
     return [
-      `/app/pages/chat/chat?id=${chatId}&inviter=${encodedInviter}`,
-      `../chat/chat?id=${chatId}&inviter=${encodedInviter}`,
-      `/pages/chat/chat?id=${chatId}&inviter=${encodedInviter}`
+      `/app/pages/chat/chat?id=${chatId}&inviter=${encodedInviter}&fromInvite=true&action=join`,
+      `../chat/chat?id=${chatId}&inviter=${encodedInviter}&fromInvite=true&action=join`,
+      `/pages/chat/chat?id=${chatId}&inviter=${encodedInviter}&fromInvite=true&action=join`
     ];
   },
 
@@ -416,19 +404,30 @@ App({
     const currentUrl = urls[index];
     console.log(`[邀请流程] 尝试跳转到(${index+1}/${urls.length}): ${currentUrl}`);
     
-    // 使用reLaunch进行跳转
-    wx.reLaunch({
-      url: currentUrl,
-      success: () => {
-        console.log(`[邀请流程] 成功跳转到: ${currentUrl}`);
-        if (typeof onSuccess === 'function') onSuccess();
-      },
-      fail: (err) => {
-        console.error(`[邀请流程] 跳转失败: ${currentUrl}`, err);
-        // 尝试下一个URL
-        this.tryNavigateToUrls(urls, index + 1, onSuccess, onFail);
-      }
-    });
+    // 使用安全封装，避免并发跳转导致丢失 webview
+    if (!this._navLocked) {
+      this._navLocked = true;
+      clearTimeout(this._navLockTimer);
+      this._navLockTimer = setTimeout(() => { this._navLocked = false; }, 2000);
+      wx.reLaunch({
+        url: currentUrl,
+        success: () => {
+          this._navLocked = false;
+          console.log(`[邀请流程] 成功跳转到: ${currentUrl}`);
+          if (typeof onSuccess === 'function') onSuccess();
+        },
+        fail: (err) => {
+          this._navLocked = false;
+          console.error(`[邀请流程] 跳转失败: ${currentUrl}`, err);
+          // 尝试下一个URL
+          this.tryNavigateToUrls(urls, index + 1, onSuccess, onFail);
+        }
+      });
+    } else {
+      console.warn('[导航] 跳过重复跳转:', currentUrl);
+      // 直接尝试下一个，避免卡住
+      this.tryNavigateToUrls(urls, index + 1, onSuccess, onFail);
+    }
   },
 
   /**

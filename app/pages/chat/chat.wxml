@@ -35,6 +35,7 @@
     scroll-y="true"
     scroll-into-view="{{scrollIntoView}}"
     enable-flex="true"
+    style="padding-bottom: {{bottomPaddingPx}}px;"
   >
     <!-- 正在加载 -->
     <view wx:if="{{isLoading}}" class="loading-container">
@@ -71,11 +72,7 @@
           </view>
           
           <view class="message-row">
-            <!-- 对方消息：头像在左侧 -->
-            <view wx:if="{{!item.isSelf}}" class="message-avatar">
-              <image class="avatar-img" src="{{item.avatar}}" mode="aspectFill"></image>
-            </view>
-            
+            <!-- 🔥 确保没有头像元素渲染 -->
             <!-- 消息气泡 -->
             <view class="message-bubble-wrapper {{item.isSelf ? 'self-bubble' : 'other-bubble'}}">
               <view 
@@ -93,19 +90,16 @@
                 <!-- 🔥 点击查看提示 - 已移除，现在采用自动销毁方式 -->
               </view>
             </view>
-            
-            <!-- 自己消息：头像在右侧 -->
-            <view wx:if="{{item.isSelf}}" class="message-avatar">
-              <image class="avatar-img" src="{{item.avatar}}" mode="aspectFill"></image>
-            </view>
           </view>
         </view>
       </block>
+      <!-- 底部锚点：键盘弹起时滚动定位 -->
+      <view id="bottom-anchor" style="height: 1rpx;"></view>
     </view>
   </scroll-view>
   
   <!-- 底部输入区域 -->
-  <view class="input-container">
+  <view class="input-container" style="bottom: {{keyboardHeight}}px;">
     <view class="voice-btn" bindtap="toggleVoiceInput">
       <image class="icon" src="/assets/images/mic.png" mode="aspectFit"></image>
     </view>
@@ -116,8 +110,13 @@
       placeholder="输入消息..."
       value="{{inputValue}}"
       bindinput="onInputChange"
+      bindfocus="onInputFocus"
+      bindblur="onInputBlur"
       confirm-type="send"
       bindconfirm="sendMessage"
+      confirm-hold="true"
+      cursor-spacing="16"
+      adjust-position="false"
       disabled="{{isCreatingChat}}"
     />
     

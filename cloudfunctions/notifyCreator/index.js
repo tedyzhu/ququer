@@ -77,8 +77,11 @@ exports.main = async (event, context) => {
     await db.collection('messages').add({
       data: {
         chatId: event.chatId,
+        // 标准化系统消息字段，便于前端识别
+        isSystem: true,
+        senderId: 'system',
         type: 'system',
-        content: `${joinerName}加入了你的聊天！`,
+        content: `${joinerName}加入聊天`,
         sendTime: db.serverDate(),
         status: 'sent',
         important: true // 标记为重要消息，确保在UI中高亮显示

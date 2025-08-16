@@ -514,12 +514,13 @@ Page({
                 this.inviteeWatcher.close();
                 this.inviteeWatcher = null;
                 
-                // 提示用户并自动跳转
-                wx.showToast({
-                  title: '好友已加入！',
-                  icon: 'success',
-                  duration: 1500
-                });
+                // 🔗 [连接提示修复] 移除Toast提示，只保留系统消息
+                // wx.showToast({
+                //   title: '好友已加入！',
+                //   icon: 'success',
+                //   duration: 1500
+                // });
+                console.log('🔗 [连接提示修复] ✅ 跳过"好友已加入！"Toast提示，只保留系统消息');
                 
                 setTimeout(() => {
                   this.goToChat(chatId);
@@ -602,12 +603,13 @@ Page({
               inviteeJoined: true
             });
             
-            // 提示并跳转
-            wx.showToast({
-              title: '好友已加入！',
-              icon: 'success',
-              duration: 1500
-            });
+            // 🔗 [连接提示修复] 移除Toast提示，只保留系统消息
+            // wx.showToast({
+            //   title: '好友已加入！',
+            //   icon: 'success',
+            //   duration: 1500
+            // });
+            console.log('🔗 [连接提示修复] ✅ 跳过"好友已加入！"Toast提示，只保留系统消息');
             
             setTimeout(() => {
               this.goToChat(chatId);

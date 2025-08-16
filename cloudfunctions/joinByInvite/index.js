@@ -339,8 +339,11 @@ exports.main = async (event, context) => {
     await db.collection('messages').add({
       data: {
         chatId: event.chatId,
+        // 标准化系统消息字段，便于前端识别
+        isSystem: true,
+        senderId: 'system',
         type: 'system',
-        content: `成功加入${creatorName}的聊天！`, // 🔧 修复系统消息内容
+        content: `加入${creatorName}的聊天`, // 🔧 修复系统消息内容
         sendTime: db.serverDate(),
         status: 'sent'
       }

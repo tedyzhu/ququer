@@ -70,7 +70,7 @@ exports.main = async (event, context) => {
           friendName: userName || '用户',
           createdAt: db.serverDate(),
           updatedAt: db.serverDate(),
-          lastMessage: `${userName || '用户'}加入了私密聊天`,
+          lastMessage: `${userName || '用户'}加入了聊天`,
           lastMessageTime: db.serverDate(),
           status: 'active'
         }
@@ -82,7 +82,7 @@ exports.main = async (event, context) => {
           friendJoined: true,
           friendName: userName || '用户',
           updatedAt: db.serverDate(),
-          lastMessage: `${userName || '用户'}加入了私密聊天`,
+          lastMessage: `${userName || '用户'}加入了聊天`,
           lastMessageTime: db.serverDate(),
           // 确保当前用户在参与者列表中
           participants: db.command.addToSet(userId)
@@ -94,7 +94,7 @@ exports.main = async (event, context) => {
     await db.collection('messages').add({
       data: {
         chatId: conversationId,
-        content: `${userName || '用户'}加入了私密聊天`,
+        content: `${userName || '用户'}加入了聊天`,
         senderId: 'system',
         type: 'system',
         sendTime: db.serverDate(),

@@ -54,6 +54,9 @@
 .message-list {
   flex: 1;
   padding: 20rpx;
+  /* 🔥 预留底部空间，避免被吸底输入栏遮挡 */
+  padding-bottom: calc(160rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
   overflow-y: auto;
 }
 
@@ -100,23 +103,25 @@
 }
 
 .message-bubble {
-  padding: 16rpx 20rpx;
-  border-radius: 20rpx;
+  padding: 20rpx;
+  border-radius: 16rpx !important;
   word-wrap: break-word;
   position: relative;
+  border: none;
+  outline: none;
 }
 
 .self-bubble {
-  background-color: #007aff;
-  color: white;
-  border-bottom-right-radius: 8rpx;
+  background-color: #95EC69;
+  color: #333333;
+  border-radius: 16rpx !important;
 }
 
 .other-bubble {
-  background-color: white;
-  color: #333;
-  border: 2rpx solid #e0e0e0;
-  border-bottom-left-radius: 8rpx;
+  background-color: #ffffff;
+  color: #333333;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.1);
+  border-radius: 16rpx !important;
 }
 
 .message-content {
@@ -147,6 +152,15 @@
   align-items: center;
   border-top: 2rpx solid #e0e0e0;
   box-shadow: 0 -4rpx 8rpx rgba(0,0,0,0.1);
+  /* 🔥 吸底固定 */
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  /* 🔥 iOS 安全区 */
+  padding-bottom: calc(20rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
 }
 
 .message-input {
@@ -171,4 +185,35 @@
 
 .send-button:active {
   background-color: #0056cc;
+} 
+
+/* 🔥 额外强制去除小尾巴的样式 */
+.message-bubble,
+.message-bubble::before,
+.message-bubble::after,
+.normal-message .message-bubble,
+.normal-message .message-bubble::before,
+.normal-message .message-bubble::after,
+.self-bubble::before,
+.self-bubble::after,
+.other-bubble::before,
+.other-bubble::after {
+  border-radius: 16rpx !important;
+  border-top-left-radius: 16rpx !important;
+  border-top-right-radius: 16rpx !important;
+  border-bottom-left-radius: 16rpx !important;
+  border-bottom-right-radius: 16rpx !important;
+  border: none !important;
+  outline: none !important;
+}
+
+/* 🔥 禁用所有伪元素 */
+.message-bubble::before,
+.message-bubble::after,
+.self-bubble::before,
+.self-bubble::after,
+.other-bubble::before,
+.other-bubble::after {
+  display: none !important;
+  content: none !important;
 } 

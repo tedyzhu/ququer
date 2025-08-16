@@ -412,7 +412,7 @@ Page({
       name: 'createChat',
       data: {
         chatId: this.data.conversationId,
-        message: `${this.data.userInfo.nickName || '用户'}加入了私密聊天`
+        message: `${this.data.userInfo.nickName || '用户'}加入了聊天`
       },
       success: res => {
         console.log('[创建聊天] 创建聊天结果:', JSON.stringify(res.result));
@@ -468,7 +468,7 @@ Page({
         });
         
         // 获取跳转参数，确保格式一致，使用安全编码
-        const encoding = require('../../utils/encoding.js');
+        const encoding = require('../../app/utils/encoding.js');
         const nickname = encoding.safeEncodeNickname(this.data.userInfo.nickName || '用户');
         
         console.log('[开始聊天] 当前用户昵称:', this.data.userInfo.nickName, '编码后:', nickname);

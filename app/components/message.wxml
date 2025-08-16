@@ -10,7 +10,7 @@
   
   <!-- 未销毁的消息 -->
   <block wx:else>
-    <view class="message-bubble {{message.destroying || countdown > 0 ? 'destroying' : ''}}">
+    <view class="message-bubble {{message.destroying || countdown > 0 ? 'destroying' : ''}}" style="opacity: {{message.opacity}};">
       <!-- 消息内容 -->
       <block wx:if="{{message.type === 'text'}}">
         <view class="message-content">{{message.content}}</view>

@@ -576,7 +576,7 @@ App({
           }
         }
         
-        if (urlParams.get('fromInvite') === 'true') {
+        if (urlParams.get('fromInvite') === 'true' || urlParams.get('fromInvite') === '1') {
           fromInvite = true;
           console.log('[邀请流程] 确认来自邀请链接');
         }
@@ -606,7 +606,7 @@ App({
       } else {
         inviter = '朋友';
       }
-      if (options.query.fromInvite === 'true') {
+      if (options.query.fromInvite === 'true' || options.query.fromInvite === true || options.query.fromInvite === '1') {
         fromInvite = true;
       }
     }

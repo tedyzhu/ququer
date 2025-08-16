@@ -18,21 +18,23 @@
 .message-bubble {
   max-width: 70%;
   padding: 20rpx;
-  border-radius: 8px;
+  border-radius: 16rpx !important;
   position: relative;
   transition: opacity 0.5s ease;
+  border: none;
+  outline: none;
 }
 
 .message-self .message-bubble {
-  background-color: var(--primary-color);
-  color: var(--white);
-  border-top-right-radius: 0;
+  background-color: #95EC69;
+  color: #333333;
+  border-radius: 16rpx !important;
 }
 
 .message-other .message-bubble {
-  background-color: var(--white);
-  color: var(--text-color);
-  border-top-left-radius: 0;
+  background-color: #ffffff;
+  color: #333333;
+  border-radius: 16rpx !important;
 }
 
 /* 图片消息 */
@@ -107,4 +109,35 @@
   background-color: rgba(0, 0, 0, 0.05);
   padding: 10rpx 30rpx;
   border-radius: 30rpx;
+}
+
+/* 🔥 额外强制去除小尾巴的样式 */
+.message-bubble,
+.message-bubble::before,
+.message-bubble::after,
+.message-item .message-bubble,
+.message-self .message-bubble,
+.message-other .message-bubble,
+.message-self .message-bubble::before,
+.message-self .message-bubble::after,
+.message-other .message-bubble::before,
+.message-other .message-bubble::after {
+  border-radius: 16rpx !important;
+  border-top-left-radius: 16rpx !important;
+  border-top-right-radius: 16rpx !important;
+  border-bottom-left-radius: 16rpx !important;
+  border-bottom-right-radius: 16rpx !important;
+  border: none !important;
+  outline: none !important;
+}
+
+/* 🔥 禁用所有伪元素 */
+.message-bubble::before,
+.message-bubble::after,
+.message-self .message-bubble::before,
+.message-self .message-bubble::after,
+.message-other .message-bubble::before,
+.message-other .message-bubble::after {
+  display: none !important;
+  content: none !important;
 }

@@ -266,20 +266,20 @@
 .message-content {
   max-width: 70%;
   padding: 20rpx;
-  border-radius: 10rpx;
+  border-radius: 16rpx !important;
   word-wrap: break-word;
 }
 
 .self .message-content {
   background-color: #95ec69;
   color: #000;
-  border-top-right-radius: 4rpx;
+  border-radius: 16rpx !important;
 }
 
 .other .message-content {
   background-color: #fff;
   color: #000;
-  border-top-left-radius: 4rpx;
+  border-radius: 16rpx !important;
 }
 
 .input-area {
@@ -376,4 +376,37 @@
   border-radius: 44rpx;
   margin-top: 60rpx;
   margin-bottom: 30rpx;
+} 
+
+/* 🔥 强制去除消息气泡小尾巴 - 确保统一样式 */
+.message-content,
+.message-content::before,
+.message-content::after,
+.self .message-content,
+.other .message-content,
+.self .message-content::before,
+.self .message-content::after,
+.other .message-content::before,
+.other .message-content::after {
+  border-radius: 16rpx !important;
+  border-top-left-radius: 16rpx !important;
+  border-top-right-radius: 16rpx !important;
+  border-bottom-left-radius: 16rpx !important;
+  border-bottom-right-radius: 16rpx !important;
+  border: none !important;
+  outline: none !important;
+}
+
+/* 🔥 彻底移除所有可能的伪元素小尾巴 */
+.message-content::before,
+.message-content::after,
+.self .message-content::before,
+.self .message-content::after,
+.other .message-content::before,
+.other .message-content::after {
+  display: none !important;
+  content: none !important;
+  border: none !important;
+  width: 0 !important;
+  height: 0 !important;
 } 

@@ -125,6 +125,9 @@
 .messages-container {
   flex: 1;
   padding: 20rpx 0;
+  /* 🔥 预留底部空间，避免被吸底输入栏遮挡 */
+  padding-bottom: calc(160rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
   overflow-y: auto;
 }
@@ -190,26 +193,12 @@
 
 /* 对方消息 - 左侧布局 */
 .message-other .message-row {
-  flex-direction: row;
   justify-content: flex-start;
 }
 
 /* 自己消息 - 右侧布局 */
 .message-self .message-row {
-  flex-direction: row-reverse;
-  justify-content: flex-start;
-}
-
-/* 头像样式 */
-.message-avatar {
-  flex-shrink: 0;
-  margin: 0 12rpx;
-}
-
-.avatar-img {
-  width: 80rpx;
-  height: 80rpx;
-  border-radius: 10rpx;
+  justify-content: flex-end;
 }
 
 /* 消息气泡容器 */
@@ -221,41 +210,17 @@
 /* 对方消息气泡 */
 .other-bubble .message-bubble {
   background-color: #ffffff;
-  border-radius: 0 16rpx 16rpx 16rpx;
+  border-radius: 16rpx !important;
   position: relative;
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.1);
-}
-
-.other-bubble .message-bubble::before {
-  content: '';
-  position: absolute;
-  left: -10rpx;
-  bottom: 24rpx;
-  width: 0;
-  height: 0;
-  border: 10rpx solid transparent;
-  border-right-color: #ffffff;
-  border-left: none;
 }
 
 /* 自己消息气泡 */
 .self-bubble .message-bubble {
   background-color: #95EC69;
-  border-radius: 16rpx 0 16rpx 16rpx;
+  border-radius: 16rpx !important;
   position: relative;
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.1);
-}
-
-.self-bubble .message-bubble::after {
-  content: '';
-  position: absolute;
-  right: -10rpx;
-  bottom: 24rpx;
-  width: 0;
-  height: 0;
-  border: 10rpx solid transparent;
-  border-left-color: #95EC69;
-  border-right: none;
 }
 
 /* 消息气泡内容 */
@@ -264,6 +229,9 @@
   min-height: 40rpx;
   display: flex;
   flex-direction: column;
+  border-radius: 16rpx !important;
+  border: none;
+  outline: none;
 }
 
 .bubble-content {
@@ -274,23 +242,30 @@
   word-break: break-all;
 }
 
-/* 系统消息 */
+/* 🔥 系统消息 - 彻底消除空气泡效果 */
 .message-wrapper.system {
   align-self: center;
-  max-width: 90%;
-  margin: 20rpx 0;
+  max-width: 100%;
+  margin: 6rpx 0; /* 🔥 进一步减少间距 */
+  padding: 0; /* 🔥 移除可能的内边距 */
 }
 
 .system-message {
-  background-color: rgba(0, 0, 0, 0.1);
-  padding: 12rpx 24rpx;
-  border-radius: 20rpx;
+  background-color: rgba(0, 0, 0, 0.03); /* 🔥 进一步降低背景透明度 */
+  padding: 6rpx 12rpx; /* 🔥 进一步减少内边距 */
+  border-radius: 12rpx; /* 🔥 减小圆角 */
   text-align: center;
+  max-width: 50%; /* 🔥 进一步限制宽度 */
+  margin: 0 auto; /* 🔥 居中显示 */
+  box-sizing: border-box;
 }
 
 .system-message .message-text {
-  font-size: 24rpx;
-  color: #888888;
+  font-size: 20rpx; /* 🔥 进一步减小字体 */
+  color: #AAAAAA; /* 🔥 调整颜色更淡 */
+  line-height: 1.2; /* 🔥 减少行高 */
+  margin: 0;
+  padding: 0;
 }
 
 /* 消息底部信息 */
@@ -367,8 +342,17 @@
   display: flex;
   align-items: center;
   padding: 20rpx 30rpx;
+  /* 🔥 吸底固定 */
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
   background-color: #f6f6f6;
   border-top: 1rpx solid #e6e6e6;
+  /* 🔥 iOS 安全区 */
+  padding-bottom: calc(20rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
 }
 
 .voice-btn, .emoji-btn, .more-btn {
@@ -555,4 +539,83 @@
 @keyframes hint-fade-in-out {
   0%, 100% { opacity: 0; transform: translateX(-50%) translateY(10rpx); }
   20%, 80% { opacity: 1; transform: translateX(-50%) translateY(0); }
+} 
+
+/* 🔥 强制统一所有消息气泡样式，确保没有小尾巴 */
+.message-bubble,
+.message-bubble::before,
+.message-bubble::after,
+.other-bubble .message-bubble,
+.self-bubble .message-bubble,
+.other-bubble .message-bubble::before,
+.other-bubble .message-bubble::after,
+.self-bubble .message-bubble::before,
+.self-bubble .message-bubble::after {
+  border-radius: 16rpx !important;
+  border-top-left-radius: 16rpx !important;
+  border-top-right-radius: 16rpx !important;
+  border-bottom-left-radius: 16rpx !important;
+  border-bottom-right-radius: 16rpx !important;
+  border: none !important;
+  outline: none !important;
+}
+
+/* 🔥 彻底移除所有伪元素（小尾巴） */
+.message-bubble::before,
+.message-bubble::after,
+.other-bubble::before,
+.other-bubble::after,
+.self-bubble::before,
+.self-bubble::after,
+.other-bubble .message-bubble::before,
+.other-bubble .message-bubble::after,
+.self-bubble .message-bubble::before,
+.self-bubble .message-bubble::after {
+  display: none !important;
+  content: none !important;
+  border: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* 🔥 B端头像隐藏 - 隐藏自己发送消息时的头像 */
+.message-self image[class*="avatar"],
+.message-self .avatar,
+.self-bubble image[class*="avatar"],
+.self-bubble .avatar,
+.message-self image[src*="avatar"],
+.self-bubble image[src*="avatar"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* 🔥 强制隐藏所有可能的头像元素 */
+.message-self image:not(.message-image),
+.self-bubble image:not(.message-image),
+.message-other image:not(.message-image),
+.other-bubble image:not(.message-image) {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* 🔥 针对B端的额外头像隐藏规则 */
+.message-self .avatar-container,
+.message-self .user-avatar,
+.self-bubble .avatar-container,
+.self-bubble .user-avatar {
+  display: none !important;
+}
+
+/* 🔥 但是保留消息内容中的图片 */
+.message-self .message-image,
+.self-bubble .message-image,
+.message-self .bubble-content image,
+.self-bubble .bubble-content image {
+  display: block !important;
 } 
