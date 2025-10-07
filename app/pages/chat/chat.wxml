@@ -36,6 +36,7 @@
     scroll-into-view="{{scrollIntoView}}"
     enable-flex="true"
     style="padding-bottom: {{bottomPaddingPx}}px;"
+    bindscrolltolower="refreshToolbarHeightPadding"
   >
     <!-- 正在加载 -->
     <view wx:if="{{isLoading}}" class="loading-container">
@@ -51,6 +52,7 @@
           wx:if="{{item.isSystem}}"
           id="sys-{{index}}"
           class="message-wrapper system"
+          style="opacity: {{item.opacity !== undefined ? item.opacity : 1}}"
         >
           <view class="system-message">
             <text class="message-text">{{item.content}}</text>
@@ -58,16 +60,17 @@
         </view>
         
         <!-- 普通消息 - 微信原生样式 -->
+        <!-- 🔥 【HOTFIX-v1.3.74】修复空白气泡：只渲染未被销毁的消息 -->
         <view 
-          wx:else
+          wx:elif="{{!item.destroyed}}"
           id="msg-{{index}}"
           class="message-item {{item.isSelf ? 'message-self' : 'message-other'}}"
           bindtap="onMessageTap"
           bindlongpress="onMessageLongTap"
           data-msgid="{{item.id}}"
         >
-          <!-- 时间显示 -->
-          <view wx:if="{{item.showTime}}" class="message-time-divider">
+          <!-- 时间显示（与气泡同步淡出） -->
+          <view wx:if="{{item.showTime}}" class="message-time-divider" style="opacity: {{item.opacity !== undefined ? item.opacity : 1}}">
             <text class="time-text">{{item.timeDisplay}}</text>
           </view>
           
@@ -109,6 +112,7 @@
       type="text"
       placeholder="输入消息..."
       value="{{inputValue}}"
+      focus="{{inputFocus}}"
       bindinput="onInputChange"
       bindfocus="onInputFocus"
       bindblur="onInputBlur"

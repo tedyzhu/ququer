@@ -124,22 +124,25 @@ exports.main = async (event, context) => {
       }
     });
     
-    // 如果有初始消息，保存到消息集合
-    if (event.message) {
-      const messageId = `msg_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-      await db.collection('messages').add({
-        data: {
-          _id: messageId,
-          chatId: chatId,
-          senderId: userId,
-          content: event.message,
-          type: 'system',
-          sendTime: timestamp,
-          status: 'sent',
-          destroyed: false
-        }
-      });
-    }
+    // 🔥 【HOTFIX-v1.3.86】取消云端添加系统消息，完全由前端控制
+    // 原因：云端添加的系统消息会与前端本地添加的系统消息重复,导致3个相同消息
+    // if (event.message) {
+    //   const messageId = `msg_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    //   await db.collection('messages').add({
+    //     data: {
+    //       _id: messageId,
+    //       chatId: chatId,
+    //       senderId: userId,
+    //       content: event.message,
+    //       type: 'system',
+    //       isSystem: true,
+    //       sendTime: timestamp,
+    //       status: 'sent',
+    //       destroyed: false,
+    //       destroyTimeout: 7
+    //     }
+    //   });
+    // }
     
     return {
       success: true,

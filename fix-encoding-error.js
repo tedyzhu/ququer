@@ -219,6 +219,50 @@ if (typeof wx !== 'undefined') {
   };
 }
 
+// 7. DevTools 热重载兼容：为旧/缺失 API 提供安全兜底，避免渲染层报错
+try {
+  if (typeof wx !== 'undefined') {
+    // 包一层，确保返回的对象至少包含 enableUpdateWxAppCode 等空实现
+    const originalGetUpdateManager = wx.getUpdateManager;
+    if (typeof originalGetUpdateManager !== 'function') {
+      wx.getUpdateManager = function() {
+        return {
+          enableUpdateWxAppCode: function() {},
+          onCheckForUpdate: function() {},
+          onUpdateReady: function() {},
+          onUpdateFailed: function() {},
+          applyUpdate: function() {}
+        };
+      };
+    } else {
+      wx.getUpdateManager = function() {
+        try {
+          const mgr = originalGetUpdateManager.call(wx) || {};
+          if (typeof mgr.enableUpdateWxAppCode !== 'function') {
+            mgr.enableUpdateWxAppCode = function() {};
+          }
+          // 兜底地补齐事件函数，避免访问 undefined
+          if (typeof mgr.onCheckForUpdate !== 'function') mgr.onCheckForUpdate = function() {};
+          if (typeof mgr.onUpdateReady !== 'function') mgr.onUpdateReady = function() {};
+          if (typeof mgr.onUpdateFailed !== 'function') mgr.onUpdateFailed = function() {};
+          if (typeof mgr.applyUpdate !== 'function') mgr.applyUpdate = function() {};
+          return mgr;
+        } catch (e) {
+          return {
+            enableUpdateWxAppCode: function() {},
+            onCheckForUpdate: function() {},
+            onUpdateReady: function() {},
+            onUpdateFailed: function() {},
+            applyUpdate: function() {}
+          };
+        }
+      };
+    }
+  }
+} catch (e) {
+  console.warn('热重载兼容兜底失败（可忽略）:', e);
+}
+
 // 6. 设置全局标记，表示修复已应用
 if (typeof getApp === 'function') {
   try {

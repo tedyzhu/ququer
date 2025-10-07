@@ -227,6 +227,27 @@ Page({
     
     console.log('[邀请流程] 准备调用登录云函数，发送数据:', userInfo);
     
+    // 检查云环境是否已初始化
+    const app = getApp();
+    if (!app.globalData.cloudInitialized) {
+      console.log('云环境未初始化，尝试重新初始化...');
+      app.initCloud();
+      
+      // 等待一小段时间让初始化完成
+      setTimeout(() => {
+        this.callLoginCloudFunction(userInfo);
+      }, 1000);
+      return;
+    }
+    
+    this.callLoginCloudFunction(userInfo);
+  },
+  
+  /**
+   * 调用登录云函数
+   * @param {Object} userInfo 用户信息
+   */
+  callLoginCloudFunction: function(userInfo) {
     // 调用登录云函数
     wx.cloud.callFunction({
       name: 'login',

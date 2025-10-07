@@ -1,24 +1,66 @@
-/* 自定义标题栏 */
+/* 🔥 页面根元素优化 - 防止键盘影响 */
+page {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden; /* 🔥 防止页面滚动影响固定定位元素 */
+  background-color: #ededed;
+  /* 🔥 【HOTFIX-v1.3.75】强制固定视窗大小，不受键盘影响 */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* 🔥 【HOTFIX-v1.3.75】使用GPU加速确保页面固定 */
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* 🔥 全局容器优化 */
+.container {
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 自定义标题栏 - 修复键盘遮挡问题 */
 .custom-navbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 88rpx;
+  /* 🔥 【HOTFIX-v1.3.75】标题栏内容高度44px + 安全区域 */
+  height: 44px;
+  min-height: 44px;
   background-color: #ededed;
   border-bottom: 1rpx solid #d7d7d7;
-  padding: 0 30rpx;
+  padding: 0 16rpx; /* 🔥 调整左右边距 */
+  /* 🔥 【HOTFIX-v1.3.75】顶部padding用于状态栏区域 */
   padding-top: constant(safe-area-inset-top);
   padding-top: env(safe-area-inset-top);
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  z-index: 999;
+  /* 🔥 【HOTFIX-v1.3.75】极高z-index，确保在键盘之上 */
+  z-index: 999999;
+  /* 🔥 【HOTFIX-v1.3.75】content-box: padding-top作为额外空间 */
+  box-sizing: content-box;
+  /* 🔥 【HOTFIX-v1.3.75】使用translate3d强制GPU加速和固定定位 */
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+  /* 🔥 增强固定定位性能优化 */
+  will-change: auto; /* 改为auto避免过度优化 */
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  /* 🔥 确保在所有情况下保持在顶部 */
+  pointer-events: auto;
 }
 
 .navbar-left {
-  width: 80rpx;
-  height: 60rpx;
+  /* 🔥 【HOTFIX-v1.3.74】调整左侧按钮尺寸，与标题栏高度匹配 */
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -26,6 +68,7 @@
   user-select: none;
   border-radius: 50%;
   transition: background-color 0.2s ease;
+  flex-shrink: 0; /* 🔥 防止被压缩 */
 }
 
 .navbar-left:active {
@@ -33,11 +76,13 @@
 }
 
 .navbar-right {
-  width: 60rpx;
-  height: 60rpx;
+  /* 🔥 【HOTFIX-v1.3.74】调整右侧占位尺寸，确保对称 */
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0; /* 🔥 防止被压缩 */
 }
 
 .navbar-center {
@@ -45,46 +90,56 @@
   display: flex;
   justify-content: center;
   align-items: center;
+  /* 🔥 【HOTFIX-v1.3.74】确保标题居中且不溢出 */
+  overflow: hidden;
+  height: 44px; /* 与标题栏同高 */
 }
 
 .chat-title {
-  font-size: 36rpx;
-  font-weight: 500;
+  /* 🔥 【HOTFIX-v1.3.74】调整字体大小，与微信标准一致 */
+  font-size: 17px; /* 微信标准标题字体大小 */
+  font-weight: 600; /* 加粗，更醒目 */
   color: #000000;
   text-align: center;
+  line-height: 44px; /* 🔥 与标题栏同高，确保垂直居中 */
+  white-space: nowrap; /* 🔥 防止换行 */
+  overflow: hidden; /* 🔥 超出隐藏 */
+  text-overflow: ellipsis; /* 🔥 超出显示省略号 */
+  max-width: 100%; /* 🔥 限制最大宽度 */
 }
 
 .back-icon, .more-icon, .menu-icon {
-  font-size: 40rpx;
+  font-size: 20px; /* 🔥 【HOTFIX-v1.3.74】调整图标大小 */
   color: #000000;
-  font-weight: 300;
+  font-weight: 400; /* 🔥 调整字重 */
 }
 
 .back-icon {
-  font-size: 48rpx;
+  font-size: 24px;
   transform: scaleX(1.5);
 }
 
 .more-icon {
-  font-size: 32rpx;
-  letter-spacing: 2rpx;
+  font-size: 20px;
+  letter-spacing: 1px;
 }
 
 .menu-icon {
-  font-size: 32rpx;
-  letter-spacing: 2rpx;
-  padding: 15rpx;
+  /* 🔥 【HOTFIX-v1.3.74】调整菜单图标样式 */
+  font-size: 22px; /* 三个点的大小 */
+  letter-spacing: 0;
   cursor: pointer;
   transition: all 0.2s ease;
   border-radius: 50%;
-  display: block;
-  width: 100%;
-  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 44px; /* 与按钮同宽 */
+  height: 44px; /* 与按钮同高 */
   box-sizing: border-box;
   user-select: none;
+  font-weight: 700; /* 加粗三个点 */
+  line-height: 1; /* 🔥 确保垂直居中 */
 }
 
 .menu-icon:active {
@@ -96,11 +151,22 @@
 .chat-container {
   display: flex;
   flex-direction: column;
+  /* 🔥 使用固定视窗高度，不受键盘影响 */
   height: 100vh;
+  width: 100vw;
   background-color: #ededed;
-  position: relative;
-  padding-top: calc(88rpx + constant(safe-area-inset-top));
-  padding-top: calc(88rpx + env(safe-area-inset-top));
+  /* 🔥 使用absolute定位，相对于fixed的page元素 */
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* 🔥 【HOTFIX-v1.3.74】调整padding-top以匹配新的标题栏高度 */
+  padding-top: calc(44px + constant(safe-area-inset-top));
+  padding-top: calc(44px + env(safe-area-inset-top));
+  /* 🔥 防止键盘推动容器 */
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 /* 销毁计时器 */
@@ -168,12 +234,16 @@
 /* 消息项容器 */
 .message-item {
   margin-bottom: 32rpx;
+  /* 🔥 【HOTFIX-v1.3.73】消息项容器淡出过渡动画，5秒与fading同步 */
+  transition: opacity 5s ease-in-out;
 }
 
 /* 时间分隔线 */
 .message-time-divider {
   text-align: center;
   margin: 30rpx 0 20rpx 0;
+  /* 🔥 【HOTFIX-v1.3.73】时间显示淡出过渡动画，5秒与fading同步 */
+  transition: opacity 5s ease-in-out;
 }
 
 .time-text {
@@ -205,6 +275,8 @@
 .message-bubble-wrapper {
   max-width: 60%;
   position: relative;
+  /* 🔥 【HOTFIX-v1.3.73】消息气泡容器淡出过渡动画，5秒与fading同步 */
+  transition: opacity 5s ease-in-out;
 }
 
 /* 对方消息气泡 */
@@ -248,6 +320,8 @@
   max-width: 100%;
   margin: 6rpx 0; /* 🔥 进一步减少间距 */
   padding: 0; /* 🔥 移除可能的内边距 */
+  /* 🔥 【HOTFIX-v1.3.73】系统消息淡出过渡动画，5秒与fading同步 */
+  transition: opacity 5s ease-in-out;
 }
 
 .system-message {
@@ -258,6 +332,8 @@
   max-width: 50%; /* 🔥 进一步限制宽度 */
   margin: 0 auto; /* 🔥 居中显示 */
   box-sizing: border-box;
+  /* 🔥 【HOTFIX-v1.3.73】系统消息内层也应用淡出过渡动画，5秒与fading同步 */
+  transition: opacity 5s ease-in-out;
 }
 
 .system-message .message-text {
@@ -305,7 +381,7 @@
 
 /* 渐变销毁的消息 - 透明度变化阶段 */
 .message-bubble.fading {
-  transition: opacity 1s ease-in-out;
+  transition: opacity 5s ease-in-out; /* 🔥 【HOTFIX-v1.3.73】5秒淡出过渡，与JS中的fadeDuration保持一致 */
   animation: none; /* 停止脉冲动画 */
 }
 
@@ -337,7 +413,7 @@
   font-style: italic;
 }
 
-/* 输入区域 */
+/* 输入区域 - 优化键盘交互 */
 .input-container {
   display: flex;
   align-items: center;
@@ -347,12 +423,16 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 1000;
+  z-index: 10000; /* 🔥 调整层级，低于标题栏但高于其他内容 */
   background-color: #f6f6f6;
   border-top: 1rpx solid #e6e6e6;
   /* 🔥 iOS 安全区 */
   padding-bottom: calc(20rpx + constant(safe-area-inset-bottom));
   padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  /* 🔥 确保输入区域始终可见 */
+  box-sizing: border-box;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 
 .voice-btn, .emoji-btn, .more-btn {

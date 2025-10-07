@@ -1,5 +1,6 @@
 /**
- * 获取会话列表云函数
+ * 获取会话列表云函数 - 优化版
+ * 修复参与者昵称显示问题，获取真实的用户昵称
  */
 const cloud = require('wx-server-sdk');
 
@@ -8,102 +9,162 @@ cloud.init({
   env: cloud.DYNAMIC_CURRENT_ENV
 });
 
+const db = cloud.database();
+
 /**
- * 获取会话列表云函数入口
+ * 获取参与者的真实信息
+ * @param {Array} participants - 参与者列表
+ * @returns {Promise<Array>} 包含真实信息的参与者列表
+ */
+async function getParticipantsWithRealNames(participants) {
+  if (!participants || participants.length === 0) {
+    return [];
+  }
+
+  const participantInfos = await Promise.all(
+    participants.map(async participant => {
+      // 如果已经是完整对象，直接返回
+      if (typeof participant === 'object' && participant.nickName) {
+        return {
+          id: participant.id || participant.openId,
+          nickName: participant.nickName || participant.name || '用户',
+          avatarUrl: participant.avatarUrl || participant.avatar || ''
+        };
+      }
+
+      // 否则从 users 集合查询
+      try {
+        const participantId = typeof participant === 'object' 
+          ? (participant.id || participant.openId) 
+          : participant;
+        
+        const userResult = await db.collection('users')
+          .where({ openId: participantId })
+          .limit(1)
+          .get();
+
+        if (userResult.data && userResult.data.length > 0) {
+          const userData = userResult.data[0];
+          return {
+            id: participantId,
+            nickName: userData.nickName || userData.userInfo?.nickName || '用户',
+            avatarUrl: userData.avatarUrl || userData.userInfo?.avatarUrl || ''
+          };
+        }
+      } catch (error) {
+        console.error('🔥 [getConversations] 查询用户信息失败:', error);
+      }
+
+      // 默认值
+      return {
+        id: typeof participant === 'object' ? participant.id : participant,
+        nickName: '用户',
+        avatarUrl: ''
+      };
+    })
+  );
+
+  return participantInfos;
+}
+
+/**
+ * 云函数入口函数
  * @param {Object} event - 云函数调用参数
- * @param {Object} context - 云函数调用上下文
+ * @param {number} [event.limit=10] - 返回会话数量限制
+ * @param {number} [event.offset=0] - 分页偏移量
+ * @param {Object} context - 云函数执行上下文
  * @returns {Promise<Object>} 返回会话列表
  */
 exports.main = async (event, context) => {
-  console.log('获取会话列表云函数被调用', event);
-  
-  const wxContext = cloud.getWXContext();
-  const userId = wxContext.OPENID;
-  
-  // 初始化数据库
-  const db = cloud.database();
-  const _ = db.command;
-  const conversationsCollection = db.collection('conversations');
-  const usersCollection = db.collection('users');
+  console.log('🔥 [getConversations] 云函数被调用', event);
   
   try {
-    // 查询当前用户参与的所有会话
-    const conversationsResult = await conversationsCollection
+    const wxContext = cloud.getWXContext();
+    const userId = wxContext.OPENID;
+    
+    console.log('🔥 [getConversations] 用户ID:', userId);
+    
+    if (!userId) {
+      return {
+        success: false,
+        error: '用户未登录',
+        conversations: []
+      };
+    }
+
+    // 查询用户参与的会话
+    const conversationsCollection = db.collection('conversations');
+    
+    // 获取用户的会话列表
+    const result = await conversationsCollection
       .where({
         participants: userId
       })
       .orderBy('updateTime', 'desc')
+      .limit(event.limit || 10)
       .get();
     
-    // 获取所有参与用户的ID
-    const userIds = new Set();
-    conversationsResult.data.forEach(conversation => {
-      conversation.participants.forEach(participantId => {
-        if (participantId !== userId) {
-          userIds.add(participantId);
-        }
-      });
-    });
+    console.log('🔥 [getConversations] 查询结果数量:', result.data?.length || 0);
     
-    // 查询所有参与用户的信息
-    const userInfoMap = {};
-    if (userIds.size > 0) {
-      // 云函数中batch获取用户信息
-      const usersResult = await usersCollection
-        .where({
-          openId: _.in([...userIds])
-        })
-        .get();
-      
-      // 构建用户信息映射
-      usersResult.data.forEach(user => {
-        userInfoMap[user.openId] = {
-          nickName: user.userInfo.nickName || '用户',
-          avatarUrl: user.userInfo.avatarUrl || ''
-        };
-      });
+    if (!result.data || result.data.length === 0) {
+      return {
+        success: true,
+        conversations: [],
+        message: '暂无会话记录'
+      };
     }
     
-    // 处理会话数据，添加对方用户信息
-    const processedConversations = conversationsResult.data.map(conversation => {
-      // 找到对方的ID
-      const otherUserId = conversation.participants.find(id => id !== userId);
-      
-      // 获取对方用户信息
-      const otherUserInfo = userInfoMap[otherUserId] || {
-        nickName: '用户',
-        avatarUrl: ''
-      };
-      
-      // 组装返回数据
-      return {
-        id: conversation._id,
-        lastMessage: conversation.lastMessage || {
-          content: '',
-          type: 'text',
-          time: new Date(),
-          senderId: '',
-          destroyed: false
-        },
-        // 对方用户信息
-        contactInfo: {
-          id: otherUserId,
-          nickName: otherUserInfo.nickName,
-          avatarUrl: otherUserInfo.avatarUrl
-        },
-        updateTime: conversation.updateTime
-      };
-    });
+    // 处理每个会话，获取真实的参与者信息
+    const conversations = await Promise.all(
+      result.data.map(async conversation => {
+        // 获取参与者真实信息
+        const participantsInfo = await getParticipantsWithRealNames(
+          conversation.participants || []
+        );
+        
+        console.log('🔥 [getConversations] 会话参与者信息:', {
+          chatId: conversation._id,
+          participantCount: participantsInfo.length,
+          names: participantsInfo.map(p => p.nickName)
+        });
+        
+        // 找到对方（非当前用户）
+        const otherParticipant = participantsInfo.find(p => p.id !== userId);
+        
+        return {
+          id: conversation._id,
+          chatId: conversation._id,
+          participants: conversation.participants,
+          participantNames: participantsInfo.map(p => p.nickName),
+          lastMessage: conversation.lastMessage || '开始聊天吧',
+          lastMessageTime: conversation.updateTime || conversation.createTime,
+          createTime: conversation.createTime,
+          updateTime: conversation.updateTime,
+          status: conversation.status,
+          chatStarted: conversation.chatStarted,
+          contactInfo: otherParticipant || {
+            id: '',
+            nickName: '未知用户',
+            avatarUrl: ''
+          }
+        };
+      })
+    );
+    
+    console.log('🔥 [getConversations] 处理后的会话列表:', conversations.length);
     
     return {
       success: true,
-      conversations: processedConversations
+      conversations: conversations,
+      total: conversations.length
     };
-  } catch (err) {
-    console.error('获取会话列表出错', err);
+    
+  } catch (error) {
+    console.error('🔥 [getConversations] 错误:', error);
     return {
       success: false,
-      error: err
+      error: error.message || '获取会话列表失败',
+      conversations: []
     };
   }
-}; 
+};

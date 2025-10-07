@@ -1,27 +1,30 @@
 {
   "pages": [
     "app/pages/login/login",
-    "app/pages/home/home",
     "app/pages/chat/chat",
-    "app/pages/chat/detail",
+    "app/pages/home/home",
     "app/pages/index/index",
     "app/pages/share/share",
-    "pages/login/login",
-    "pages/home/home",
-    "pages/chat/detail",
-    "pages/index/index",
-    "pages/share/share",
-    "pages/test-share/test-share",
+    "app/pages/test/test",
+    "app/pages/chat-new/chat-new",
+    "pages/debug/debug",
+    "pages/test/test",
     "pages/test-encoding/test-encoding",
+    "pages/test-share/test-share",
     "pages/test-share-fix/test-share-fix"
   ],
+  "entryPagePath": "app/pages/login/login",
   "window": {
+    "backgroundColor": "#F6F6F6",
     "backgroundTextStyle": "light",
-    "navigationBarBackgroundColor": "#fff",
-    "navigationBarTitleText": "蛐曲儿",
+    "navigationBarBackgroundColor": "#F6F6F6",
+    "navigationBarTitleText": "Ququer",
     "navigationBarTextStyle": "black"
   },
-  "style": "v2",
-  "sitemapLocation": "sitemap.json",
-  "lazyCodeLoading": "requiredComponents"
-} 
+  "networkTimeout": {
+    "request": 10000,
+    "downloadFile": 10000
+  },
+  "debug": false,
+  "cloud": true
+}

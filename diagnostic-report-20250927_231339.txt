@@ -1,0 +1,26 @@
+# 小程序诊断报告
+生成时间: Sat Sep 27 23:13:39 CST 2025
+
+## 项目配置
+- 项目路径: /Users/tedsmini/Desktop/app design/ququer
+- 云环境ID: ququer-env-6g35f0nv28c446e7
+
+## 文件检查
+- app.json: ✅
+- project.config.json: ✅
+- cloudfunctions/config.json: ✅
+
+## 云函数状态
+- login: ✅
+- sendMessage: ✅
+- getConversations: ✅
+- createChat: ✅
+
+## 修复建议
+1. 如果云函数显示❌，请在微信开发者工具中重新上传对应的云函数
+2. 如果仍有问题，请完全关闭微信开发者工具后重新打开
+3. 检查网络连接是否稳定
+4. 确认微信账号有云环境管理权限
+
+## 应急处理
+如果问题持续存在，请联系技术支持并提供此诊断报告。

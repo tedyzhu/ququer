@@ -24,41 +24,34 @@ App({
     // 🔥 立即保存启动参数，确保分享链接信息不丢失
     this.globalData.launchOptions = options;
     
-    // 🔥 优先检查和保存分享邀请信息
-    this.checkAndSaveShareInvite(options);
+    // 🔥 【真机调试优化】异步处理邀请信息，避免阻塞启动
+    setTimeout(() => {
+      this.checkAndSaveShareInvite(options);
+    }, 50);
     
-    // 🚨 立即应用编码修复，防止btoa错误
-    try {
-      require('./fix-encoding-error.js');
-      this.globalData.ENCODING_FIX_APPLIED = true;
-      console.log('✅ 编码修复已应用');
-    } catch (e) {
-      console.warn('编码修复应用失败，但不影响正常功能:', e);
-    }
+    // 🚨 临时禁用所有修复脚本，确保小程序能正常启动
+    console.log('🚨 临时禁用修复脚本，优先保证小程序正常启动');
     
-    // 🚨 应用云函数错误修复
-    try {
-      require('./fix-cloud-function-errors.js');
-      this.globalData.CLOUD_FIX_APPLIED = true;
-      console.log('✅ 云函数错误修复已应用');
-    } catch (e) {
-      console.warn('云函数错误修复应用失败:', e);
-    }
+    // 设置安全标志
+    this.globalData.SAFE_MODE = true;
+    this.globalData.STOP_ALL_RETRIES = true;
     
-    // 🚨 应用安全的云函数错误修复
+    // 仅在必要时应用编码修复
     try {
-      require('./fix-cloud-function-errors-safe.js');
-      this.globalData.SAFE_CLOUD_FIX_APPLIED = true;
-      console.log('✅ 安全的云函数错误修复已应用');
+      // require('./fix-encoding-error.js'); // 暂时禁用
+      this.globalData.ENCODING_FIX_APPLIED = false;
+      console.log('🚨 编码修复已禁用');
     } catch (e) {
-      console.warn('安全的云函数错误修复应用失败:', e);
+      console.warn('编码修复禁用过程出错:', e);
     }
     
     // 初始化云环境
     this.initCloud();
     
-    // 检查登录状态
-    this.checkLoginStatus();
+    // 🔥 【真机调试优化】延迟非关键初始化，提升启动速度
+    setTimeout(() => {
+      this.checkLoginStatus();
+    }, 100);
     
     // 监听用户截屏事件
     wx.onUserCaptureScreen(() => {
@@ -176,48 +169,93 @@ App({
   },
   
   /**
-   * 初始化云环境
+   * 🚨 简化的云环境初始化（安全启动模式）
    * @returns {boolean} 初始化是否成功
    */
   initCloud: function() {
-    console.log('尝试初始化云环境');
+    console.log('🚨 安全模式：简化云环境初始化');
     
-    // 如果已经初始化过，直接返回true
-    if (this.globalData.cloudInitialized) {
-      console.log('云环境已经初始化过，跳过');
-      return true;
-    }
-    
-    if (!wx.cloud) {
-      console.error('请使用2.2.3或以上的基础库以使用云能力');
-      return false;
-    } else {
+    // 在安全模式下，仍需要基础的云环境初始化以支持登录功能
+    if (this.globalData.SAFE_MODE) {
+      console.log('🚨 安全模式已启用，进行基础云环境初始化');
+      
       try {
-        console.log('开始初始化云环境 ququer-env-6g35f0nv28c446e7');
-        wx.cloud.init({
-          env: 'ququer-env-6g35f0nv28c446e7',
-          traceUser: true,
-          // 🔧 移除无效的安全配置（小程序云开发不支持这些配置）
-          timeout: 10000, // 设置超时时间为10秒
-          retry: 3        // 设置重试次数
-        });
-        console.log('云环境初始化成功: ququer-env-6g35f0nv28c446e7');
-        this.globalData.cloudInitialized = true;
+        // 基础的云环境初始化，仅启用必要功能
+        if (wx.cloud) {
+          wx.cloud.init({
+            env: 'ququer-env-6g35f0nv28c446e7', // 明确指定云环境ID
+            traceUser: false // 在安全模式下关闭用户追踪
+          });
+          
+          console.log('✅ 安全模式云环境初始化成功');
+          this.globalData.cloudInitialized = true;
+        } else {
+          console.error('wx.cloud不可用');
+          this.globalData.cloudInitialized = false;
+        }
+        
+        this.globalData.networkAvailable = true;
         return true;
-      } catch (e) {
-        console.error('云环境初始化失败', e);
+      } catch (error) {
+        console.error('❌ 安全模式云环境初始化失败:', error);
+        this.globalData.cloudInitialized = false;
+        this.globalData.networkAvailable = true;
         
-        // 设置延迟重试
-        setTimeout(() => {
-          if (!this.globalData.cloudInitialized) {
-            console.log('尝试重新初始化云环境');
-            this.initCloud();
-          }
-        }, 3000);
-        
-        return false;
+        return true; // 即使初始化失败也让小程序继续启动
       }
     }
+    
+    // 如果不在安全模式，进行正常初始化
+    if (!wx.cloud) {
+      console.error('云开发不可用，但不影响小程序启动');
+      return true; // 不阻止小程序启动
+    }
+    
+    // 简单初始化，不重试
+    try {
+      console.log('尝试简单初始化云环境');
+      wx.cloud.init({
+        env: 'ququer-env-6g35f0nv28c446e7',
+        traceUser: true,
+        timeout: 5000 // 减少到5秒
+      });
+      
+      this.globalData.cloudInitialized = true;
+      console.log('✅ 云环境初始化成功');
+      return true;
+      
+    } catch (e) {
+      console.warn('云环境初始化失败，但不影响小程序启动:', e);
+      this.globalData.cloudInitialized = false;
+      return true; // 仍然返回true，不阻止小程序启动
+    }
+  },
+  
+  /**
+   * 🔥 新增：测试云环境连通性（已暂时禁用避免死循环）
+   */
+  testCloudConnection: function() {
+    console.log('🔧 云环境连通性测试已暂时禁用，防止死循环');
+    
+    // 🚨 暂时禁用连通性测试，因为可能触发修复脚本的死循环
+    // 如果需要测试，可以手动在调试控制台中调用云函数
+    
+    /* 原代码暂时注释
+    wx.cloud.callFunction({
+      name: 'login',
+      data: { 
+        test: true,
+        timestamp: Date.now()
+      },
+      timeout: 8000,
+      success: (res) => {
+        console.log('✅ 云环境连通性测试成功', res);
+      },
+      fail: (err) => {
+        console.warn('⚠️ 云环境连通性测试失败，但不影响正常使用', err);
+      }
+    });
+    */
   },
 
   /**
@@ -300,6 +338,24 @@ App({
     }
     
     console.log('调用云函数更新登录时间');
+    
+    // 额外保护：确保云环境正确初始化
+    try {
+      if (!wx.cloud) {
+        console.error('wx.cloud不可用，跳过登录时间更新');
+        return;
+      }
+      
+      // 尝试重新初始化云环境（确保环境ID正确）
+      wx.cloud.init({
+        env: 'ququer-env-6g35f0nv28c446e7',
+        traceUser: true
+      });
+    } catch (initError) {
+      console.error('重新初始化云环境失败:', initError);
+      return;
+    }
+    
     wx.cloud.callFunction({
       name: 'login',
       data: { userInfo },

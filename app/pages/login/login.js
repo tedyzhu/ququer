@@ -365,6 +365,29 @@ Page({
 
     console.log('[邀请流程] 准备调用登录云函数，发送数据:', userInfo);
 
+    // 检查云环境是否已初始化
+    const app = getApp();
+    if (!app.globalData.cloudInitialized) {
+      console.log('云环境未初始化，尝试重新初始化...');
+      app.initCloud();
+      
+      // 等待一小段时间让初始化完成
+      setTimeout(() => {
+        this.callLoginCloudFunction(userInfo);
+      }, 1000);
+      return;
+    }
+    
+    this.callLoginCloudFunction(userInfo);
+  },
+  
+  /**
+   * 调用登录云函数
+   * @param {Object} userInfo 用户信息
+   */
+  callLoginCloudFunction: function(userInfo) {
+    const app = getApp();
+    
     // 调用云函数登录
     wx.cloud.callFunction({
       name: 'login',
@@ -440,25 +463,20 @@ Page({
             const launchOptions = (typeof wx.getLaunchOptionsSync === 'function') ? wx.getLaunchOptionsSync() : {};
             const launchQuery = (launchOptions && launchOptions.query) || {};
             const launchPath = (launchOptions && launchOptions.path) || '';
-            const launchedByInvite = (
-              inviteInfo.fromInvite === true ||
+            // 仅基于“启动参数中的显式邀请”判断，而不依赖本地pendingInvite的新鲜度
+            const hasExplicitInviteInLaunch = (
               launchQuery.fromInvite === 'true' || launchQuery.fromInvite === true || launchQuery.fromInvite === '1' ||
               launchQuery.action === 'join' ||
-              (!!launchQuery.inviter) ||
-              (typeof launchPath === 'string' && launchPath.includes('/chat') && (launchQuery.fromInvite === 'true' || !!launchQuery.inviter))
+              !!launchQuery.inviter || !!launchQuery.chatId || !!launchQuery.inviteId ||
+              (typeof launchPath === 'string' && launchPath.includes('/chat') && (launchQuery.fromInvite === 'true' || !!launchQuery.inviter || !!launchQuery.chatId || !!launchQuery.inviteId))
             );
-            // ✅ 最严格策略：只有“明确邀请启动”才允许邀请跳转；否则一律当作普通登录
+            const launchedByInvite = (inviteInfo.fromInvite === true) || hasExplicitInviteInLaunch;
+            // ✅ 收紧策略：仅当“明确邀请启动”时才允许邀请跳转
             const allowInviteNavigation = launchedByInvite;
 
-            if (!allowInviteNavigation) {
-              console.log('[邀请流程] 未检测到明确邀请启动，作为普通登录处理');
-              try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e) {}
-              this.createAndEnterNewChat(userInfo);
-              return;
-            }
-
-            if (!inviteInfo.fromInvite) {
-              console.log('[邀请流程] 缺少fromInvite明确标记，但检测到明确邀请启动，进行一次云端二次校验');
+            // 🚫 不再因缺少显式邀请而直接走普通登录。若存在有效的邀请信息，则始终进行一次云端校验。
+            if (!allowInviteNavigation || !inviteInfo.fromInvite) {
+              console.log('[邀请流程] 🔍 未携带fromInvite或显式邀请标记，转为云端二次校验以避免误判');
               const currentOpenId = app.globalData && app.globalData.openId;
               if (!currentOpenId) {
                 console.log('[邀请流程] 缺少当前openId，走普通登录流程');
@@ -473,32 +491,211 @@ Page({
                   try {
                     const participants = (res.result && res.result.participants) || [];
                     console.log('[邀请流程] 二次校验参与者结果:', participants);
+                    console.log('[邀请流程] 当前用户OpenId:', currentOpenId);
+                    
+                    // 🔥 增强调试信息
+                    participants.forEach((p, index) => {
+                      console.log(`[邀请流程] 参与者${index}:`, {
+                        openId: p.openId,
+                        id: p.id,
+                        nickName: p.nickName,
+                        isCreator: p.isCreator
+                      });
+                    });
+                    
                     // 过滤出他人
-                    const others = participants.filter(p => (p.openId || p.id) && (p.openId || p.id) !== currentOpenId);
+                    const others = participants.filter(p => {
+                      const participantId = p.openId || p.id;
+                      const isOther = participantId && participantId !== currentOpenId;
+                      console.log(`[邀请流程] 参与者ID: ${participantId}, 是否为他人: ${isOther}`);
+                      return isOther;
+                    });
+                    
+                    console.log('[邀请流程] 他人参与者数量:', others.length);
+                    console.log('[邀请流程] 总参与者数量:', participants.length);
+                    
                     const hasOtherOnly = participants.length >= 1 && others.length >= 1;
+                    console.log('[邀请流程] hasOtherOnly判断结果:', hasOtherOnly);
 
-                    // 额外保护：若当前用户即为创建者，则不按邀请跳转
+                    // 🔥【HOTFIX-v1.3.58】关键检查：用户是否已经在参与者列表中
+                    const userAlreadyInChat = participants.some(p => {
+                      const pId = p.openId || p.id;
+                      return pId === currentOpenId;
+                    });
+                    console.log('[邀请流程] 用户是否已在聊天中:', userAlreadyInChat);
+                    
+                    // 🔥【HOTFIX-v1.3.58】如果用户已在聊天中，说明是回访而非新加入
+                    if (userAlreadyInChat && participants.length >= 2) {
+                      console.log('[邀请流程] ⚠️ 检测到用户已在聊天参与者列表中，这是回访而非新加入');
+                      console.log('[邀请流程] 🎯 确认为回访的创建者，直接进入聊天，跳过joinByInvite');
+                      
+                      // 🔥 【HOTFIX-v1.3.89】存储创建者信息
+                      const creatorKey = `creator_${inviteInfo.chatId}`;
+                      wx.setStorageSync(creatorKey, currentOpenId);
+                      console.log('[邀请流程] 🔥 [v1.3.89] 存储回访创建者信息:', currentOpenId);
+                      
+                      // 清除无效的邀请信息
+                      try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e) {}
+                      wx.removeStorageSync('inviteInfo');
+                      
+                      // 回访者直接进入聊天
+                      const chatPath = `/app/pages/chat/chat?id=${inviteInfo.chatId}&userName=${encodeURIComponent(userInfo.nickName)}`;
+                      console.log('[邀请流程] 🚀 回访者直接进入聊天:', chatPath);
+                      
+                      wx.reLaunch({
+                        url: chatPath,
+                        success: () => {
+                          console.log('[邀请流程] ✅ 回访者成功进入聊天页面');
+                        },
+                        fail: (err) => {
+                          console.error('[邀请流程] ❌ 回访者跳转失败，走普通流程:', err);
+                          this.createAndEnterNewChat(userInfo);
+                        }
+                      });
+                      return;
+                    }
+
+                    // 🔥【A端身份紧急修复】防止A端创建者被误判为B端
                     const normalized = participants.map(p => ({
                       id: p.openId || p.id,
                       isCreator: !!p.isCreator
                     }));
-                    const meIsCreator = normalized.some(p => p.isCreator && p.id === currentOpenId);
+                    let meIsCreator = normalized.some(p => p.isCreator && p.id === currentOpenId);
+                    console.log('[邀请流程] 数据库标记的创建者状态:', meIsCreator);
+
+                    // 🔥【HOTFIX-v1.3.58】邀请信息时效性检查 - 过期邀请不应触发B端逻辑
+                    const inviteTimestamp = inviteInfo.timestamp || 0;
+                    const currentTime = Date.now();
+                    const inviteAge = currentTime - inviteTimestamp;
+                    const isExpiredInvite = inviteAge > 600000; // 10分钟
+                    console.log('[邀请流程] 邀请信息时效检查:', {
+                      inviteTimestamp,
+                      currentTime,
+                      inviteAge,
+                      isExpiredInvite,
+                      ageInMinutes: (inviteAge / 60000).toFixed(2)
+                    });
+
+                    // 🔥【智能创建者检测】当数据库标记不准确时，使用其他证据
+                    if (!meIsCreator && hasOtherOnly) {
+                      console.log('[邀请流程] 🔍 数据库创建者标记可能不准确，开始智能检测');
+                      
+                      // 证据1: 检查聊天ID是否包含当前用户ID
+                      const userIdShort = currentOpenId.substring(currentOpenId.length - 8);
+                      const chatIdContainsUserId = inviteInfo.chatId.includes(userIdShort);
+                      
+                      // 证据2: 检查访问历史（创建者通常会多次访问）
+                      // 🔥【HOTFIX-v1.3.58】使用与chat.js相同的存储结构
+                      const allVisitHistory = wx.getStorageSync('chat_visit_history') || {};
+                      const visitHistory = allVisitHistory[inviteInfo.chatId] || 0;
+                      const isFrequentVisitor = visitHistory >= 2;
+                      
+                      // 证据3: 检查用户昵称是否与邀请者信息不符
+                      const currentNickname = userInfo.nickName || '';
+                      const inviterNickname = inviteInfo.inviter || '';
+                      const nicknameConflict = currentNickname && inviterNickname && 
+                                             currentNickname !== inviterNickname && 
+                                             inviterNickname !== '朋友';
+                      
+                      // 🔥【HOTFIX-v1.3.58】新证据4: 参与者顺序判断
+                      // 如果用户是第一个参与者，很可能是创建者
+                      const userParticipantIndex = participants.findIndex(p => {
+                        const pId = p.openId || p.id;
+                        return pId === currentOpenId;
+                      });
+                      const isFirstParticipant = userParticipantIndex === 0;
+                      
+                      // 🔥【HOTFIX-v1.3.58】新证据5: 邀请信息过期
+                      // 如果邀请信息已过期，且用户在参与者列表中，很可能是回访的创建者
+                      const isReturningCreator = isExpiredInvite && participants.length >= 2;
+                      
+                      console.log('[邀请流程] 🔍 智能创建者检测结果:');
+                      console.log('[邀请流程] - 聊天ID包含用户ID片段:', chatIdContainsUserId, `(${userIdShort})`);
+                      console.log('[邀请流程] - 访问次数:', visitHistory, '是否频繁访问:', isFrequentVisitor);
+                      console.log('[邀请流程] - 昵称冲突（非邀请者）:', nicknameConflict);
+                      console.log('[邀请流程] - 是否第一个参与者:', isFirstParticipant);
+                      console.log('[邀请流程] - 邀请已过期回访:', isReturningCreator);
+                      
+                      // 如果有任一创建者证据，认定为创建者
+                      if (chatIdContainsUserId || isFrequentVisitor || nicknameConflict || 
+                          isFirstParticipant || isReturningCreator) {
+                        meIsCreator = true;
+                        console.log('[邀请流程] ✅ 智能检测确认：用户是聊天创建者！');
+                        console.log('[邀请流程] 📝 证据：chatId包含userId=', chatIdContainsUserId, 
+                                  ', 频繁访问=', isFrequentVisitor, ', 昵称冲突=', nicknameConflict,
+                                  ', 第一参与者=', isFirstParticipant, ', 过期回访=', isReturningCreator);
+                      }
+                    }
+                    
+                    console.log('[邀请流程] 最终创建者判断结果:', meIsCreator);
 
                     if (meIsCreator) {
-                      console.log('[邀请流程] 检测到当前用户是该聊天创建者，跳过邀请跳转，走普通登录流程');
+                      console.log('[邀请流程] 🎯 确认用户是该聊天创建者，清除错误邀请信息并直接进入聊天');
+                      
+                      // 清除无效的邀请信息
                       try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e) {}
-                      this.createAndEnterNewChat(userInfo);
+                      wx.removeStorageSync('inviteInfo');
+                      
+                      // A端创建者直接进入聊天，使用create action
+                      const chatPath = `/pages/chat/chat?id=${inviteInfo.chatId}&action=create&userName=${encodeURIComponent(userInfo.nickName)}`;
+                      console.log('[邀请流程] 🚀 A端创建者直接进入聊天:', chatPath);
+                      
+                      wx.reLaunch({
+                        url: chatPath,
+                        success: () => {
+                          console.log('[邀请流程] ✅ A端创建者成功进入聊天页面');
+                        },
+                        fail: (err) => {
+                          console.error('[邀请流程] ❌ A端跳转失败，走普通流程:', err);
+                          this.createAndEnterNewChat(userInfo);
+                        }
+                      });
                       return;
                     }
 
                     if (hasOtherOnly) {
-                      console.log('[邀请流程] 二次校验通过，判定为邀请进入，直接进入聊天');
-                      app.tryNavigateToChat(inviteInfo.inviteId, inviteInfo.inviter,
-                        () => { setTimeout(() => { try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e) {} }, 5000); },
-                        () => { this.createAndEnterNewChat(userInfo); }
-                      );
+                      console.log('[邀请流程] 🎉 二次校验通过，B端确认进入A端聊天!');
+                      // 🔥 【关键修复】B端应该调用joinByInvite加入聊天，而不是直接跳转
+                      console.log('[邀请流程] 开始调用joinByInvite加入聊天:', inviteInfo.inviteId);
+                      
+                      wx.cloud.callFunction({
+                        name: 'joinByInvite',
+                        data: {
+                          chatId: inviteInfo.inviteId,
+                          inviter: inviteInfo.inviter
+                        },
+                        success: (joinRes) => {
+                          console.log('[邀请流程] ✅ joinByInvite调用成功:', joinRes);
+                          if (joinRes.result && joinRes.result.success) {
+                            console.log('[邀请流程] B端成功加入A端聊天，开始跳转');
+                            app.tryNavigateToChat(inviteInfo.inviteId, inviteInfo.inviter,
+                              () => { setTimeout(() => { try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e) {} }, 5000); },
+                              () => { 
+                                console.warn('[邀请流程] 跳转失败，创建新聊天');
+                                this.createAndEnterNewChat(userInfo);
+                              }
+                            );
+                          } else {
+                            console.warn('[邀请流程] joinByInvite失败，创建新聊天:', joinRes.result);
+                            this.createAndEnterNewChat(userInfo);
+                          }
+                        },
+                        fail: (joinErr) => {
+                          console.error('[邀请流程] joinByInvite调用失败:', joinErr);
+                          // 🔥 即使joinByInvite失败，也尝试直接跳转，因为聊天已经存在
+                          console.log('[邀请流程] joinByInvite失败，但聊天存在，尝试直接跳转');
+                          app.tryNavigateToChat(inviteInfo.inviteId, inviteInfo.inviter,
+                            () => { setTimeout(() => { try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e) {} }, 5000); },
+                            () => { this.createAndEnterNewChat(userInfo); }
+                          );
+                        }
+                      });
                     } else {
-                      console.log('[邀请流程] 二次校验不通过，走普通登录流程');
+                      console.log('[邀请流程] ❌ 二次校验不通过，详细信息:');
+                      console.log('[邀请流程] - 参与者数量:', participants.length);
+                      console.log('[邀请流程] - 他人数量:', others.length);
+                      console.log('[邀请流程] - hasOtherOnly:', hasOtherOnly);
+                      console.log('[邀请流程] 走普通登录流程');
                       try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e) {}
                       this.createAndEnterNewChat(userInfo);
                     }
@@ -663,7 +860,195 @@ Page({
    * @param {Object} userInfo - 用户信息
    */
   createAndEnterNewChat: function(userInfo) {
-    console.log('[邀请流程] 普通用户登录成功，创建新聊天并进入聊天页面');
+    console.log('[邀请流程] 普通用户登录成功，开始智能检测现有聊天');
+    
+    // 🔥 【HOTFIX-v1.3.53】添加智能聊天检测机制
+    this.intelligentChatDetection(userInfo);
+  },
+  
+  /**
+   * 🔥 【HOTFIX-v1.3.53】智能聊天检测机制
+   * 检查是否有现有聊天可以加入，避免用户总是创建新聊天
+   * @param {Object} userInfo - 用户信息
+   */
+  intelligentChatDetection: function(userInfo) {
+    console.log('🔥 [智能检测] 开始检查是否有现有聊天可以加入');
+    
+    const app = getApp();
+    const currentOpenId = app.globalData && app.globalData.openId;
+    
+    if (!currentOpenId) {
+      console.log('🔥 [智能检测] 缺少用户OpenId，直接创建新聊天');
+      this.proceedWithNewChat(userInfo);
+      return;
+    }
+    
+    // 调用云函数检查用户的聊天记录
+    wx.cloud.callFunction({
+      name: 'getConversations',
+      data: {
+        openId: currentOpenId,
+        limit: 10 // 获取最近的10个聊天
+      },
+      success: (res) => {
+        console.log('🔥 [智能检测] 获取聊天记录成功:', res);
+        this.analyzeExistingChats(res.result, userInfo);
+      },
+      fail: (error) => {
+        console.log('🔥 [智能检测] 获取聊天记录失败，创建新聊天:', error);
+        this.proceedWithNewChat(userInfo);
+      }
+    });
+  },
+  
+  /**
+   * 🔥 【HOTFIX-v1.3.53】分析现有聊天并提供选择
+   * @param {Object} conversationsResult - 聊天记录结果
+   * @param {Object} userInfo - 用户信息
+   */
+  analyzeExistingChats: function(conversationsResult, userInfo) {
+    const conversations = conversationsResult.conversations || [];
+    console.log('🔥 [智能检测] 分析现有聊天，数量:', conversations.length);
+    
+    if (conversations.length === 0) {
+      console.log('🔥 [智能检测] 没有现有聊天，创建新聊天');
+      this.proceedWithNewChat(userInfo);
+      return;
+    }
+    
+    // 筛选活跃的聊天（最近7天内有活动的）
+    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const activeChats = conversations.filter(chat => {
+      const lastMessageTime = chat.lastMessageTime || chat.createTime || 0;
+      return lastMessageTime > sevenDaysAgo;
+    });
+    
+    console.log('🔥 [智能检测] 活跃聊天数量:', activeChats.length);
+    
+    if (activeChats.length === 0) {
+      console.log('🔥 [智能检测] 没有活跃聊天，创建新聊天');
+      this.proceedWithNewChat(userInfo);
+      return;
+    }
+    
+    // 如果只有一个活跃聊天，询问用户是否要加入
+    if (activeChats.length === 1) {
+      const chat = activeChats[0];
+      this.askUserToJoinExistingChat(chat, userInfo);
+      return;
+    }
+    
+    // 如果有多个活跃聊天，让用户选择
+    this.showMultipleChatOptions(activeChats, userInfo);
+  },
+  
+  /**
+   * 🔥 【HOTFIX-v1.3.53】询问用户是否加入现有聊天
+   * @param {Object} chat - 聊天信息
+   * @param {Object} userInfo - 用户信息
+   */
+  askUserToJoinExistingChat: function(chat, userInfo) {
+    console.log('🔥 [智能检测] 询问用户是否加入现有聊天:', chat.chatId);
+    
+    // 获取对方昵称
+    const otherParticipantName = this.getOtherParticipantName(chat);
+    
+    wx.showModal({
+      title: '发现现有聊天',
+      content: `发现你与 ${otherParticipantName} 的聊天，是否继续该聊天？`,
+      confirmText: '继续聊天',
+      cancelText: '创建新聊天',
+      success: (res) => {
+        if (res.confirm) {
+          console.log('🔥 [智能检测] 用户选择继续现有聊天');
+          this.joinExistingChat(chat, userInfo);
+        } else {
+          console.log('🔥 [智能检测] 用户选择创建新聊天');
+          this.proceedWithNewChat(userInfo);
+        }
+      },
+      fail: () => {
+        // 默认创建新聊天
+        console.log('🔥 [智能检测] 弹窗失败，默认创建新聊天');
+        this.proceedWithNewChat(userInfo);
+      }
+    });
+  },
+  
+  /**
+   * 🔥 【HOTFIX-v1.3.53】显示多个聊天选项
+   * @param {Array} activeChats - 活跃聊天列表
+   * @param {Object} userInfo - 用户信息
+   */
+  showMultipleChatOptions: function(activeChats, userInfo) {
+    console.log('🔥 [智能检测] 显示多个聊天选项，数量:', activeChats.length);
+    
+    const items = activeChats.map(chat => {
+      const otherName = this.getOtherParticipantName(chat);
+      const timeStr = this.formatChatTime(chat.lastMessageTime || chat.createTime);
+      return `与 ${otherName} 的聊天 (${timeStr})`;
+    });
+    items.push('创建新聊天');
+    
+    wx.showActionSheet({
+      itemList: items,
+      success: (res) => {
+        const tapIndex = res.tapIndex;
+        if (tapIndex < activeChats.length) {
+          // 选择了现有聊天
+          const selectedChat = activeChats[tapIndex];
+          console.log('🔥 [智能检测] 用户选择现有聊天:', selectedChat.chatId);
+          this.joinExistingChat(selectedChat, userInfo);
+        } else {
+          // 选择创建新聊天
+          console.log('🔥 [智能检测] 用户选择创建新聊天');
+          this.proceedWithNewChat(userInfo);
+        }
+      },
+      fail: () => {
+        // 默认创建新聊天
+        console.log('🔥 [智能检测] 选择失败，默认创建新聊天');
+        this.proceedWithNewChat(userInfo);
+      }
+    });
+  },
+  
+  /**
+   * 🔥 【HOTFIX-v1.3.53】加入现有聊天
+   * @param {Object} chat - 聊天信息
+   * @param {Object} userInfo - 用户信息
+   */
+  joinExistingChat: function(chat, userInfo) {
+    console.log('🔥 [智能检测] 用户加入现有聊天:', chat.chatId);
+    
+    const otherParticipantName = this.getOtherParticipantName(chat);
+    
+    // 设置邀请信息，确保以B端身份进入
+    const app = getApp();
+    app.saveInviteInfo(chat.chatId, otherParticipantName, true);
+    
+    // 跳转到聊天页面，使用邀请参数
+    const chatUrl = `/app/pages/chat/chat?id=${chat.chatId}&inviter=${encodeURIComponent(otherParticipantName)}&fromInvite=true`;
+    console.log('🔥 [智能检测] 跳转到现有聊天:', chatUrl);
+    
+    wx.reLaunch({
+      url: chatUrl,
+      success: () => {
+        console.log('🔥 [智能检测] 成功加入现有聊天');
+      },
+      fail: (err) => {
+        console.error('🔥 [智能检测] 加入现有聊天失败:', err);
+        this.proceedWithNewChat(userInfo);
+      }
+    });
+  },
+  
+  /**
+   * 🔥 【HOTFIX-v1.3.53】创建新聊天（原有逻辑）
+   * @param {Object} userInfo - 用户信息
+   */
+  proceedWithNewChat: function(userInfo) {
+    console.log('🔥 [智能检测] 执行创建新聊天逻辑');
     
     // 创建新的聊天ID
     const newChatId = 'chat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -691,6 +1076,46 @@ Page({
         });
       }
     });
+  },
+  
+  /**
+   * 🔥 【HOTFIX-v1.3.53】获取聊天中其他参与者的名称
+   * @param {Object} chat - 聊天信息
+   * @returns {String} 其他参与者名称
+   */
+  getOtherParticipantName: function(chat) {
+    if (chat.participantNames && chat.participantNames.length > 0) {
+      const app = getApp();
+      const currentOpenId = app.globalData && app.globalData.openId;
+      const currentNickName = app.globalData.userInfo && app.globalData.userInfo.nickName;
+      
+      // 找到不是当前用户的参与者
+      const otherName = chat.participantNames.find(name => name !== currentNickName);
+      return otherName || '朋友';
+    }
+    return '朋友';
+  },
+  
+  /**
+   * 🔥 【HOTFIX-v1.3.53】格式化聊天时间
+   * @param {Number} timestamp - 时间戳
+   * @returns {String} 格式化的时间字符串
+   */
+  formatChatTime: function(timestamp) {
+    if (!timestamp) return '最近';
+    
+    const now = Date.now();
+    const diff = now - timestamp;
+    const hours = Math.floor(diff / (60 * 60 * 1000));
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) {
+      return `${days}天前`;
+    } else if (hours > 0) {
+      return `${hours}小时前`;
+    } else {
+      return '最近';
+    }
   },
 
   /**
