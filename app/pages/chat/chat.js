@@ -3135,12 +3135,14 @@ Page({
 
       // 🔥【HOTFIX-v1.3.66】确保存在正确的加入提示，B端系统消息和A端保持一致会自动淡出
       const hasJoin = (changed ? this.data.messages : messages).some(m => m.isSystem && m.content === joinMsg);
-      if (!hasJoin) {
+      if (!hasJoin && !this.bEndSystemMessageProcessed) {
         // 🔥 【HOTFIX-v1.3.66】B端系统消息和A端保持一致，显示一段时间后自动淡出
         this.addSystemMessage(joinMsg, {
           autoFadeStaySeconds: 3,
           fadeSeconds: 5
         });
+      } else if (!hasJoin && this.bEndSystemMessageProcessed) {
+        console.log('🔥 [B端系统消息] 已处理过加入提示，跳过再次补充');
       }
     } else {
       // A 端：对应的系统消息若未进入淡出流程则强制触发
