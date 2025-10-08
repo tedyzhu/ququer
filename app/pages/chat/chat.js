@@ -3110,6 +3110,12 @@ Page({
     let changed = false;
 
     if (isFromInvite) {
+      // 🔒 B端防重复：若已处理过，则不再normalize补充
+      if (this.bEndSystemMessageProcessed) {
+        console.log('🔥 [B端系统消息保护] 已处理过B端系统消息，跳过normalize补充');
+        return;
+      }
+
       // B 端：确定对方昵称
       const currentUserOpenId = this.data.currentUser?.openId;
       const other = participants.find(p => (p.openId || p.id) !== currentUserOpenId);
@@ -7171,6 +7177,30 @@ Page({
     
     // 🔥 【阅后即焚增强】检查并处理离线期间的消息
     this.processOfflineMessages();
+    
+    // 🚨 【B端系统消息强制清理】页面显示时立即清理A端样式系统消息
+    if (this.data.isFromInvite) {
+      const messages = this.data.messages || [];
+      const beforeCount = messages.length;
+      const cleanedMessages = messages.filter(m => {
+        if (!m || !m.isSystem || typeof m.content !== 'string') return true;
+        // 移除A端样式"XX加入聊天"(但保留B端样式"加入XX的聊天")
+        if (/^.+加入聊天$/.test(m.content) && !/^加入.+的聊天$/.test(m.content)) {
+          console.log('🧹 [B端onShow清理] 移除A端样式系统消息:', m.content);
+          return false;
+        }
+        // 移除A端创建消息
+        if (m.content.includes('您创建了私密聊天')) {
+          console.log('🧹 [B端onShow清理] 移除A端创建消息:', m.content);
+          return false;
+        }
+        return true;
+      });
+      if (cleanedMessages.length !== beforeCount) {
+        this.setData({ messages: cleanedMessages });
+        console.log('🧹 [B端onShow清理] 已移除', beforeCount - cleanedMessages.length, '条A端样式系统消息');
+      }
+    }
     
     // 🚨 【强化热修复】页面显示时运行多项检查和修复
     setTimeout(() => {
