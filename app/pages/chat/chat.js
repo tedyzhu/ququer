@@ -3068,6 +3068,22 @@ Page({
     const otherName = other?.nickName || other?.name || '好友';
 
     if (isFromInvite) {
+      // 🔒 B端防重复：若已处理过，则不再补充系统消息
+      if (this.bEndSystemMessageProcessed) {
+        console.log('🔥 [B端系统消息] 已处理过加入提示，跳过enforce补充');
+        return;
+      }
+      
+      // 🔥 【1008终极防护】检查是否已存在B端系统消息
+      const hasBEndJoinMessage = messages.some(m => 
+        m && m.isSystem && m.content && /^加入.+的聊天$/.test(m.content)
+      );
+      if (hasBEndJoinMessage) {
+        console.log('🔥 [B端系统消息保护-1008] 已存在B端加入消息，跳过enforce补充');
+        this.bEndSystemMessageProcessed = true; // 设置标记
+        return;
+      }
+      
       // B端：确保"加入[A端昵称]的聊天"存在，并移除创建者类消息
       const joinMsg = `加入${otherName}的聊天`;
       const hasJoin = messages.some(m => m.isSystem && m.content === joinMsg);
@@ -3076,12 +3092,6 @@ Page({
         m.content?.includes('您创建了私密聊天') || (/^.+加入聊天$/.test(m.content || '') && !/^加入.+的聊天$/.test(m.content || ''))
       )));
       this.setData({ messages: filtered });
-      
-      // 🔒 B端防重复：若已处理过，则不再补充系统消息
-      if (this.bEndSystemMessageProcessed) {
-        console.log('🔥 [B端系统消息] 已处理过加入提示，跳过enforce补充');
-        return;
-      }
       
       // 🔥 【HOTFIX-v1.3.76】如果不存在加入消息，使用addSystemMessage添加，确保淡出效果
       if (!hasJoin) {
@@ -3113,6 +3123,16 @@ Page({
       // 🔒 B端防重复：若已处理过，则不再normalize补充
       if (this.bEndSystemMessageProcessed) {
         console.log('🔥 [B端系统消息保护] 已处理过B端系统消息，跳过normalize补充');
+        return;
+      }
+      
+      // 🔥 【1008终极防护】检查是否已存在B端系统消息
+      const hasBEndJoinMessage = messages.some(m => 
+        m && m.isSystem && m.content && /^加入.+的聊天$/.test(m.content)
+      );
+      if (hasBEndJoinMessage) {
+        console.log('🔥 [B端系统消息保护-1008] 已存在B端加入消息，跳过normalize补充');
+        this.bEndSystemMessageProcessed = true; // 设置标记
         return;
       }
 
