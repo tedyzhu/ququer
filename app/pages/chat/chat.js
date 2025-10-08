@@ -5351,7 +5351,18 @@ Page({
           });
           
           // 合并本地系统消息和服务器消息
-          const allMessages = [...filteredServerMessages, ...localSystemMessages];
+          let allMessages = [...filteredServerMessages, ...localSystemMessages];
+          // B端合并时强制剔除A端样式“XX加入聊天”，仅保留“加入XX的聊天”
+          if (that.data && that.data.isFromInvite) {
+            allMessages = allMessages.filter(m => {
+              if (!m || !m.isSystem || typeof m.content !== 'string') return true;
+              if (/^.+加入聊天$/.test(m.content) && !/^加入.+的聊天$/.test(m.content)) {
+                console.log('🧹 [合并过滤] (B端) 移除A端样式系统消息:', m.content);
+                return false;
+              }
+              return true;
+            });
+          }
           
           // 按时间排序，但确保本地系统消息显示在最后
           allMessages.sort((a, b) => {
@@ -6229,9 +6240,15 @@ Page({
     const isBEndJoin = this.data && this.data.isFromInvite && /^加入.+的聊天$/.test(content);
     if (isBEndJoin) {
       const before = messages.length;
-      messages = messages.filter(m => !(m && m.isSystem && typeof m.content === 'string' && /^加入.+的聊天$/.test(m.content)));
+      messages = messages.filter(m => {
+        if (!m || !m.isSystem || typeof m.content !== 'string') return true;
+        // 同时移除 B 端样式“加入XX的聊天”和 A 端样式“XX加入聊天”
+        if (/^加入.+的聊天$/.test(m.content)) return false;
+        if (/^.+加入聊天$/.test(m.content)) return false;
+        return true;
+      });
       if (before !== messages.length) {
-        console.log('🧹 [B端系统消息] 预清理旧的加入提示，移除数量:', before - messages.length);
+        console.log('🧹 [B端系统消息] 预清理旧的加入提示(含A端样式)，移除数量:', before - messages.length);
       }
     }
 
@@ -14034,13 +14051,18 @@ cleanupStaleData: function() {
     console.log('🔥 [清理重复消息-v57] 开始清理重复的B端系统消息');
     
     const messages = this.data.messages || [];
+    const isFromInvite = !!this.data.isFromInvite;
     const joinMessages = [];
     const otherMessages = [];
     
     // 分离加入消息和其他消息
     messages.forEach(msg => {
-      if (msg.isSystem && msg.content && msg.content.includes('加入') && msg.content.includes('的聊天')) {
+      if (msg && msg.isSystem && typeof msg.content === 'string' && msg.content.includes('加入') && msg.content.includes('的聊天')) {
         joinMessages.push(msg);
+      } else if (msg && msg.isSystem && typeof msg.content === 'string' && /^.+加入聊天$/.test(msg.content)) {
+        // 始终移除 A 端样式“XX加入聊天”（B端不应出现）
+        console.log('🧹 [清理重复消息-v57] 移除A端样式系统消息:', msg.content);
+        // 不加入otherMessages
       } else {
         otherMessages.push(msg);
       }
