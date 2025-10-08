@@ -5607,6 +5607,28 @@ Page({
           
           console.log(`🔍 处理后的消息数据 ${messages.length} 条:`, messages);
           
+          // 🔥 【B端最终防线】setData前再次清理A端样式系统消息
+          if (that.data.isFromInvite) {
+            const beforeCleanCount = messages.length;
+            messages = messages.filter(m => {
+              if (!m || !m.isSystem || typeof m.content !== 'string') return true;
+              // 移除A端样式"XX加入聊天"(但保留B端样式"加入XX的聊天")
+              if (/^.+加入聊天$/.test(m.content) && !/^加入.+的聊天$/.test(m.content)) {
+                console.log('🧹 [B端setData前清理] 移除A端样式系统消息:', m.content);
+                return false;
+              }
+              // 移除A端创建消息
+              if (m.content.includes('您创建了私密聊天')) {
+                console.log('🧹 [B端setData前清理] 移除A端创建消息:', m.content);
+                return false;
+              }
+              return true;
+            });
+            if (messages.length !== beforeCleanCount) {
+              console.log('🧹 [B端setData前清理] 已移除', beforeCleanCount - messages.length, '条A端样式系统消息');
+            }
+          }
+          
           // 🔥 【HOTFIX-v1.3.84】检查是否有系统消息，如果有则滚动到顶部
           const hasSystemMessage = messages.some(msg => msg.isSystem || msg.senderId === 'system');
           const scrollTarget = hasSystemMessage ? 'sys-0' : ''; // 如果有系统消息，滚动到第一个
