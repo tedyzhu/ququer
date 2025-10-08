@@ -7836,12 +7836,24 @@ Page({
     // 🔥 【移除过度保护】允许A端标题根据参与者变化动态更新
     // A端标题应该能响应：单人→双人→多人的状态变化
     
-    // 🔥 【CRITICAL-FIX-v4】保护B端手动设置的标题
+    // 🔥 【1008修复】B端标题保护：只保护真实昵称，允许更新占位符
     if (this.data.isFromInvite && this.data.hasJoinedAsReceiver) {
       const currentTitle = this.data.dynamicTitle;
-      if (currentTitle && currentTitle.includes('我和') && currentTitle.includes('（2）') && !currentTitle.includes('用户')) {
-        console.log('🔥 [B端标题保护] 跳过覆盖B端手动设置的正确标题:', currentTitle);
+      // 🔥 检查标题是否包含占位符昵称
+      const hasPlaceholder = currentTitle && (
+        currentTitle.includes('用户') ||
+        currentTitle.includes('朋友') ||
+        currentTitle.includes('好友') ||
+        currentTitle.includes('邀请者') ||
+        currentTitle.includes('新用户')
+      );
+      
+      // 🔥 只有标题是真实昵称(不包含占位符)时才保护
+      if (currentTitle && currentTitle.includes('我和') && currentTitle.includes('（2）') && !hasPlaceholder) {
+        console.log('🔥 [B端标题保护-1008] 跳过覆盖B端真实昵称标题:', currentTitle);
         return;
+      } else if (hasPlaceholder) {
+        console.log('🔥 [B端标题更新-1008] 检测到占位符标题，允许更新:', currentTitle);
       }
     }
     
