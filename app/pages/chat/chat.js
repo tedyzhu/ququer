@@ -7546,8 +7546,8 @@ Page({
                         const messageExists = existingMessages.some(msg => msg.id === newMessage._id);
                         
                         if (!messageExists) {
-                          // 🔥 【URGENT-FIX】使用正确作用域中的用户ID进行身份判断
-                          const isMyMessage = this.isMessageFromCurrentUser(newMessage.senderId, currentUserId);
+                          // 🔥 【1008聚焦修复】仅用严格ID判断是否为自己消息，避免误判导致B端收不到A端消息
+                          const isMyMessageStrict = newMessage.senderId === currentUserId;
                           
                           console.log('🔔 [新消息处理] 身份判断:', {
                             senderId: newMessage.senderId,
@@ -7556,7 +7556,7 @@ Page({
                             content: newMessage.content
                           });
                           
-                          if (isMyMessage) {
+                          if (isMyMessageStrict) {
                             console.log('🔔 [新消息处理] 这是自己发送的消息，跳过添加');
                             return;
                           }
@@ -7590,7 +7590,7 @@ Page({
                             senderId: newMessage.senderId,
                             content: newMessage.content,
                             timestamp: newMessage.timestamp || Date.now(),
-                            isSelf: this.isMessageFromCurrentUser(newMessage.senderId, currentUserId),
+                            isSelf: newMessage.senderId === currentUserId,
                             isSystem: newMessage.senderId === 'system',
                             destroyTimeout: newMessage.destroyTimeout || 10,
                             isDestroyed: newMessage.destroyed || false
