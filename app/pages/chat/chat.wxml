@@ -62,7 +62,7 @@
         <!-- 普通消息 - 微信原生样式 -->
         <!-- 🔥 【HOTFIX-v1.3.74】修复空白气泡：只渲染未被销毁的消息 -->
         <view 
-          wx:elif="{{!item.destroyed}}"
+          wx:elif="{{!item.destroyed && item.content}}"
           id="msg-{{index}}"
           class="message-item {{item.isSelf ? 'message-self' : 'message-other'}}"
           bindtap="onMessageTap"

@@ -6,7 +6,63 @@
 const ResourceManager = require('../../../utils/resource-manager.js');
 const ErrorHandler = require('../../../utils/error-handler.js');
 
+// 🔧 系统消息与销毁记录默认配置 + 调试开关
+const SYSTEM_MESSAGE_DEFAULTS = {
+  AUTO_FADE_STAY_SECONDS: 3,
+  FADE_SECONDS: 5,
+  MAX_DESTROY_RECORDS: 200
+};
+
+const DEBUG_FLAGS = {
+  ENABLE_VERBOSE_LOGS: false, // 设置为true以启用详细日志
+  ENABLE_TEST_APIS: false     // 设置为true以暴露测试API
+};
+
 Page({
+  /**
+   * 判断是否为占位符昵称
+   * @param {string} name - 昵称
+   * @returns {boolean} 是否为占位符
+   */
+  isPlaceholderNickname: function(name) {
+    if (!name || typeof name !== 'string') return true;
+    const trimmed = name.trim();
+    if (!trimmed) return true;
+    const placeholders = ['用户', '新用户', '朋友', '邀请者'];
+    if (placeholders.includes(trimmed)) return true;
+    if (/^用户[_\-\dA-Za-z]+$/.test(trimmed)) return true;
+    if (/^user[_\-\dA-Za-z]*$/i.test(trimmed)) return true;
+    return false;
+  },
+
+  /**
+   * 判断消息是否由当前用户发送
+   * @param {string} senderId - 消息发送者ID（可能为openId或其他映射ID）
+   * @param {string} currentUserOpenId - 当前用户openId（可选，若未提供将自动获取）
+   * @returns {boolean} 是否为当前用户消息
+   */
+  isMessageFromCurrentUser: function(senderId, currentUserOpenId) {
+    try {
+      if (!senderId || senderId === 'system') return false;
+      const app = getApp();
+      const sid = String(senderId);
+      const uid = String(
+        currentUserOpenId ||
+        this.data.currentUser?.openId ||
+        app?.globalData?.userInfo?.openId ||
+        app?.globalData?.openId ||
+        ''
+      );
+      if (!uid) return false;
+      if (sid === uid) return true; // 精确匹配
+      // 若存在映射关系检查，则作为补充判断
+      if (this.checkChatUserMapping && this.checkChatUserMapping(sid, uid)) return true;
+      return false;
+    } catch (e) {
+      try { console.warn('⚠️ [身份匹配] 判断失败，安全返回false:', e); } catch (_) {}
+      return false;
+    }
+  },
   /**
    * 页面初始数据
    */
@@ -1179,9 +1235,11 @@ Page({
       }, 5000);
     }
     
-    // 🧪 【开发调试】在页面加载时添加测试方法
-    this.addTestMethods();
-    console.log('🧪 [调试] 测试方法已在onLoad中添加完成');
+    // 🧪 【开发调试】在页面加载时添加测试方法（受DEBUG_FLAGS控制）
+    if (DEBUG_FLAGS.ENABLE_TEST_APIS) {
+      this.addTestMethods();
+      console.log('🧪 [调试] 测试方法已在onLoad中添加完成');
+    }
     
     // 🔥 【HOTFIX-v1.3.57】B端系统消息安全检查：页面加载后检查并清理错误消息
     setTimeout(() => {
@@ -4118,6 +4176,22 @@ Page({
                     participants: immediateParticipants
                   });
                   
+                  // 🔥 【HOTFIX-v1.3.94】A端即时标题：先用临时昵称更新，稍后再用真实昵称覆盖
+                  try {
+                    if (this.data.isSender && !this.data.isFromInvite) {
+                      const immediateTitle = `我和${otherName}（2）`;
+                      this.setData({
+                        dynamicTitle: immediateTitle,
+                        contactName: immediateTitle,
+                        chatTitle: immediateTitle
+                      });
+                      wx.setNavigationBarTitle({ title: immediateTitle });
+                      console.log('🔥 [即时标题-v1.3.94] A端已用临时昵称更新标题:', immediateTitle);
+                    }
+                  } catch (e) {
+                    console.warn('⚠️ [即时标题-v1.3.94] A端临时标题更新失败:', e);
+                  }
+                  
                   // 🔥 【HOTFIX-v1.3.92】立即启动异步获取真实昵称（此时participants已经是2人，会触发标题更新）
                   console.log('🔥 [连接后标题刷新-v1.3.92] 立即开始获取真实昵称并更新标题');
                   this.fetchChatParticipantsWithRealNames();
@@ -4154,12 +4228,8 @@ Page({
                     timeSinceLastJoin
                   });
                   
-                  // 🔥 【HOTFIX-v1.3.94】检查是否为占位符昵称
-                  const isPlaceholderNickname = !otherName || 
-                    otherName === '用户' || 
-                    otherName === '新用户' || 
-                    otherName === '朋友' ||
-                    otherName.startsWith('用户_');
+                  // 🔧 使用统一工具函数判断占位符昵称
+                  const isPlaceholderNickname = this.isPlaceholderNickname(otherName);
                   
                   // 🔥 【HOTFIX-v1.3.64】如果是占位符昵称，延迟添加系统消息，先获取真实昵称
                   if (isPlaceholderNickname) {
@@ -4191,7 +4261,7 @@ Page({
                       // 从参与者列表获取最新的昵称
                       const participants = this.data.participants || [];
                       const otherP = participants.find(p => p.id !== currentUserOpenId && p.openId !== currentUserOpenId);
-                      let finalName = '新用户';
+                      let finalName = null; // 避免使用"新用户"等占位符
                       
                       if (otherP && otherP.nickName) {
                         const isStillPlaceholder = otherP.nickName === '用户' || otherP.nickName === '好友' || 
@@ -4216,7 +4286,11 @@ Page({
                         return;
                       }
                       
-                      // 使用真实昵称添加或更新系统消息
+                      // 使用真实昵称添加或更新系统消息（若仍为占位符则跳过此次添加）
+                      if (!finalName || this.isPlaceholderNickname(finalName)) {
+                        console.log('🔥 [A端系统消息-v1.3.94] 暂无真实昵称，跳过添加加入消息，等待下一次真实昵称获取');
+                        return;
+                      }
                       if (!hasAnyJoinMessage && !hasAddedConnectionMessage && !recentJoinMessage) {
                         const joinMessage = `${finalName}加入聊天`;
                         // 🔥 【HOTFIX-v1.3.66】A端加入消息显示一段时间后自动淡出
@@ -5070,34 +5144,10 @@ Page({
    * 添加邀请系统消息
    */
   addInviteSystemMessage: function(participantName) {
-    const systemMessage = {
-      id: 'system_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-      senderId: 'system',
-      isSelf: false,
-      type: 'system',
-      content: `${participantName}加入聊天`,
-      time: this.formatTime(new Date()),
-      timeDisplay: this.formatTime(new Date()),
-      showTime: true,
-      status: 'sent',
-      destroyed: false,
-      destroying: false,
-      remainTime: 0,
-      avatar: '/assets/images/default-avatar.png',
-      isSystem: true
-    };
-    
-    const messages = this.data.messages;
-    messages.push(systemMessage);
-    
-    this.setData({
-      messages: messages
-    });
-    
-    // 滚动到底部
-    this.scrollToBottom();
-    
-    console.log('🎯 已添加邀请系统消息:', systemMessage);
+    const content = `${participantName}加入聊天`;
+    // 统一走 addSystemMessage，确保“顶置 + 自动淡出 + 去重”一致
+    this.addSystemMessage(content, { autoFadeStaySeconds: 3, fadeSeconds: 5, position: 'top' });
+    console.log('🎯 已添加邀请系统消息(统一入口):', content);
   },
 
   /**
@@ -6142,9 +6192,27 @@ Page({
    * @returns {string} 新增系统消息的ID
    */
   addSystemMessage: function(content, options) {
+    // 去重：若已存在同内容系统消息则直接跳过
+    try {
+      const existing = (this.data.messages || []).find(m => m && m.isSystem && m.content === content);
+      if (existing) {
+        console.log('📝 [系统消息] 已存在同内容系统消息，跳过重复添加:', content);
+        // B端加入提示时，确保标记为已处理，避免后续重复
+        if (this.data.isFromInvite && /^加入.+的聊天$/.test(content)) {
+          this.bEndSystemMessageProcessed = true;
+          this.globalBEndMessageAdded = true;
+        }
+        return existing.id;
+      }
+    } catch (e) {}
+
     // options: { autoFadeStaySeconds?: number, fadeSeconds?: number, position?: 'top'|'bottom' }
-    const autoFadeStaySeconds = options && typeof options.autoFadeStaySeconds === 'number' ? options.autoFadeStaySeconds : 0;
-    const fadeSeconds = options && typeof options.fadeSeconds === 'number' ? options.fadeSeconds : 5;
+    const autoFadeStaySeconds = options && typeof options.autoFadeStaySeconds === 'number' 
+      ? options.autoFadeStaySeconds 
+      : SYSTEM_MESSAGE_DEFAULTS.AUTO_FADE_STAY_SECONDS;
+    const fadeSeconds = options && typeof options.fadeSeconds === 'number' 
+      ? options.fadeSeconds 
+      : SYSTEM_MESSAGE_DEFAULTS.FADE_SECONDS;
     // 🔥 【HOTFIX-v1.3.80】强制系统消息插入顶部
     const position = options && options.position === 'bottom' ? 'bottom' : 'top';
     
@@ -6186,6 +6254,12 @@ Page({
     });
     
     console.log('📝 [系统消息-v1.3.83] ✅ 系统消息已添加，滚动到顶部sys-0');
+
+    // B端加入提示：设置处理标记，防重复
+    if (this.data && this.data.isFromInvite && /^加入.+的聊天$/.test(content)) {
+      this.bEndSystemMessageProcessed = true;
+      this.globalBEndMessageAdded = true;
+    }
     
     // 🔥 【HOTFIX-v1.3.80】延迟清除hasSystemMessage标记，给系统消息显示时间
     setTimeout(() => {
@@ -7130,7 +7204,9 @@ Page({
     }, 300);
     
     // 🧪 【开发调试】添加测试方法
-    this.addTestMethods();
+    if (DEBUG_FLAGS.ENABLE_TEST_APIS) {
+      this.addTestMethods();
+    }
   },
 
   /**
@@ -11486,7 +11562,20 @@ cleanupStaleData: function() {
     
     // 🔥 【关键修复】同步保存到本地存储，确保持久化
     try {
-      const destroyedIds = Array.from(app.globalDestroyedMessageIds);
+      let destroyedIds = Array.from(app.globalDestroyedMessageIds);
+      // 🔧 限制记录上限，防止无限增长（就地裁剪，保持引用不变）
+      if (destroyedIds.length > SYSTEM_MESSAGE_DEFAULTS.MAX_DESTROY_RECORDS) {
+        const trimmed = destroyedIds.slice(destroyedIds.length - SYSTEM_MESSAGE_DEFAULTS.MAX_DESTROY_RECORDS);
+        // 清空并回填全局Set
+        app.globalDestroyedMessageIds.clear();
+        trimmed.forEach(id => app.globalDestroyedMessageIds.add(id));
+        // 同步页面引用的Set
+        if (this.globalDestroyedMessageIds) {
+          this.globalDestroyedMessageIds.clear();
+          trimmed.forEach(id => this.globalDestroyedMessageIds.add(id));
+        }
+        destroyedIds = trimmed;
+      }
       wx.setStorageSync('destroyedMessageIds', destroyedIds);
       console.log('🗑️ [彻底删除] 已保存到本地存储，总计:', destroyedIds.length, '条销毁记录');
     } catch (e) {
@@ -13741,34 +13830,36 @@ cleanupStaleData: function() {
       }, 500);
      };
 
-     console.log('🧪 [测试方法] 测试方法添加完成，可使用以下命令:');
-    console.log('- getCurrentPages()[getCurrentPages().length - 1].testParticipantFix()');
-    console.log('- getCurrentPages()[getCurrentPages().length - 1].testTimeFix()');
-    console.log('- getCurrentPages()[getCurrentPages().length - 1].testConnectionFix()');
-    console.log('- getCurrentPages()[getCurrentPages().length - 1].testMessageSync()     // 消息收发测试');
-    console.log('- getCurrentPages()[getCurrentPages().length - 1].forceMessageSync()   // 🆕 强制消息同步');
-   console.log('- getCurrentPages()[getCurrentPages().length - 1].testSystemMessageFilter() // 🆕 系统消息过滤测试');
-            console.log('- getCurrentPages()[getCurrentPages().length - 1].testSystemMessageFix() // 🔥 系统消息修复测试');
-        console.log('- getCurrentPages()[getCurrentPages().length - 1].testIdentityFix() // 🔥 身份判断修复测试');
-        console.log('- getCurrentPages()[getCurrentPages().length - 1].checkDataState() // 🔥 数据状态检查');
-        console.log('- getCurrentPages()[getCurrentPages().length - 1].testBurnAfterReading() // 🔥 阅后即焚测试');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].testBEndMessageDestroy() // 🔥 b端消息销毁测试');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].runFullBEndDestroyTest() // 🔥 完整b端销毁测试');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].compareDestroyTiming() // 🔥 销毁时机对比测试');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1319Fix()       // 🆕 v1.3.19修复测试');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1320Fix()       // 🆕 v1.3.20紧急修复测试');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1321Fix()       // 🆕 v1.3.21彻底修复测试');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1322Fix()       // 🆕 v1.3.22连接标题修复测试');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1323Fix()       // 🆕 v1.3.23身份不一致修复测试');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1324Fix()       // 🆕 v1.3.24标题重置和ID终极修复测试');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1325Fix()       // 🆕 v1.3.25智能映射系统修复测试');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1329Fix()       // 🆕 v1.3.29用户数据调试和修复测试');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1333Fix()       // 🆕 v1.3.33标题显示修复测试');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].testBEndDisplayFix()  // 🆕 v1.3.45 b端标题和系统消息测试');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].rebuildUserMapping()  // 🆕 重建用户映射');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].cleanUserData()       // 🆕 清理用户数据');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].performBEndSystemMessageCheck()  // 🆕 B端系统消息安全检查');
-     console.log('- getCurrentPages()[getCurrentPages().length - 1].removeDuplicateBEndMessages()     // 🆕 清理重复B端系统消息');
+    if (DEBUG_FLAGS.ENABLE_TEST_APIS) {
+      console.log('🧪 [测试方法] 测试方法添加完成，可使用以下命令:');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testParticipantFix()');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testTimeFix()');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testConnectionFix()');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testMessageSync()     // 消息收发测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].forceMessageSync()   // 🆕 强制消息同步');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testSystemMessageFilter() // 🆕 系统消息过滤测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testSystemMessageFix() // 🔥 系统消息修复测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testIdentityFix() // 🔥 身份判断修复测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].checkDataState() // 🔥 数据状态检查');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testBurnAfterReading() // 🔥 阅后即焚测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testBEndMessageDestroy() // 🔥 b端消息销毁测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].runFullBEndDestroyTest() // 🔥 完整b端销毁测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].compareDestroyTiming() // 🔥 销毁时机对比测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1319Fix()       // 🆕 v1.3.19修复测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1320Fix()       // 🆕 v1.3.20紧急修复测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1321Fix()       // 🆕 v1.3.21彻底修复测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1322Fix()       // 🆕 v1.3.22连接标题修复测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1323Fix()       // 🆕 v1.3.23身份不一致修复测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1324Fix()       // 🆕 v1.3.24标题重置和ID终极修复测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1325Fix()       // 🆕 v1.3.25智能映射系统修复测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1329Fix()       // 🆕 v1.3.29用户数据调试和修复测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testV1333Fix()       // 🆕 v1.3.33标题显示修复测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].testBEndDisplayFix()  // 🆕 v1.3.45 b端标题和系统消息测试');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].rebuildUserMapping()  // 🆕 重建用户映射');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].cleanUserData()       // 🆕 清理用户数据');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].performBEndSystemMessageCheck()  // 🆕 B端系统消息安全检查');
+      console.log('- getCurrentPages()[getCurrentPages().length - 1].removeDuplicateBEndMessages()     // 🆕 清理重复B端系统消息');
+    }
   },
   
   /**
