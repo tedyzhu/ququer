@@ -63,6 +63,43 @@ Page({
       return false;
     }
   },
+  
+  /**
+   * 判断B端加入系统消息是否曾经显示过（当前chatId级别持久化）
+   * @param {string} chatId - 聊天ID
+   * @returns {boolean} 是否曾经显示过B端加入消息
+   */
+  hasBEndJoinEver: function(chatId) {
+    try {
+      const id = chatId || this.data?.contactId;
+      if (!id) return false;
+      const key = `bEndJoinEver_${id}`;
+      const val = wx.getStorageSync(key);
+      return !!val;
+    } catch (e) {
+      try { console.warn('⚠️ [B端一次性防护] 读取持久化标记失败，安全返回false:', e); } catch (_) {}
+      return false;
+    }
+  },
+  
+  /**
+   * 标记B端加入系统消息为“已显示过”（当前chatId级别持久化）
+   * @param {string} chatId - 聊天ID
+   * @returns {void}
+   */
+  markBEndJoinEver: function(chatId) {
+    try {
+      const id = chatId || this.data?.contactId;
+      if (!id) return;
+      const key = `bEndJoinEver_${id}`;
+      wx.setStorageSync(key, true);
+      // 同步内存标记，进一步降低重复添加概率
+      this.bEndSystemMessageProcessed = true;
+      this.globalBEndMessageAdded = true;
+    } catch (e) {
+      try { console.warn('⚠️ [B端一次性防护] 写入持久化标记失败:', e); } catch (_) {}
+    }
+  },
   /**
    * 页面初始数据
    */
@@ -3068,6 +3105,12 @@ Page({
     const otherName = other?.nickName || other?.name || '好友';
 
     if (isFromInvite) {
+      // ever：若已显示过B端加入提示，直接返回，防止重复
+      if (this.hasBEndJoinEver && this.hasBEndJoinEver(this.data.contactId)) {
+        console.log('🛡️ [B端一次性防护] enforce阶段检测到ever标记，跳过');
+        this.bEndSystemMessageProcessed = true;
+        return;
+      }
       // 🔒 B端防重复：若已处理过，则不再补充系统消息
       if (this.bEndSystemMessageProcessed) {
         console.log('🔥 [B端系统消息] 已处理过加入提示，跳过enforce补充');
@@ -3120,6 +3163,12 @@ Page({
     let changed = false;
 
     if (isFromInvite) {
+      // ever：若已显示过B端加入提示，直接返回，防止重复
+      if (this.hasBEndJoinEver && this.hasBEndJoinEver(this.data.contactId)) {
+        console.log('🛡️ [B端一次性防护] normalize阶段检测到ever标记，跳过');
+        this.bEndSystemMessageProcessed = true;
+        return;
+      }
       // 🔒 B端防重复：若已处理过，则不再normalize补充
       if (this.bEndSystemMessageProcessed) {
         console.log('🔥 [B端系统消息保护] 已处理过B端系统消息，跳过normalize补充');
@@ -6287,6 +6336,13 @@ Page({
     let messages = this.data.messages || [];
     const isBEndJoin = this.data && this.data.isFromInvite && /^加入.+的聊天$/.test(content);
     if (isBEndJoin) {
+      // 若已标记“曾经显示过”，直接跳过添加，避免重复
+      if (this.hasBEndJoinEver && this.hasBEndJoinEver(this.data.contactId)) {
+        console.log('🛡️ [B端一次性防护] 已存在ever标记，跳过重复添加:', content);
+        this.bEndSystemMessageProcessed = true;
+        this.globalBEndMessageAdded = true;
+        return null;
+      }
       const before = messages.length;
       messages = messages.filter(m => {
         if (!m || !m.isSystem || typeof m.content !== 'string') return true;
@@ -6342,6 +6398,10 @@ Page({
     if (this.data && this.data.isFromInvite && /^加入.+的聊天$/.test(content)) {
       this.bEndSystemMessageProcessed = true;
       this.globalBEndMessageAdded = true;
+      // 写入ever标记（当前chatId作用域）
+      if (this.markBEndJoinEver) {
+        try { this.markBEndJoinEver(this.data.contactId); } catch (e) {}
+      }
       // 保险：立即做一次去重清理，仅保留最新一条
       try { this.removeDuplicateBEndMessages && this.removeDuplicateBEndMessages(); } catch (e) {}
     }
