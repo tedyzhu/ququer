@@ -6224,6 +6224,17 @@ Page({
     // 🔥 【HOTFIX-v1.3.80】强制系统消息插入顶部
     const position = options && options.position === 'bottom' ? 'bottom' : 'top';
     
+    // 如果是B端加入提示，先移除已有的所有B端加入提示，保证唯一
+    let messages = this.data.messages || [];
+    const isBEndJoin = this.data && this.data.isFromInvite && /^加入.+的聊天$/.test(content);
+    if (isBEndJoin) {
+      const before = messages.length;
+      messages = messages.filter(m => !(m && m.isSystem && typeof m.content === 'string' && /^加入.+的聊天$/.test(m.content)));
+      if (before !== messages.length) {
+        console.log('🧹 [B端系统消息] 预清理旧的加入提示，移除数量:', before - messages.length);
+      }
+    }
+
     const systemMessage = {
       id: 'sys_' + new Date().getTime() + '_' + Math.random().toString(36).substr(2, 5),
       senderId: 'system',
@@ -6244,7 +6255,6 @@ Page({
       isSystemMessage: true
     };
     
-    const messages = this.data.messages || [];
     // 根据position参数决定插入位置
     if (position === 'top') {
       messages.unshift(systemMessage); // 插入到数组开头（顶部）
@@ -6267,6 +6277,8 @@ Page({
     if (this.data && this.data.isFromInvite && /^加入.+的聊天$/.test(content)) {
       this.bEndSystemMessageProcessed = true;
       this.globalBEndMessageAdded = true;
+      // 保险：立即做一次去重清理，仅保留最新一条
+      try { this.removeDuplicateBEndMessages && this.removeDuplicateBEndMessages(); } catch (e) {}
     }
     
     // 🔥 【HOTFIX-v1.3.80】延迟清除hasSystemMessage标记，给系统消息显示时间
