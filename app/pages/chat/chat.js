@@ -1278,14 +1278,18 @@ Page({
       console.log('🧪 [调试] 测试方法已在onLoad中添加完成');
     }
     
-    // 🔥 【HOTFIX-v1.3.57】B端系统消息安全检查：页面加载后检查并清理错误消息
+    // 🔥 【HOTFIX-v1.3.57】B端系统消息安全检查：仅在B端执行
     setTimeout(() => {
-      this.performBEndSystemMessageCheck();
-      
-      // 🔥 【HOTFIX-v1.3.57】额外保险：清理可能的重复消息
-      setTimeout(() => {
-        this.removeDuplicateBEndMessages();
-      }, 500);
+      if (this.data && this.data.isFromInvite) {
+        this.performBEndSystemMessageCheck && this.performBEndSystemMessageCheck();
+        
+        // 🔥 【HOTFIX-v1.3.57】额外保险：清理可能的重复消息（仅B端）
+        setTimeout(() => {
+          this.removeDuplicateBEndMessages && this.removeDuplicateBEndMessages();
+        }, 500);
+      } else {
+        console.log('🛡️ [B端检查] A端环境，跳过B端系统消息安全检查与去重');
+      }
     }, 1500);
     
     // 🔥 【HOTFIX-v1.3.46】检查是否需要添加B端加入系统消息
@@ -14196,6 +14200,10 @@ cleanupStaleData: function() {
     
     const messages = this.data.messages || [];
     const isFromInvite = !!this.data.isFromInvite;
+    if (!isFromInvite) {
+      console.log('🛡️ [清理重复消息-v57] A端环境，跳过B端去重');
+      return;
+    }
     const joinMessages = [];
     const otherMessages = [];
     
