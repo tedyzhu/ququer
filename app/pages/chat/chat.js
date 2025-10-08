@@ -265,9 +265,8 @@ Page({
    * @param {Object} options - 页面参数
    */
   onLoad: async function (options) {
-    // 🔥 【HOTFIX-v1.3.65】重置防重复标记
+    // 🔥 【HOTFIX-v1.3.65】重置防重复标记（保留ever已显示状态，不清空处理标志）
     this.bEndSystemMessageAdded = false;
-    this.bEndSystemMessageProcessed = false;
     this.aEndJoinMessageAdded = false; // 🔥 A端加入消息防重复标记
     console.log('🔥 [页面初始化-v1.3.65] 重置系统消息防重复标记');
     
@@ -1304,10 +1303,9 @@ Page({
       isNewChatSession: true
     });
     
-    // 🔥 【HOTFIX-v1.3.57】初始化全局B端系统消息防重复标记
+    // 🔥 【HOTFIX-v1.3.57】初始化全局B端系统消息防重复标记（不清空已处理标志，防止重复补充）
     this.globalBEndMessageAdded = false;
     this.bEndSystemMessageAdded = false;
-    this.bEndSystemMessageProcessed = false;
     
     // 🔧 【连接检测修复】确保所有情况下都清除isLoading状态，不显示前端loading
     setTimeout(() => {
@@ -2033,9 +2031,8 @@ Page({
     
     if (hasWrongCreatorMessage) {
       console.log('🔥 [B端系统消息修复-v6] ⚠️ 检测到错误的A端消息，强制清理并重新添加正确的B端消息');
-      // 重置防重复标记，允许重新处理
+      // 重置新增标记允许替换，但保留已处理标志（由ever控制补充逻辑）
       this.bEndSystemMessageAdded = false;
-      this.bEndSystemMessageProcessed = false;
     }
     
     // 检查是否已存在正确的B端系统消息
@@ -2170,7 +2167,6 @@ Page({
       // 🔥 【HOTFIX-v1.3.56】强制重置防重复标记，确保能够添加正确的B端消息
       console.log('🔥 [B端系统消息修复-v6] 强制添加正确的B端系统消息');
       this.bEndSystemMessageAdded = false;
-      this.bEndSystemMessageProcessed = false;
       
       // 先调用获取参与者方法（不返回Promise）
       this.fetchChatParticipantsWithRealNames();
