@@ -3077,6 +3077,12 @@ Page({
       )));
       this.setData({ messages: filtered });
       
+      // 🔒 B端防重复：若已处理过，则不再补充系统消息
+      if (this.bEndSystemMessageProcessed) {
+        console.log('🔥 [B端系统消息] 已处理过加入提示，跳过enforce补充');
+        return;
+      }
+      
       // 🔥 【HOTFIX-v1.3.76】如果不存在加入消息，使用addSystemMessage添加，确保淡出效果
       if (!hasJoin) {
         console.log('🔥 [B端系统消息-v1.3.76] 通过enforceSystemMessages添加淡出消息:', joinMsg);
