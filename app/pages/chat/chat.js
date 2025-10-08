@@ -7503,8 +7503,8 @@ Page({
                 });
               }
               
-              if (isSender) {
-                  console.log('🔔 [智能消息处理] 发送方检测到新消息，直接添加到界面而不获取历史消息');
+              if (hasNewMessage) {
+                  console.log('🔔 [智能消息处理] 检测到新消息，直接添加到界面（双端通用）');
                   
                   // 🔥 【调试】检查 snapshot.docChanges
                   console.log('🔔 [调试] snapshot.docChanges 数量:', snapshot.docChanges.length);
@@ -7512,7 +7512,7 @@ Page({
                   
                   // 🔥 【URGENT-FIX】确保在正确的作用域中处理消息
                   if (snapshot.docChanges && snapshot.docChanges.length > 0) {
-                    const currentUserInfo = this.data.currentUser; // 🔥 确保在正确作用域中获取用户信息
+                    const currentUserInfo = this.data.currentUser; // 🔥 使用页面数据中的用户
                     const currentUserId = currentUserInfo?.openId;
                     
                     console.log('🔔 [消息处理] 当前用户信息:', { currentUserId, currentUserInfo });
