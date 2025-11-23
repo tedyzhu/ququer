@@ -160,7 +160,7 @@ function fixBMessageReceive() {
                 timestamp: newMessage.sendTime ? newMessage.sendTime.getTime() : Date.now(),
                 isSelf: false,
                 isSystem: newMessage.senderId === 'system',
-                destroyTimeout: newMessage.destroyTimeout || 10,
+                destroyTimeout: newMessage.destroyTimeout || 30,
                 isDestroyed: false,
                 type: 'text'
               };
@@ -216,7 +216,7 @@ function fixBMessageReceive() {
           timestamp: msg.sendTime ? msg.sendTime.getTime() : Date.now(),
           isSelf: isFromSelf,
           isSystem: msg.senderId === 'system',
-          destroyTimeout: msg.destroyTimeout || 10,
+          destroyTimeout: msg.destroyTimeout || 30,
           isDestroyed: false,
           type: 'text'
         };

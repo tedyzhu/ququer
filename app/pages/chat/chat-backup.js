@@ -13,7 +13,7 @@ Page({
     scrollTop: 0,
     isLoading: true,
     // 阅后即焚倒计时配置（秒）
-    destroyTimeout: 10,
+    destroyTimeout: 30,
     // 是否正在创建聊天
     isCreatingChat: false,
     // 创建聊天重试次数

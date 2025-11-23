@@ -52,7 +52,7 @@ exports.main = async (event, context) => {
       sendTime: db.serverDate(),
       status: 'sent',
       destroyed: false,
-      destroyTimeout: event.destroyTimeout || 10
+      destroyTimeout: event.destroyTimeout || 30
     };
     
     console.log('💾 准备保存消息数据:', messageData);

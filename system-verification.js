@@ -32,15 +32,25 @@
     if (currentPage.resourceManager) {
       results.push('✅ 资源管理器已集成');
       
-      const stats = currentPage.resourceManager.getStats();
-      results.push(`📊 当前资源使用: ${stats.total}个 (定时器:${stats.timeouts} 间隔:${stats.intervals} 监听器:${stats.watchers})`);
-      
-      if (stats.total > 10) {
-        results.push('⚠️ 资源使用较多，建议检查');
-        verificationResults.memory.status = 'warning';
+      if (typeof currentPage.resourceManager.getStats === 'function') {
+        try {
+          const stats = currentPage.resourceManager.getStats();
+          results.push(`📊 当前资源使用: ${stats.total}个 (定时器:${stats.timeouts} 间隔:${stats.intervals} 监听器:${stats.watchers})`);
+          
+          if (stats.total > 10) {
+            results.push('⚠️ 资源使用较多，建议检查');
+            verificationResults.memory.status = 'warning';
+          } else {
+            results.push('✅ 资源使用正常');
+            verificationResults.memory.status = 'passed';
+          }
+        } catch (error) {
+          results.push('⚠️ 无法获取资源统计: ' + error.message);
+          verificationResults.memory.status = 'warning';
+        }
       } else {
-        results.push('✅ 资源使用正常');
-        verificationResults.memory.status = 'passed';
+        results.push('⚠️ 资源管理器缺少统计方法');
+        verificationResults.memory.status = 'warning';
       }
     } else {
       results.push('❌ 资源管理器未集成');
@@ -106,7 +116,8 @@
     console.log('🔍 [验证3] 检查性能优化...');
     
     const results = [];
-    const startTime = performance.now();
+    const hasPerformanceNow = typeof performance !== 'undefined' && typeof performance.now === 'function';
+    const startTime = hasPerformanceNow ? performance.now() : Date.now();
     
     // 检查日志输出量
     let logCount = 0;
@@ -131,7 +142,7 @@
     }, 100);
     
     setTimeout(() => {
-      const endTime = performance.now();
+      const endTime = hasPerformanceNow ? performance.now() : Date.now();
       const duration = endTime - startTime;
       
       // 恢复console方法
@@ -264,11 +275,14 @@
     }
     
     // 检查修复标记
-    const pageStr = currentPage.toString ? currentPage.toString() : '';
     const fixVersions = ['v1.3.45', 'HOTFIX', '系统修复'];
-    const hasFixMarkers = fixVersions.some(version => 
-      JSON.stringify(currentPage).includes(version)
-    );
+    let hasFixMarkers = false;
+    try {
+      const serializedPage = safeStringify(currentPage);
+      hasFixMarkers = fixVersions.some(version => serializedPage.includes(version));
+    } catch (error) {
+      results.push('⚠️ 修复标记检测失败: ' + error.message);
+    }
     
     if (hasFixMarkers) {
       results.push('✅ 包含修复标记');
@@ -281,6 +295,22 @@
     
     // 生成最终报告
     generateFinalReport();
+  }
+
+  function safeStringify(target) {
+    const seenObjects = new WeakSet();
+    return JSON.stringify(target, (key, value) => {
+      if (typeof value === 'function') {
+        return `[Function ${value.name || 'anonymous'}]`;
+      }
+      if (typeof value === 'object' && value !== null) {
+        if (seenObjects.has(value)) {
+          return '[Circular]';
+        }
+        seenObjects.add(value);
+      }
+      return value;
+    });
   }
 
   // 📊 生成最终报告

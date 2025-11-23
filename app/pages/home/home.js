@@ -2,6 +2,7 @@
  * 首页/欢迎页面逻辑
  */
 Page({
+  disableScroll: true,
   /**
    * 页面初始数据
    */
@@ -18,7 +19,8 @@ Page({
     friendJoined: false, // 朋友是否已加入
     friendName: '', // 朋友昵称
     checkJoinTimer: null, // 检查朋友加入的定时器
-    chatStarted: false // 聊天是否已开始
+    chatStarted: false, // 聊天是否已开始
+    keyboardHeight: 0 // 键盘高度（用于固定底部输入栏）
   },
 
   /**
@@ -83,12 +85,16 @@ Page({
     
     // 检查是否有聊天邀请需要处理
     this.checkInvitation();
+
+    // 绑定键盘高度监听，确保底部输入栏跟随键盘
+    this.bindKeyboardHeightListener();
   },
 
   /**
    * 生命周期函数--监听页面显示
    */
   onShow: function () {
+    this.bindKeyboardHeightListener();
     console.log('[生命周期] onShow，当前状态:', {
       hasInvitation: this.data.hasInvitation,
       friendJoined: this.data.friendJoined,
@@ -118,6 +124,7 @@ Page({
    */
   onHide: function() {
     this.stopCheckFriendJoinedTimer();
+    this.unbindKeyboardHeightListener();
   },
   
   /**
@@ -125,6 +132,7 @@ Page({
    */
   onUnload: function() {
     this.stopCheckFriendJoinedTimer();
+    this.unbindKeyboardHeightListener();
   },
 
   /**
@@ -174,36 +182,160 @@ Page({
       wx.removeStorageSync('isInvited');
     }
   },
+
+  /**
+   * 监听键盘高度变化，保持底部输入栏固定
+   */
+  bindKeyboardHeightListener: function() {
+    if (!wx.onKeyboardHeightChange) {
+      console.log('[键盘监听] 当前基础库不支持 wx.onKeyboardHeightChange');
+      return;
+    }
+    if (this._keyboardHeightHandler) return;
+
+    this._keyboardHeightHandler = (res = {}) => {
+      const height = res.height || 0;
+      if (this.data.keyboardHeight !== height) {
+        this.setData({ keyboardHeight: height });
+      }
+    };
+
+    wx.onKeyboardHeightChange(this._keyboardHeightHandler);
+  },
+
+  /**
+   * 解绑键盘高度监听
+   */
+  unbindKeyboardHeightListener: function() {
+    if (this._keyboardHeightHandler && wx.offKeyboardHeightChange) {
+      try {
+        wx.offKeyboardHeightChange(this._keyboardHeightHandler);
+      } catch (err) {
+        console.warn('[键盘监听] 解绑失败:', err);
+      }
+    }
+    this._keyboardHeightHandler = null;
+    if (this.data.keyboardHeight !== 0) {
+      this.setData({ keyboardHeight: 0 });
+    }
+  },
   
   /**
    * 加入会话
+   * @param {string} inviteId 邀请ID/聊天ID
    */
   joinConversation: function(inviteId) {
     const app = getApp();
-    const userInfo = app.globalData.userInfo;
+    const userInfo = app.globalData.userInfo || {};
     
-    // 模拟加入会话的过程
-    // 实际项目中应该调用云函数处理
-    setTimeout(() => {
-      this.setData({
-        conversationStarted: true,
-        partnerName: '向冬', // 实际应从服务器获取对方昵称
-        conversationId: inviteId,
-        messages: [
-          {
-            id: Date.now(),
-            content: '你好，欢迎加入蛐曲儿~',
-            isSelf: false,
-            timestamp: new Date().toISOString()
-          }
-        ]
-      });
-      
+    wx.showLoading({
+      title: '正在加入聊天...',
+      mask: true
+    });
+    
+    const finalizeJoin = (partnerDisplayName) => {
+      this.initializeConversationSession(inviteId, partnerDisplayName);
       console.log('成功加入会话:', inviteId);
-      
-      // 通知对方已加入会话
       this.notifyPartnerJoined(inviteId, userInfo);
-    }, 1000);
+    };
+    
+    this.fetchPartnerName(inviteId)
+      .then(partnerName => finalizeJoin(partnerName))
+      .catch(error => {
+        console.error('获取邀请者昵称失败，使用备用名称', error);
+        finalizeJoin(this.data.partnerName || '朋友');
+      })
+      .finally(() => {
+        try {
+          wx.hideLoading();
+        } catch (hideErr) {
+          console.warn('隐藏加载状态失败:', hideErr);
+        }
+      });
+  },
+  
+  /**
+   * 初始化会话状态并注入系统消息
+   * @param {string} conversationId 聊天ID
+   * @param {string} partnerName 邀请者昵称
+   */
+  initializeConversationSession: function(conversationId, partnerName) {
+    const safeName = partnerName || '朋友';
+    const systemMessage = this.buildJoinSystemMessage(safeName);
+    
+    this.setData({
+      conversationStarted: true,
+      partnerName: safeName,
+      conversationId: conversationId,
+      messages: [systemMessage]
+    });
+  },
+  
+  /**
+   * 构建B端加入聊天系统消息
+   * @param {string} partnerName 邀请者昵称
+   * @returns {Object} 系统消息对象
+   */
+  buildJoinSystemMessage: function(partnerName) {
+    const safeName = partnerName || '朋友';
+    return {
+      id: `system-${Date.now()}`,
+      content: `加入${safeName}的聊天`,
+      isSystem: true,
+      timestamp: new Date().toISOString()
+    };
+  },
+  
+  /**
+   * 获取聊天对象昵称
+   * @param {string} chatId 聊天ID
+   * @returns {Promise<string>} 邀请者昵称
+   */
+  fetchPartnerName: function(chatId) {
+    return new Promise((resolve, reject) => {
+      wx.cloud.callFunction({
+        name: 'getChatParticipants',
+        data: { chatId },
+        success: (res) => {
+          if (!res.result || res.result.success === false) {
+            reject(res.result?.error || '获取参与者失败');
+            return;
+          }
+          
+          const participants = res.result.participants || [];
+          if (!participants.length) {
+            resolve('朋友');
+            return;
+          }
+          
+          const currentOpenId = this.getCurrentUserOpenId();
+          const partner = participants.find(item => {
+            const participantId = item.openId || item.id;
+            if (!participantId) return false;
+            if (!currentOpenId) return false;
+            return participantId !== currentOpenId;
+          }) || participants.find(item => !!(item.openId || item.id)) || participants[0];
+          
+          const partnerName = partner?.nickName || partner?.name || partner?.displayName || '朋友';
+          resolve(partnerName);
+        },
+        fail: (error) => reject(error)
+      });
+    });
+  },
+  
+  /**
+   * 获取当前用户的openId
+   * @returns {string} openId
+   */
+  getCurrentUserOpenId: function() {
+    const app = getApp();
+    return (
+      app.globalData?.openId ||
+      app.globalData?.userInfo?.openId ||
+      app.globalData?.userInfo?._id ||
+      ''
+    );
   },
   
   /**
@@ -582,6 +714,65 @@ Page({
   onInputChange: function(e) {
     this.setData({
       inputContent: e.detail.value
+    });
+  },
+  
+  /**
+   * 切换语音输入（占位功能）
+   */
+  toggleVoiceInput: function() {
+    wx.showToast({
+      title: '语音功能开发中',
+      icon: 'none'
+    });
+  },
+  
+  /**
+   * 打开表情选择器（占位功能）
+   */
+  openEmojiPicker: function() {
+    wx.showToast({
+      title: '表情功能开发中',
+      icon: 'none'
+    });
+  },
+  
+  /**
+   * 打开更多功能（占位功能）
+   */
+  openMoreFunctions: function() {
+    wx.showActionSheet({
+      itemList: ['发送图片', '语音通话', '视频通话', '销毁设置'],
+      success: (res) => {
+        switch (res.tapIndex) {
+          case 0:
+            wx.showToast({
+              title: '图片发送功能开发中',
+              icon: 'none'
+            });
+            break;
+          case 1:
+            wx.showToast({
+              title: '语音通话功能开发中',
+              icon: 'none'
+            });
+            break;
+          case 2:
+            wx.showToast({
+              title: '视频通话功能开发中',
+              icon: 'none'
+            });
+            break;
+          case 3:
+            wx.showToast({
+              title: '销毁设置功能开发中',
+              icon: 'none'
+            });
+            break;
+          default:
+            break;
+        }
+      }
     });
   },
   

@@ -88,7 +88,7 @@ function getMessages(targetUserId) {
  * @param {Number} destroyTimeout - 销毁倒计时（秒）
  * @returns {Promise<Object>} 发送结果
  */
-function sendMessage(receiverId, content, type = 'text', fileId = '', destroyTimeout = 10) {
+function sendMessage(receiverId, content, type = 'text', fileId = '', destroyTimeout = 30) {
   return callFunction('sendMessage', {
     receiverId,
     content,

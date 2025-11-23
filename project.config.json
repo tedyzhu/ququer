@@ -1,7 +1,48 @@
 {
   "description": "项目配置文件",
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      {
+        "type": "file",
+        "value": "app/pages/chat/chat-backup.js"
+      },
+      {
+        "type": "file",
+        "value": "app/pages/chat/chat-safe.js"
+      },
+      {
+        "type": "file",
+        "value": "messageReceiveFix.js"
+      },
+      {
+        "type": "file",
+        "value": "chatIdFixTool.js"
+      },
+      {
+        "type": "folder",
+        "value": "pages/debug"
+      },
+      {
+        "type": "folder",
+        "value": "pages/test"
+      },
+      {
+        "type": "folder",
+        "value": "pages/test-share"
+      },
+      {
+        "type": "folder",
+        "value": "pages/test-share-fix"
+      },
+      {
+        "type": "folder",
+        "value": "pages/test-encoding"
+      },
+      {
+        "type": "glob",
+        "value": "temp_*.js"
+      }
+    ],
     "include": []
   },
   "setting": {
@@ -49,7 +90,7 @@
     "compileWorklet": false,
     "localPlugins": false,
     "disableUseStrict": false,
-    "condition": false,
+    "condition": true,
     "swc": false,
     "disableSWC": true
   },

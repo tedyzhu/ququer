@@ -131,7 +131,5 @@
     <view class="more-btn" bindtap="openMoreFunctions">
       <image class="icon" src="/assets/images/more.png" mode="aspectFit"></image>
     </view>
-    
-    <view class="send-btn" bindtap="sendMessage" wx:if="{{inputValue.length > 0}}">发送</view>
   </view>
 </view> 

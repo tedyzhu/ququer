@@ -3,7 +3,7 @@
     <view class="title">蛐曲儿</view>
   </view>
   
-  <view class="content">
+  <scroll-view scroll-y="true" enable-flex="true" class="content content-scroll">
     <view wx:if="{{isLoading}}" class="loading-container">
       <view class="loading"></view>
       <text>加载中...</text>
@@ -17,15 +17,34 @@
         <view class="chat-container">
           <scroll-view scroll-y="true" class="message-list" scroll-into-view="msg-{{messages[messages.length-1].id}}">
             <block wx:for="{{messages}}" wx:key="id">
-              <view class="message {{item.isSelf ? 'self' : 'other'}}" id="msg-{{item.id}}">
+              <view wx:if="{{item.isSystem}}" class="system-message" id="msg-{{item.id}}">
+                <text class="system-text">{{item.content}}</text>
+              </view>
+              <view wx:else class="message {{item.isSelf ? 'self' : 'other'}}" id="msg-{{item.id}}">
                 <view class="message-content">{{item.content}}</view>
               </view>
             </block>
           </scroll-view>
           
-          <view class="input-area">
-            <input class="message-input" bindinput="onInputChange" value="{{inputContent}}" placeholder="输入消息..." confirm-type="send" bindconfirm="sendMessage" />
-            <button class="send-btn" bindtap="sendMessage">发送</button>
+          <view class="input-area" style="bottom: {{keyboardHeight}}px;">
+            <view class="voice-btn" bindtap="toggleVoiceInput">
+              <image class="icon" src="/assets/images/mic.png" mode="aspectFit"></image>
+            </view>
+            <input
+              class="message-input"
+              bindinput="onInputChange"
+              value="{{inputContent}}"
+              confirm-type="send"
+              bindconfirm="sendMessage"
+              adjust-position="false"
+              cursor-spacing="16"
+            />
+            <view class="emoji-btn" bindtap="openEmojiPicker">
+              <image class="icon" src="/assets/images/emoji.png" mode="aspectFit"></image>
+            </view>
+            <view class="more-btn" bindtap="openMoreFunctions">
+              <image class="icon" src="/assets/images/more.png" mode="aspectFit"></image>
+            </view>
           </view>
         </view>
       </view>
@@ -44,5 +63,5 @@
         <view class="welcome-guide">可点击"..."转发来邀请朋友，一起开始蛐曲儿～</view>
       </view>
     </view>
-  </view>
+  </scroll-view>
 </view> 

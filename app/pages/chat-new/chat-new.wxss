@@ -163,29 +163,31 @@
   padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
 }
 
+.voice-btn,
+.emoji-btn,
+.more-btn {
+  width: 60rpx;
+  height: 60rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.icon {
+  width: 40rpx;
+  height: 40rpx;
+}
+
 .message-input {
   flex: 1;
+  height: 72rpx;
   border: 2rpx solid #e0e0e0;
-  border-radius: 24rpx;
-  padding: 16rpx 20rpx;
+  border-radius: 8rpx;
+  padding: 0 20rpx;
+  margin: 0 16rpx;
   font-size: 28rpx;
-  margin-right: 16rpx;
   background-color: #f8f8f8;
 }
-
-.send-button {
-  background-color: #007aff;
-  color: white;
-  border: none;
-  border-radius: 24rpx;
-  padding: 16rpx 32rpx;
-  font-size: 28rpx;
-  min-width: 120rpx;
-}
-
-.send-button:active {
-  background-color: #0056cc;
-} 
 
 /* 🔥 额外强制去除小尾巴的样式 */
 .message-bubble,
@@ -216,4 +218,21 @@
 .other-bubble::after {
   display: none !important;
   content: none !important;
+}
+
+/* 🔥 强制隐藏发送按钮 */
+.send-btn,
+.send-button,
+button[form-type="submit"],
+.input-bar button,
+.input-bar view.send-button,
+.input-bar cover-view {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 } 

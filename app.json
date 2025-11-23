@@ -2,18 +2,35 @@
   "pages": [
     "app/pages/login/login",
     "app/pages/chat/chat",
-    "app/pages/home/home",
-    "app/pages/index/index",
-    "app/pages/share/share",
-    "app/pages/test/test",
-    "app/pages/chat-new/chat-new",
-    "pages/debug/debug",
-    "pages/test/test",
-    "pages/test-encoding/test-encoding",
-    "pages/test-share/test-share",
-    "pages/test-share-fix/test-share-fix"
+    "app/pages/index/index"
   ],
   "entryPagePath": "app/pages/login/login",
+  "subpackages": [
+    {
+      "root": "app/pages/home",
+      "pages": [
+        "home"
+      ]
+    },
+    {
+      "root": "app/pages/share",
+      "pages": [
+        "share"
+      ]
+    },
+    {
+      "root": "app/pages/test",
+      "pages": [
+        "test"
+      ]
+    },
+    {
+      "root": "app/pages/chat-new",
+      "pages": [
+        "chat-new"
+      ]
+    }
+  ],
   "window": {
     "backgroundColor": "#F6F6F6",
     "backgroundTextStyle": "light",

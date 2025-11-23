@@ -17,7 +17,9 @@
     "checkInvalidKey": true,
     "ignoreDevUnusedFiles": true,
     "bigPackageSizeSupport": false,
-    "useIsolateContext": true
+    "useIsolateContext": true,
+    "safeCompile": false,
+    "safeModeCompile": false
   },
   "condition": {}
 }

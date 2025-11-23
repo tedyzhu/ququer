@@ -18,7 +18,94 @@ const DEBUG_FLAGS = {
   ENABLE_TEST_APIS: false     // 设置为true以暴露测试API
 };
 
+const DEFAULT_DESTROY_TIMEOUT = 30;
+
+const PLACEHOLDER_JOIN_MESSAGE_REGEX = /^加入(朋友|好友|用户|邀请者|发送方|a端用户|a端发送方)的聊天[！!]?$/i;
+
+function isPlaceholderJoinMessage(content) {
+  if (!content || typeof content !== 'string') return false;
+  return PLACEHOLDER_JOIN_MESSAGE_REGEX.test(content.trim());
+}
+
+/**
+ * 判断消息是否属于系统消息
+ * @param {Object} message - 原始或格式化后的消息对象
+ * @returns {boolean} 是否视为系统消息
+ */
+function isSystemLikeMessage(message) {
+  if (!message) return false;
+  if (message.isSystem === true || message.isSystemMessage === true) return true;
+  if (message.fromSystem === true) return true;
+  const type = typeof message.type === 'string' ? message.type.toLowerCase() : '';
+  if (type === 'system') return true;
+  const senderId = typeof message.senderId === 'string' ? message.senderId.toLowerCase() : '';
+  if (senderId === 'system') return true;
+  const sender = typeof message.sender === 'string' ? message.sender.toLowerCase() : '';
+  if (sender === 'system') return true;
+  return false;
+}
+
+/**
+ * 为系统消息补齐标记字段
+ * @param {Object} message - 消息对象
+ * @returns {Object} 处理后的消息对象
+ */
+function ensureSystemFlags(message) {
+  if (!message) return message;
+  if (isSystemLikeMessage(message)) {
+    message.isSystem = true;
+    message.isSystemMessage = true;
+    if (!message.type) {
+      message.type = 'system';
+    }
+  }
+  return message;
+}
+
 Page({
+  disableScroll: true,
+
+  getDestroyedStorageKey: function(chatIdOverride, userOpenIdOverride) {
+    const app = getApp();
+    const resolvedChatId = chatIdOverride || this.data?.contactId || this.options?.id || 'unknownChat';
+    const resolvedUserId = userOpenIdOverride
+      || this.data?.currentUser?.openId
+      || this.actualCurrentUser?.openId
+      || app?.globalData?.openId
+      || 'anonymous';
+    return `destroyedMessageIds_${resolvedUserId}_${resolvedChatId}`;
+  },
+
+  initializeDestroyedMessageStore: function(chatId, userOpenId) {
+    const app = getApp();
+    if (!app.globalDestroyedMessageStore) {
+      app.globalDestroyedMessageStore = {};
+    }
+    const storageKey = this.getDestroyedStorageKey(chatId, userOpenId);
+    if (!app.globalDestroyedMessageStore[storageKey]) {
+      app.globalDestroyedMessageStore[storageKey] = new Set();
+      console.log('🔥 [销毁消息保护] 创建新的全局销毁消息记录:', storageKey);
+      try {
+        const savedDestroyedIds = wx.getStorageSync(storageKey);
+        if (savedDestroyedIds && Array.isArray(savedDestroyedIds)) {
+          savedDestroyedIds.forEach(id => app.globalDestroyedMessageStore[storageKey].add(id));
+          console.log('🔥 [销毁消息保护] 从本地存储恢复销毁记录:', savedDestroyedIds.length, '条');
+        }
+      } catch (e) {
+        console.log('🔥 [销毁消息保护] 本地存储恢复失败:', e);
+      }
+    } else {
+      console.log('🔥 [销毁消息保护] 使用现有的全局销毁消息记录:', storageKey, '数量:', app.globalDestroyedMessageStore[storageKey].size);
+    }
+    this.globalDestroyedMessageIds = app.globalDestroyedMessageStore[storageKey];
+    this.destroyedStoreKey = storageKey;
+  },
+
+  ensureDestroyedMessageStore: function() {
+    if (!this.globalDestroyedMessageIds) {
+      this.initializeDestroyedMessageStore(this.data?.contactId, this.data?.currentUser?.openId);
+    }
+  },
   /**
    * 判断是否为占位符昵称
    * @param {string} name - 昵称
@@ -28,10 +115,72 @@ Page({
     if (!name || typeof name !== 'string') return true;
     const trimmed = name.trim();
     if (!trimmed) return true;
-    const placeholders = ['用户', '新用户', '朋友', '邀请者'];
+    const placeholders = ['用户', '新用户', '朋友', '好友', '邀请者', '发送方', 'a端用户', 'A端用户', 'a端发送方', 'A端发送方'];
     if (placeholders.includes(trimmed)) return true;
     if (/^用户[_\-\dA-Za-z]+$/.test(trimmed)) return true;
     if (/^user[_\-\dA-Za-z]*$/i.test(trimmed)) return true;
+    return false;
+  },
+
+  /**
+   * 判断当前是否处于B端接收方环境
+   * @returns {boolean} 是否应按B端逻辑处理
+   */
+  isReceiverEnvironment: function() {
+    const data = this.data || {};
+    if (data.isFromInvite === true) return true;
+    if (data.isSender === false) return true;
+    if (typeof this.finalIsFromInvite === 'boolean') {
+      return this.finalIsFromInvite;
+    }
+    if (typeof this.isSender === 'boolean') {
+      return this.isSender === false;
+    }
+
+    const participants = Array.isArray(data.participants) ? data.participants : [];
+    const currentUserOpenId = data.currentUser?.openId;
+
+    if (participants.length && currentUserOpenId) {
+      const selfParticipant = participants.find(p => {
+        const pid = p && (p.openId || p.id);
+        return pid && pid === currentUserOpenId;
+      });
+
+      if (selfParticipant) {
+        if (selfParticipant.isJoiner === true ||
+            selfParticipant.isReceiver === true ||
+            selfParticipant.role === 'receiver') {
+          return true;
+        }
+        if (selfParticipant.isCreator === true ||
+            selfParticipant.isSender === true ||
+            selfParticipant.role === 'creator') {
+          return false;
+        }
+      }
+
+      const otherHasCreatorFlag = participants.some(p => {
+        if (!p || p === selfParticipant) return false;
+        return p.isCreator === true || p.isSender === true || p.role === 'creator';
+      });
+      if (otherHasCreatorFlag && (!selfParticipant || selfParticipant.isCreator !== true)) {
+        return true;
+      }
+    }
+
+    try {
+      const contactId = data.contactId || this.data?.contactId;
+      if (contactId && currentUserOpenId && typeof wx !== 'undefined' && wx.getStorageSync) {
+        const creatorKey = `creator_${contactId}`;
+        const storedCreator = wx.getStorageSync(creatorKey);
+        if (storedCreator && storedCreator !== currentUserOpenId) {
+          return true;
+        }
+      }
+    } catch (error) {
+      try { console.warn('⚠️ [B端检测] 本地创建者比对失败:', error); } catch (_) {}
+    }
+
     return false;
   },
 
@@ -114,11 +263,13 @@ Page({
     chatTitle: '你和jerala(2)', // 聊天标题
     dynamicTitle: '', // 动态标题
     // 阅后即焚倒计时配置（秒）
-    destroyTimeout: 10,
+    destroyTimeout: DEFAULT_DESTROY_TIMEOUT,
     showDestroyTimer: false,
     destroyTimerText: '',
     // 是否正在创建聊天
     isCreatingChat: false,
+    // 是否正在发送消息
+    isSending: false,
     // 创建聊天重试次数
     createChatRetryCount: 0,
     // 最大重试次数
@@ -159,6 +310,10 @@ Page({
   onInputFocus: function() {
     try {
       console.log('🔥 键盘弹出 - 输入框获得焦点');
+      // 🔧 仅保留一次“保持展开”行为，恢复正常 blur 逻辑
+      if (this.data.keepKeyboardOpenOnSend) {
+        this.setData({ keepKeyboardOpenOnSend: false });
+      }
       
       // 🔥 【HOTFIX-v1.3.80】检查是否有系统消息，如果有则不自动滚动到底部
       const hasSystemMsg = this.data.hasSystemMessage;
@@ -186,11 +341,18 @@ Page({
     try {
       console.log('🔥 键盘收起 - 输入框失去焦点');
       
-      // 若发送后需要保持展开，立即重新聚焦并阻止收起
-      if (this.data.keepKeyboardOpenOnSend) {
-        this.setData({ inputFocus: true });
-        return;
-      }
+    // 若发送后需要保持展开，立即重新聚焦并阻止收起
+    if (this.data.keepKeyboardOpenOnSend) {
+      this.setData({
+        inputFocus: false,
+        keepKeyboardOpenOnSend: false
+      }, () => {
+        wx.nextTick(() => {
+          this.setData({ inputFocus: true });
+        });
+      });
+      return;
+    }
       
       this.setData({ 
         inputFocus: false,
@@ -204,7 +366,7 @@ Page({
       console.error('输入框失焦处理失败:', e);
     }
   },
-  
+
   /**
    * 🔥 确保标题栏位置正确的方法
    * 增强版：确保标题栏始终固定在顶部，不受键盘影响
@@ -268,6 +430,8 @@ Page({
     // 🔥 【HOTFIX-v1.3.65】重置防重复标记（保留ever已显示状态，不清空处理标志）
     this.bEndSystemMessageAdded = false;
     this.aEndJoinMessageAdded = false; // 🔥 A端加入消息防重复标记
+    this.participantWatcherReady = false; // 🔥 发送方监听初始化状态
+    this.lastParticipantIds = []; // 🔥 记录最近一次同步的参与者ID列表
     console.log('🔥 [页面初始化-v1.3.65] 重置系统消息防重复标记');
     
     // 🔥 软键盘高度监听
@@ -296,7 +460,16 @@ Page({
               console.log('🔥 [系统消息保护-v1.3.80] 检测到系统消息，跳过键盘滚动');
             }
             // 使用实际DOM高度微调消息区底部留白，确保与输入栏高度一致
-            wx.nextTick(() => { try { this.refreshToolbarHeightPadding && this.refreshToolbarHeightPadding(); } catch (e) {} });
+            wx.nextTick(() => {
+              try {
+                this.refreshToolbarHeightPadding && this.refreshToolbarHeightPadding();
+              } catch (e) {}
+              try {
+                this.ensureNavbarPosition && this.ensureNavbarPosition();
+              } catch (e) {
+                console.warn('⚠️ [键盘处理] 标题栏位置校验失败:', e);
+              }
+            });
           } catch (e) {}
         });
       }
@@ -310,31 +483,6 @@ Page({
     console.log('🛠️ [系统修复] 资源管理器已初始化');
     
     const app = getApp();
-    
-    // 🔥 【URGENT-FIX】修复全局销毁记录被重置的问题
-    
-    // 🔥 使用app级别的全局存储，确保跨页面生命周期保持
-    if (!app.globalDestroyedMessageIds) {
-      app.globalDestroyedMessageIds = new Set();
-      console.log('🔥 [销毁消息保护] 创建新的全局销毁消息记录');
-    } else {
-      console.log('🔥 [销毁消息保护] 使用现有的全局销毁消息记录，已销毁消息数量:', app.globalDestroyedMessageIds.size);
-    }
-    
-    // 🔥 同时从本地存储恢复销毁记录
-    try {
-      const savedDestroyedIds = wx.getStorageSync('destroyedMessageIds');
-      if (savedDestroyedIds && Array.isArray(savedDestroyedIds)) {
-        savedDestroyedIds.forEach(id => app.globalDestroyedMessageIds.add(id));
-        console.log('🔥 [销毁消息保护] 从本地存储恢复销毁记录:', savedDestroyedIds.length, '条');
-      }
-    } catch (e) {
-      console.log('🔥 [销毁消息保护] 本地存储恢复失败:', e);
-    }
-    
-    // 🔥 设置页面实例引用
-    this.globalDestroyedMessageIds = app.globalDestroyedMessageIds;
-    console.log('🔥 [销毁消息保护] 全局销毁消息记录已初始化，当前记录数量:', this.globalDestroyedMessageIds.size);
     
     // 检查云环境是否已初始化
     if (!app.cloudInitialized) {
@@ -1077,6 +1225,7 @@ Page({
     // 🔥 【HOTFIX-v1.3.44】保存身份判断结果到页面实例，避免data被覆盖
     this.finalIsFromInvite = finalIsFromInvite;
     this.actualCurrentUser = actualCurrentUser;
+    this.initializeDestroyedMessageStore(chatId, actualCurrentUser?.openId);
     
     // 🔥 【增强检测】记录聊天访问历史，用于未来的创建者检测
     this.recordChatVisit(chatId, actualCurrentUser?.openId);
@@ -1734,7 +1883,8 @@ Page({
     }
     
     // 🔥 【B端专门处理】B端用户的显示修复
-    if (isFromInvite && !isSender) {
+    const isReceiverEnv = this.isReceiverEnvironment();
+    if (isReceiverEnv) {
       console.log('🔥 [B端显示修复] 检测到B端用户，修复B端显示');
     } else {
       console.log('🔥 [双端显示修复] 身份不明确，跳过修复');
@@ -2018,8 +2168,11 @@ Page({
     
     console.log('🔥 [B端系统消息修复-v7] 开始全局防重复检查');
     
-    const { isFromInvite, currentUser } = this.data;
+    const currentUser = this.data.currentUser;
+    const dataIsFromInvite = this.data.isFromInvite;
+    const isReceiverEnv = this.isReceiverEnvironment();
     const userNickName = currentUser?.nickName || '我';
+    console.log('🔥 [B端系统消息修复-v5] 当前用户身份 isFromInvite:', dataIsFromInvite, 'isReceiverEnv:', isReceiverEnv);
     
     // 🔥 【HOTFIX-v1.3.56】强制检查并清理错误的A端消息
     const currentMessages = this.data.messages || [];
@@ -2064,10 +2217,8 @@ Page({
     }
     
     console.log('🔥 [B端系统消息修复-v5] 处理后的邀请者名称:', processedInviterName);
-    console.log('🔥 [B端系统消息修复-v5] 当前用户身份 isFromInvite:', isFromInvite);
-    
     // 【修复】检查是否真的是B端身份
-    if (!isFromInvite) {
+    if (!isReceiverEnv) {
       console.log('🔥 [B端系统消息修复-v5] 检测到非B端身份，跳过B端系统消息处理');
       return;
     }
@@ -2101,6 +2252,7 @@ Page({
           msg.content.includes('成功加入') ||
           // 🔥 【HOTFIX-v1.3.61】B端不显示A端风格的"XX加入聊天"，但保留B端风格的"加入XX的聊天"
           (/^.+加入聊天$/.test(msg.content) && !/^加入.+的聊天$/.test(msg.content)) ||
+          isPlaceholderJoinMessage(msg.content) ||
           // 移除senderId无效的消息
           (!msg.senderId || msg.senderId === 'undefined' || msg.senderId === '');
           
@@ -2343,7 +2495,7 @@ Page({
     
     const currentMessages = this.data.messages || [];
     const beforeCount = currentMessages.length;
-    const isFromInvite = !!this.data.isFromInvite;
+    const isReceiverEnv = this.isReceiverEnvironment();
     
     const cleanedMessages = currentMessages.filter(msg => {
       // 🔥 【垃圾数据过滤】优先过滤无效数据
@@ -2364,7 +2516,7 @@ Page({
       
       if (msg.isSystem && msg.content) {
         // 🔥 【HOTFIX-v1.3.61】B端永远不应该看到创建者消息或A端风格"XX加入聊天"
-        if (isFromInvite) {
+        if (isReceiverEnv) {
           if (msg.content.includes('您创建了私密聊天') || (/^.+加入聊天$/.test(msg.content) && !/^加入.+的聊天$/.test(msg.content))) {
             console.log('🔥 [垃圾数据清理-v4] (B端) 移除不应显示的系统消息:', msg.content);
             return false;
@@ -2388,6 +2540,8 @@ Page({
           // 移除重复的"朋友已加入聊天"类型消息
           msg.content === '朋友已加入聊天' ||
           msg.content === '朋友已加入聊天！' ||
+          // 移除占位符格式的B端加入消息
+          isPlaceholderJoinMessage(msg.content) ||
           // 移除格式错误的系统消息
           (msg.content.includes('系统') && msg.content.length < 3);
         
@@ -2398,7 +2552,7 @@ Page({
             /^加入.+的聊天$/.test(msg.content) ||    // "加入朋友的聊天", "加入xx的聊天"
             msg.content.includes('您创建了私密聊天'); // 创建消息
             
-          if (!isFromInvite && isCorrectFormat && msg.senderId && msg.senderId !== 'undefined') {
+          if (!isReceiverEnv && isCorrectFormat && msg.senderId && msg.senderId !== 'undefined') {
             console.log('🔥 [垃圾数据清理-v4] 保留正确格式消息:', msg.content);
             return true; // 保留正确格式
           }
@@ -3093,7 +3247,7 @@ Page({
    * - B端：加入后只显示"加入[A端昵称]的聊天"，清理所有创建者类提示
    */
   enforceSystemMessages: function() {
-    const { isFromInvite } = this.data;
+    const isReceiverEnv = this.isReceiverEnvironment();
     const messages = this.data.messages || [];
     const participants = this.data.participants || [];
 
@@ -3104,7 +3258,7 @@ Page({
     const other = participants.find(p => (p.openId || p.id) !== currentUserOpenId);
     const otherName = other?.nickName || other?.name || '好友';
 
-    if (isFromInvite) {
+    if (isReceiverEnv) {
       // ever：若已显示过B端加入提示，直接返回，防止重复
       if (this.hasBEndJoinEver && this.hasBEndJoinEver(this.data.contactId)) {
         console.log('🛡️ [B端一次性防护] enforce阶段检测到ever标记，跳过');
@@ -3119,7 +3273,7 @@ Page({
       
       // 🔥 【1008终极防护】检查是否已存在B端系统消息
       const hasBEndJoinMessage = messages.some(m => 
-        m && m.isSystem && m.content && /^加入.+的聊天$/.test(m.content)
+        m && isSystemLikeMessage(m) && m.content && /^加入.+的聊天$/.test(m.content)
       );
       if (hasBEndJoinMessage) {
         console.log('🔥 [B端系统消息保护-1008] 已存在B端加入消息，跳过enforce补充');
@@ -3129,9 +3283,9 @@ Page({
       
       // B端：确保"加入[A端昵称]的聊天"存在，并移除创建者类消息
       const joinMsg = `加入${otherName}的聊天`;
-      const hasJoin = messages.some(m => m.isSystem && m.content === joinMsg);
+      const hasJoin = messages.some(m => isSystemLikeMessage(m) && m.content === joinMsg);
       // 🔥 【HOTFIX-v1.3.61】只过滤A端格式，保留B端格式
-      const filtered = messages.filter(m => !(m.isSystem && (
+      const filtered = messages.filter(m => !(isSystemLikeMessage(m) && (
         m.content?.includes('您创建了私密聊天') || (/^.+加入聊天$/.test(m.content || '') && !/^加入.+的聊天$/.test(m.content || ''))
       )));
       this.setData({ messages: filtered });
@@ -3157,12 +3311,12 @@ Page({
    * @returns {void}
    */
   normalizeSystemMessagesAfterLoad: function() {
-    const isFromInvite = !!this.data.isFromInvite;
+    const isReceiverEnv = this.isReceiverEnvironment();
     const messages = this.data.messages || [];
     const participants = this.data.participants || [];
     let changed = false;
 
-    if (isFromInvite) {
+    if (isReceiverEnv) {
       // ever：若已显示过B端加入提示，直接返回，防止重复
       if (this.hasBEndJoinEver && this.hasBEndJoinEver(this.data.contactId)) {
         console.log('🛡️ [B端一次性防护] normalize阶段检测到ever标记，跳过');
@@ -3177,7 +3331,7 @@ Page({
       
       // 🔥 【1008终极防护】检查是否已存在B端系统消息
       const hasBEndJoinMessage = messages.some(m => 
-        m && m.isSystem && m.content && /^加入.+的聊天$/.test(m.content)
+        m && isSystemLikeMessage(m) && m.content && /^加入.+的聊天$/.test(m.content)
       );
       if (hasBEndJoinMessage) {
         console.log('🔥 [B端系统消息保护-1008] 已存在B端加入消息，跳过normalize补充');
@@ -3193,7 +3347,7 @@ Page({
 
       // 过滤掉 A 端风格及错误/占位格式系统消息
       const filtered = messages.filter(m => {
-        if (!m || !m.isSystem || !m.content) return true;
+        if (!m || !isSystemLikeMessage(m) || !m.content) return true;
         if (m.content.includes('您创建了私密聊天')) return false;
         // 🔥 【HOTFIX-v1.3.61】只过滤A端格式"XX加入聊天"，保留B端格式"加入XX的聊天"
         if (/^.+加入聊天$/.test(m.content) && !/^加入.+的聊天$/.test(m.content)) return false;
@@ -3204,6 +3358,7 @@ Page({
           m.content === '成功加入聊天' ||
           m.content === '已加入聊天'
         ) return false;
+        if (isPlaceholderJoinMessage(m.content)) return false;
         // 移除与目标 joinMsg 不一致的占位加入消息
         if (/^加入.+的聊天$/.test(m.content) && m.content !== joinMsg) return false;
         return true;
@@ -3215,7 +3370,7 @@ Page({
       }
 
       // 🔥【HOTFIX-v1.3.66】确保存在正确的加入提示，B端系统消息和A端保持一致会自动淡出
-      const hasJoin = (changed ? this.data.messages : messages).some(m => m.isSystem && m.content === joinMsg);
+      const hasJoin = (changed ? this.data.messages : messages).some(m => isSystemLikeMessage(m) && m.content === joinMsg);
       if (!hasJoin && !this.bEndSystemMessageProcessed) {
         // 🔥 【HOTFIX-v1.3.66】B端系统消息和A端保持一致，显示一段时间后自动淡出
         this.addSystemMessage(joinMsg, {
@@ -3228,7 +3383,7 @@ Page({
     } else {
       // A 端：对应的系统消息若未进入淡出流程则强制触发
       messages.forEach(m => {
-        if (!m || !m.isSystem || !m.content) return;
+        if (!m || !isSystemLikeMessage(m) || !m.content) return;
         const match = (
           m.content.includes('您创建了私密聊天') ||
           /^.+加入聊天$/.test(m.content) ||
@@ -3938,9 +4093,19 @@ Page({
       console.log('🏷️ [真实姓名] 找到的对方参与者:', otherParticipant);
       
       if (otherParticipant) {
-        const otherName = otherParticipant?.nickName || otherParticipant?.name || '好友';
-        title = `我和${otherName}（2）`;
-        console.log('🏷️ [真实姓名] 规则2：双人聊天，对方名字:', otherName, '最终标题:', title);
+        const otherNameRaw = otherParticipant?.nickName || otherParticipant?.name || '';
+        const isPlaceholderName = typeof this.isPlaceholderNickname === 'function'
+          ? this.isPlaceholderNickname(otherNameRaw)
+          : (!otherNameRaw || ['用户', '朋友', '好友', '邀请者', '新用户'].includes(otherNameRaw));
+        if (!isPlaceholderName && (otherParticipant.openId || otherParticipant.id) !== 'temp_user') {
+          const otherName = otherNameRaw;
+          title = `我和${otherName}（2）`;
+          console.log('🏷️ [真实姓名] 规则2：双人聊天，对方名字:', otherName, '最终标题:', title);
+        } else {
+          console.log('🏷️ [真实姓名] 检测到占位符昵称或临时ID，触发强制获取真实昵称');
+          this.fetchChatParticipantsWithRealNames(true);
+          title = currentUser?.nickName || '我';
+        }
       } else {
         // 🔥 如果没找到对方，使用邀请链接中的昵称作为备选
         const urlParams = getCurrentPages()[getCurrentPages().length - 1].options;
@@ -3961,6 +4126,7 @@ Page({
         } else {
           title = currentUser?.nickName || '我';
           console.log('🏷️ [真实姓名] 未找到对方参与者，暂时显示自己昵称:', title);
+          this.fetchChatParticipantsWithRealNames(true);
         }
       }
     } 
@@ -4032,12 +4198,22 @@ Page({
     console.log('🔥 [发送方监听] 启动参与者实时监听，chatId:', chatId);
     
     try {
+      const extractParticipantId = (participant) => {
+        if (!participant) return null;
+        if (typeof participant === 'string') return participant;
+        return participant.openId || participant.id || participant._id || null;
+      };
+
       // 先清理可能存在的旧监听器
       if (this.participantWatcher) {
         this.participantWatcher.close();
         this.participantWatcher = null;
       }
       const db = wx.cloud.database();
+      this.participantWatcherReady = false;
+      this.lastParticipantIds = (this.data.participants || [])
+        .map(extractParticipantId)
+        .filter(id => !!id);
       
       // 监听conversations集合的participants字段变化
       this.participantWatcher = db.collection('conversations')
@@ -4105,15 +4281,22 @@ Page({
                   };
                 } else if (typeof p === 'object' && p !== null) {
                   // 处理对象格式的参与者数据
-                  id = p.id || p.openId;
+                  id = extractParticipantId(p);
                   participant = p;
+                  if (id) {
+                    participant = {
+                      ...p,
+                      id: p.id || id,
+                      openId: p.openId || id
+                    };
+                  }
                 } else {
                   console.log('🔥 [发送方监听] ❌ 无效的参与者数据格式:', p);
                   continue;
                 }
                 
                 // 🔥 【过滤垃圾数据】跳过temp_user等无效参与者
-                if (id === 'temp_user' || id.startsWith('temp_') || id.length <= 5) {
+                if (id && (id === 'temp_user' || id.startsWith('temp_') || id.length <= 5)) {
                   console.log('🔥 [发送方监听] ❌ 跳过垃圾数据:', id, participant.nickName || participant.name);
                 } else if (id && !seenIds.has(id)) {
                   seenIds.add(id);
@@ -4147,12 +4330,53 @@ Page({
               
               // 🎯 【HOTFIX-v1.3.19】增强参与者检测逻辑 - 不仅检测数量，还检测具体参与者
               const currentUserOpenId = this.data.currentUser?.openId;
-              const currentParticipantIds = currentParticipants.map(p => p.openId || p.id);
-              const newParticipantIds = newParticipants.map(p => p.id || p.openId);
+              const currentParticipantIds = currentParticipants.map(extractParticipantId).filter(Boolean);
+              const newParticipantIds = newParticipants.map(extractParticipantId).filter(Boolean);
+              const uniqueParticipantIds = deduplicatedParticipants.map(extractParticipantId).filter(Boolean);
+              const previousParticipantIds = (this.lastParticipantIds && this.lastParticipantIds.length > 0)
+                ? this.lastParticipantIds
+                : currentParticipantIds;
+              const isInitialSnapshot = snapshot.type === 'init';
+              const hasBrandNewParticipant = uniqueParticipantIds.some(id => 
+                id && id !== currentUserOpenId && !previousParticipantIds.includes(id)
+              );
+              const syncParticipantsWithoutJoin = (tag) => {
+                const participantsChanged = currentParticipants.length !== deduplicatedParticipants.length ||
+                  uniqueParticipantIds.some(id => !currentParticipantIds.includes(id));
+                if (!participantsChanged) {
+                  return;
+                }
+                console.log(`🔥 [发送方监听] 同步参与者列表（${tag || 'snapshot'}）`);
+                this.setData({
+                  participants: deduplicatedParticipants
+                }, () => {
+                  this.updateDynamicTitleWithRealNames();
+                });
+              };
               
               console.log('🔥 [发送方监听] 当前用户OpenId:', currentUserOpenId);
               console.log('🔥 [发送方监听] 当前参与者IDs:', currentParticipantIds);
               console.log('🔥 [发送方监听] 新参与者IDs:', newParticipantIds);
+              console.log('🔥 [发送方监听] 去重后参与者IDs:', uniqueParticipantIds);
+              console.log('🔥 [发送方监听] 上一次同步IDs:', previousParticipantIds);
+              console.log('🔥 [发送方监听] 是否初始化快照:', isInitialSnapshot);
+              console.log('🔥 [发送方监听] 是否检测到全新参与者ID:', hasBrandNewParticipant);
+              
+              if (isInitialSnapshot) {
+                console.log('🔥 [发送方监听] 当前变化不触发新参与者逻辑（初始化）');
+                this.lastParticipantIds = uniqueParticipantIds;
+                this.participantWatcherReady = true;
+                syncParticipantsWithoutJoin('initial-sync');
+                return;
+              }
+              
+              if (!hasBrandNewParticipant) {
+                console.log('🔥 [发送方监听] 当前变化不触发新参与者逻辑（无新增ID）');
+                this.lastParticipantIds = uniqueParticipantIds;
+                this.participantWatcherReady = true;
+                syncParticipantsWithoutJoin('no-new-id');
+                return;
+              }
               
               // 检测是否有新的参与者ID（不是当前用户）
               const hasNewParticipant = newParticipantIds.some(id => 
@@ -4162,12 +4386,10 @@ Page({
               console.log('🔥 [发送方监听] 是否有新参与者:', hasNewParticipant);
               
               // 🎯 重新检测是否有真正的新参与者（基于去重后的数据）
-              const deduplicatedParticipantIds = deduplicatedParticipants.map(p => p.id || p.openId);
-              const hasRealNewParticipant = deduplicatedParticipantIds.some(id => 
+              const hasRealNewParticipant = uniqueParticipantIds.some(id => 
                 id !== currentUserOpenId && !currentParticipantIds.includes(id)
               );
               
-              console.log('🔥 [发送方监听] 去重后参与者IDs:', deduplicatedParticipantIds);
               console.log('🔥 [发送方监听] 是否有真正的新参与者:', hasRealNewParticipant);
               console.log('🔥 [发送方监听] 去重后参与者数量:', deduplicatedParticipants.length);
               
@@ -4176,7 +4398,7 @@ Page({
               const shouldSkipProcessing = isStableChat && !hasRealNewParticipant;
               
               // 🔥 【关键修复】额外检查：确保不是因为消息发送导致的误触发
-              const isMessageTriggered = this.data.recentlysentMessage || this.data.hasAddedConnectionMessage;
+              const isMessageTriggered = this.data.recentlySentMessage || this.data.hasAddedConnectionMessage;
               const timeNow = Date.now();
               const lastMessageTime = this.data.lastMessageSentTime || 0;
               const timeSinceLastMessage = timeNow - lastMessageTime;
@@ -4200,9 +4422,23 @@ Page({
               const isDefinitelyNewParticipant = hasRealNewParticipant && !this.data.hasAddedConnectionMessage;
               const isLikelyMessageMisfire = isProbableMessageMisfire && this.data.recentlySentMessage && !hasRealNewParticipant;
               
+              const otherParticipantCandidate = deduplicatedParticipants.find(p => {
+                const pid = p.id || p.openId;
+                return pid && pid !== currentUserOpenId;
+              });
+              const otherHasConfirmedJoinFlag = otherParticipantCandidate
+                ? (
+                  typeof otherParticipantCandidate.isJoiner === 'boolean'
+                    ? otherParticipantCandidate.isJoiner
+                    : true
+                )
+                : false;
+              
               const shouldProcessNewParticipant = 
+                hasBrandNewParticipant &&
                 isDefinitelyNewParticipant && 
                 deduplicatedParticipants.length >= 2 && 
+                otherHasConfirmedJoinFlag &&
                 !shouldSkipProcessing;
                 // 🔥 【v1.3.90】移除isLikelyMessageMisfire检查,优先处理新参与者
               
@@ -4210,17 +4446,16 @@ Page({
                 isDefinitelyNewParticipant,
                 isLikelyMessageMisfire,
                 shouldProcessNewParticipant,
+                otherHasConfirmedJoinFlag,
                 hasAddedConnectionMessage: this.data.hasAddedConnectionMessage,
                 recentlySentMessage: this.data.recentlySentMessage
               });
               
-              if (shouldProcessNewParticipant) {
+              if (shouldProcessNewParticipant && otherParticipantCandidate) {
                 console.log('🔥 [发送方监听] ✅ 检测到真正的新参与者加入！立即更新标题');
                 
                 // 🔥 【HOTFIX-v1.3.92】立即更新参与者列表和标题，不等待异步操作
-                const otherParticipant = deduplicatedParticipants.find(p => 
-                  (p.id || p.openId) !== currentUserOpenId
-                );
+                const otherParticipant = otherParticipantCandidate;
                 
                 if (otherParticipant) {
                   // 🔥 【HOTFIX-v1.3.92】先立即更新参与者列表为2人状态
@@ -4493,6 +4728,8 @@ Page({
                 console.log('🔗 [连接提示修复] ✅ 跳过"朋友已加入聊天"Toast提示，只保留系统消息');
                 
                 console.log('🔥 [发送方监听] 参与者加入处理完成');
+            this.lastParticipantIds = uniqueParticipantIds;
+                this.participantWatcherReady = true;
               } else {
                 if (shouldSkipProcessing) {
                   console.log('🔥 [发送方监听] 🎯 稳定的2人聊天，跳过重复处理');
@@ -4507,6 +4744,16 @@ Page({
                 console.log('🔥 [发送方监听] - 原始参与者数量:', newParticipants.length);
                 console.log('🔥 [发送方监听] 继续监听等待真正的参与者加入...');
                 }
+                console.log('🔥 [发送方监听] 条件不足，不触发新参与者逻辑:', {
+                  hasBrandNewParticipant,
+                  otherHasConfirmedJoinFlag,
+                  shouldProcessNewParticipant,
+                  hasCandidate: !!otherParticipantCandidate
+                });
+            this.lastParticipantIds = uniqueParticipantIds;
+                this.participantWatcherReady = true;
+                syncParticipantsWithoutJoin('pending-join');
+                return;
               }
             } else {
               console.log('🔥 [发送方监听] 未获取到conversation文档');
@@ -4618,15 +4865,27 @@ Page({
   /**
    * 🔥 获取聊天参与者信息（包含真实昵称）
    */
-  fetchChatParticipantsWithRealNames: function() {
+  fetchChatParticipantsWithRealNames: function(force = false) {
     const chatId = this.data.contactId;
     if (!chatId) return;
 
     console.log('👥 [真实昵称-v1.3.71] 获取聊天参与者信息，chatId:', chatId);
     
+    // 🔥 【鲁棒性】防止重复调用：1秒内只允许调用一次（可强制刷新）
+    const now = Date.now();
+    if (!force) {
+      if (this._lastFetchParticipantsTime && (now - this._lastFetchParticipantsTime) < 1000) {
+        console.log('👥 [真实昵称] 调用过于频繁，跳过本次请求');
+        return;
+      }
+    } else {
+      console.log('👥 [真实昵称] ⚠️ 强制刷新参与者信息，忽略频率限制');
+    }
+    this._lastFetchParticipantsTime = now;
+    
     // 🔥 【HOTFIX-v1.3.71】在函数最开始就进行全局防重复检查，避免重复添加系统消息
     // 如果正在处理系统消息，直接返回
-    if (this._fetchingSystemMessage) {
+    if (this._fetchingSystemMessage && !force) {
       console.log('👥 [防重复-v1.3.71] ⚠️ 正在处理系统消息，跳过重复调用');
       return;
     }
@@ -4954,11 +5213,7 @@ Page({
               
               // 🔥 查找需要更新的临时或错误系统消息
               const tempJoinMessage = currentMessages.find(msg => 
-                msg.isSystem && (
-                  msg.content.includes('加入朋友的聊天') ||
-                  msg.content.includes('加入好友的聊天') ||
-                  msg.content.includes('加入a端用户的聊天')
-                )
+                msg.isSystem && isPlaceholderJoinMessage(msg.content)
               );
               
               // 🔥 【HOTFIX-v1.3.70】根据可靠的身份判断检查准确的系统消息
@@ -4968,7 +5223,7 @@ Page({
                 hasAccurateJoinMessage = currentMessages.some(msg => 
                   msg.isSystem && 
                   /^加入.+的聊天$/.test(msg.content) && 
-                  !/^加入(朋友|好友|a端用户)的聊天$/.test(msg.content)
+                  !isPlaceholderJoinMessage(msg.content)
                 );
                 console.log('👥 [系统消息检查-B端-v1.3.70] 检查B端格式消息:', hasAccurateJoinMessage);
               } else if (isDefinitelyASide) {
@@ -5107,6 +5362,7 @@ Page({
                   // 🔥 【HOTFIX-B端防重复】增强B端系统消息防重复机制
                   if (this.bEndSystemMessageProcessed) {
                     console.log('👥 [B端防重复] ❌ B端系统消息已处理过，跳过重复添加');
+                    this._fetchingSystemMessage = false;
                     return;
                   }
                   
@@ -5119,6 +5375,7 @@ Page({
                   if (hasBEndMessage) {
                     console.log('👥 [B端防重复] ❌ 已检测到B端加入消息，跳过重复添加');
                     this.bEndSystemMessageProcessed = true; // 标记已处理
+                    this._fetchingSystemMessage = false;
                     return;
                   }
                   
@@ -5135,6 +5392,7 @@ Page({
                   if (hasAnyBEndJoinMessage) {
                     console.log('👥 [轮询防重复] ❌ 检测到现有B端加入消息，避免重复添加');
                     this.bEndSystemMessageProcessed = true;
+                    this._fetchingSystemMessage = false;
                     return;
                   }
                   
@@ -5146,7 +5404,10 @@ Page({
                   }
                   
                   // 🔥【HOTFIX-v1.3.82】B端（确认）：显示"加入xx的聊天"，自动淡出
-                  const message = `加入${participantName}的聊天`;
+                  if (this.isPlaceholderNickname(participantName)) {
+                    console.log('👥 [B端系统消息-v1.3.82] 检测到占位符昵称，暂不添加B端系统消息，等待真实昵称');
+                  } else {
+                    const message = `加入${participantName}的聊天`;
                     console.log('👥 [B端系统消息-v1.3.82] 准备添加B端消息:', message);
                     this.addSystemMessage(message, {
                       autoFadeStaySeconds: 3,
@@ -5155,6 +5416,7 @@ Page({
                     this.bEndSystemMessageProcessed = true; // 🔥 设置处理标记
                     this.bEndSystemMessageTime = Date.now(); // 🔥 设置处理时间用于轮询优化
                     console.log('👥 [B端系统消息-v1.3.82] ✅ B端消息已添加（带淡出）:', message);
+                  }
                     } else if (isDefinitelyASide) {
       // 🔥 【A端系统消息修复-v1.3.81】A端（确认）显示"xx加入聊天"消息
       console.log('👥 [A端系统消息-v1.3.81] A端准备处理参与者加入消息');
@@ -5162,6 +5424,7 @@ Page({
       // 🔥 【HOTFIX-v1.3.81】全局防重复检查：确保整个页面生命周期只添加一次
       if (this.aEndJoinMessageAdded) {
         console.log('👥 [A端系统消息-v1.3.81] ⚠️ 全局标记：已添加过加入消息，跳过');
+        this._fetchingSystemMessage = false;
         return;
       }
       
@@ -5176,6 +5439,7 @@ Page({
       if (hasJoinMsg) {
         console.log('👥 [A端系统消息-v1.3.81] ⚠️ 已有加入消息，跳过重复添加');
         this.aEndJoinMessageAdded = true; // 设置全局标记
+        this._fetchingSystemMessage = false;
         return;
       }
       
@@ -5282,7 +5546,9 @@ Page({
               avatar = '/assets/images/default-avatar.png';
             } else if (isSelf) {
               // 🔥 【B端头像修复】B端自己的消息不显示头像
-              const isFromInvite = that.data.isFromInvite;
+              const isFromInvite = (typeof that.isReceiverEnvironment === 'function')
+                ? that.isReceiverEnvironment()
+                : !!that.data.isFromInvite;
               if (isFromInvite) {
                 // B端用户自己发送的消息，不设置头像
                 avatar = null;
@@ -5330,7 +5596,9 @@ Page({
           const filteredServerMessages = serverMessages.filter(msg => {
             if (msg.isSystem && msg.content) {
               // 🔥 【B端特殊过滤】如果当前用户是B端（isFromInvite），彻底过滤A端消息
-              const isFromInvite = this.data.isFromInvite;
+              const isFromInvite = (typeof this.isReceiverEnvironment === 'function')
+                ? this.isReceiverEnvironment()
+                : !!this.data.isFromInvite;
               
               if (isFromInvite) {
                 // 🔥 【HOTFIX-v1.3.68】B端用户：彻底过滤掉所有A端相关的系统消息
@@ -5377,7 +5645,8 @@ Page({
                 // 移除特定的"已加入"错误格式
                 (msg.content.includes('已加入') && !msg.content.match(/^已加入.+的聊天$/)) ||
                 // 过滤包含感叹号的旧格式消息
-                (msg.content.includes('加入') && msg.content.includes('聊天') && msg.content.includes('！'));
+                (msg.content.includes('加入') && msg.content.includes('聊天') && msg.content.includes('！')) ||
+                isPlaceholderJoinMessage(msg.content);
               
               if (shouldFilter) {
                 // 🔥 【HOTFIX-v1.3.68】二次检查：不要过滤正确格式的消息
@@ -5428,9 +5697,11 @@ Page({
           // 合并本地系统消息和服务器消息
           let allMessages = [...filteredServerMessages, ...localSystemMessages];
           // B端合并时强制剔除A端样式“XX加入聊天”，仅保留“加入XX的聊天”
-          if (that.data && that.data.isFromInvite) {
+          if ((typeof that.isReceiverEnvironment === 'function'
+            ? that.isReceiverEnvironment()
+            : (that.data && that.data.isFromInvite))) {
             allMessages = allMessages.filter(m => {
-              if (!m || !m.isSystem || typeof m.content !== 'string') return true;
+              if (!m || !isSystemLikeMessage(m) || typeof m.content !== 'string') return true;
               if (/^.+加入聊天$/.test(m.content) && !/^加入.+的聊天$/.test(m.content)) {
                 console.log('🧹 [合并过滤] (B端) 移除A端样式系统消息:', m.content);
                 return false;
@@ -5494,6 +5765,7 @@ Page({
    */
   fetchMessages: function () {
     const that = this;
+    that.ensureDestroyedMessageStore();
     
     console.log('🔍 获取聊天记录，chatId:', that.data.contactId);
     
@@ -5516,37 +5788,81 @@ Page({
     const destroyedMessageIds = new Set();
     const destroyingMessageIds = new Set();
     const destroyingMessageStates = new Map(); // 保存销毁状态
+
+    const registerMessageKeys = (collection, message) => {
+      if (!collection || !message) {
+        return;
+      }
+      const keys = new Set();
+      if (message.id) {
+        keys.add(message.id);
+      }
+      if (message._id) {
+        keys.add(message._id);
+      }
+      if (keys.size === 0 && typeof message === 'string') {
+        keys.add(message);
+      }
+      keys.forEach(key => {
+        if (key) {
+          collection.add(key);
+        }
+      });
+    };
+
+    const registerDestroyState = (message, state) => {
+      if (!message || !state) {
+        return;
+      }
+      const keys = [];
+      if (message.id) {
+        keys.push(message.id);
+      }
+      if (message._id && message._id !== message.id) {
+        keys.push(message._id);
+      }
+      if (!keys.length) {
+        return;
+      }
+      keys.forEach(key => destroyingMessageStates.set(key, state));
+    };
+
+    const getDestroyState = (message) => {
+      if (!message) {
+        return undefined;
+      }
+      const key = message._id || message.id;
+      if (!key) {
+        return undefined;
+      }
+      return destroyingMessageStates.get(key);
+    };
     
     // 🔥 【HOTFIX-v1.3.75】合并本地消息状态和全局销毁记录，包括fading状态
     existingMessages.forEach(msg => {
       if (msg.destroyed) {
-        destroyedMessageIds.add(msg.id);
-        that.globalDestroyedMessageIds.add(msg.id); // 添加到全局记录
+        registerMessageKeys(destroyedMessageIds, msg);
+        registerMessageKeys(that.globalDestroyedMessageIds, msg); // 添加到全局记录
       }
       // 🔥 【HOTFIX-v1.3.75】同时记录fading状态的消息，防止刷新时重新显示
       if (msg.fading || msg.destroying) {
-        destroyingMessageIds.add(msg.id);
-        destroyingMessageStates.set(msg.id, {
+        registerMessageKeys(destroyingMessageIds, msg);
+        registerDestroyState(msg, {
           opacity: msg.opacity,
           remainTime: msg.remainTime,
-          fading: msg.fading
+          fading: msg.fading,
+          destroying: msg.destroying,
+          hideWhenFading: msg.hideWhenFading
         });
-        // 🔥 将fading消息也加入销毁记录，防止刷新时作为历史消息加载
-        destroyedMessageIds.add(msg.id);
         console.log('🔥 [防空白气泡-v1.3.75] 标记正在淡出的消息:', msg.id, msg.content);
+        // 🔥 不要将fading/destroying的消息加入destroyedMessageIds，否则会被过滤掉
+        // registerMessageKeys(destroyedMessageIds, msg);
+        // if (that.globalDestroyedMessageIds) {
+        //   registerMessageKeys(that.globalDestroyedMessageIds, msg);
+        // }
       }
     });
     
-    // 🔥 【URGENT-FIX】添加app级别的全局销毁记录中的消息ID
-    const app = getApp();
-    if (app.globalDestroyedMessageIds) {
-      app.globalDestroyedMessageIds.forEach(id => {
-        destroyedMessageIds.add(id);
-      });
-      console.log('🔥 [防重复加载] 从app级别全局记录添加:', app.globalDestroyedMessageIds.size, '条销毁记录');
-    }
-    
-    // 🔥 兼容页面级别的记录（backup）
     if (that.globalDestroyedMessageIds) {
       that.globalDestroyedMessageIds.forEach(id => {
         destroyedMessageIds.add(id);
@@ -5584,7 +5900,9 @@ Page({
             
             // 🔥 【B端头像修复】处理头像逻辑
             let avatar = null; // 默认不显示头像
-            const isFromInvite = that.data.isFromInvite;
+            const isFromInvite = (typeof that.isReceiverEnvironment === 'function')
+              ? that.isReceiverEnvironment()
+              : !!that.data.isFromInvite;
             
             if (msg.type === 'system') {
               avatar = null; // 系统消息不显示头像
@@ -5637,8 +5955,9 @@ Page({
             }
             
             // 🔥 保持原有的销毁状态
-            const wasDestroying = destroyingMessageIds.has(msg._id);
-            const destroyState = destroyingMessageStates.get(msg._id);
+            const messageStateKey = msg._id || msg.id;
+            const stateSnapshot = messageStateKey ? destroyingMessageStates.get(messageStateKey) : undefined;
+            const wasDestroying = (stateSnapshot && stateSnapshot.destroying) || (messageStateKey ? destroyingMessageIds.has(messageStateKey) : false);
             
             // 🔥 【HOTFIX-v1.3.67】B端立即过滤掉A端系统消息，防止刷新时重新出现
             if (msg.type === 'system' && isFromInvite) {
@@ -5654,33 +5973,39 @@ Page({
               }
             }
             
+            const systemLikeMsg = isSystemLikeMessage(msg);
             return {
               id: msg._id,
               senderId: msg.senderId, // 🔥 修复：保持原始senderId，不转换为self/other
               originalSenderId: msg.senderId, // 🔥 保留原始发送者ID用于调试
               isSelf: isSelf,
               content: msg.content,
-              type: msg.type,
+              type: msg.type || (systemLikeMsg ? 'system' : 'text'),
               time: msgTime,
               timeDisplay: msgTime,
               showTime: true, // 简化处理，都显示时间
               status: msg.status,
               destroyed: msg.destroyed,
               destroying: wasDestroying, // 🔥 保持原有的销毁状态
-              remainTime: destroyState?.remainTime || 0,
-              opacity: destroyState?.opacity !== undefined ? destroyState.opacity : 1,
+              fading: stateSnapshot?.fading || false,
+              hideWhenFading: stateSnapshot?.hideWhenFading || false,
+              remainTime: stateSnapshot?.remainTime || 0,
+              opacity: stateSnapshot?.opacity !== undefined ? stateSnapshot.opacity : 1,
               avatar: avatar,
-              isSystem: msg.type === 'system'
+              isSystem: systemLikeMsg,
+              isSystemMessage: systemLikeMsg
             };
           }).filter(msg => msg !== null); // 🔥 过滤掉已销毁的消息和B端不应看到的A端系统消息
           
           console.log(`🔍 处理后的消息数据 ${messages.length} 条:`, messages);
           
           // 🔥 【B端最终防线】setData前再次清理A端样式系统消息
-          if (that.data.isFromInvite) {
+          if ((typeof that.isReceiverEnvironment === 'function')
+            ? that.isReceiverEnvironment()
+            : !!that.data.isFromInvite) {
             const beforeCleanCount = messages.length;
             messages = messages.filter(m => {
-              if (!m || !m.isSystem || typeof m.content !== 'string') return true;
+              if (!m || !isSystemLikeMessage(m) || typeof m.content !== 'string') return true;
               // 移除A端样式"XX加入聊天"(但保留B端样式"加入XX的聊天")
               if (/^.+加入聊天$/.test(m.content) && !/^加入.+的聊天$/.test(m.content)) {
                 console.log('🧹 [B端setData前清理] 移除A端样式系统消息:', m.content);
@@ -5699,7 +6024,7 @@ Page({
           }
           
           // 🔥 【HOTFIX-v1.3.84】检查是否有系统消息，如果有则滚动到顶部
-          const hasSystemMessage = messages.some(msg => msg.isSystem || msg.senderId === 'system');
+          const hasSystemMessage = messages.some(msg => isSystemLikeMessage(msg));
           const scrollTarget = hasSystemMessage ? 'sys-0' : ''; // 如果有系统消息，滚动到第一个
           
           console.log('🔥 [滚动控制-v1.3.84] 消息列表中是否有系统消息:', hasSystemMessage);
@@ -5894,10 +6219,51 @@ Page({
   },
   /**
    * 发送消息
+   * @param {string} [contentOverride] - 可选的消息内容（用于重试发送）
    */
-  sendMessage: function () {
-    const content = this.data.inputValue.trim();
-    if (!content) return;
+  sendMessage: function (contentOverride) {
+    // 🔥 【鲁棒性】防止重复提交：检查是否正在发送中
+    if (this.data.isSending) {
+      console.warn('📤 [发送消息] 正在发送中，跳过重复提交');
+      return;
+    }
+
+    const isRetrySend = typeof contentOverride === 'string';
+    // 🔥 严格验证事件对象结构，防止非事件对象触发默认行为
+    const isEvent = !isRetrySend && 
+                   contentOverride && 
+                   typeof contentOverride === 'object' && 
+                   (contentOverride.type || contentOverride.detail || contentOverride.currentTarget);
+
+    const eventPayload = isEvent ? contentOverride : null;
+
+    let eventProvidedContent = '';
+    if (eventPayload) {
+      const candidateValue = eventPayload.detail?.value;
+      if (typeof candidateValue === 'string') {
+        eventProvidedContent = candidateValue;
+      } else if (typeof candidateValue === 'number') {
+        eventProvidedContent = String(candidateValue);
+      } else if (typeof eventPayload.currentTarget?.dataset?.value === 'string') {
+        eventProvidedContent = eventPayload.currentTarget.dataset.value;
+      }
+    }
+
+    const rawContent = isRetrySend
+      ? contentOverride
+      : (isEvent || !contentOverride ? (eventProvidedContent || this.data.inputValue) : '');
+    const content = (rawContent || '').trim();
+    
+    if (!content) {
+      if (isRetrySend) {
+        console.warn('📤 [重试发送] 提供的消息内容为空，已跳过重试');
+      }
+      // 🔥 如果是因为内容为空返回，也要确保状态重置（虽然此时还没有设置isSending，但为了保险）
+      if (this.data.isSending) {
+        this.setData({ isSending: false });
+      }
+      return;
+    }
 
     // 🔥 【CRITICAL-FIX-v4】记录消息发送时间，防止参与者监听器误触发
     const messageTime = Date.now();
@@ -5928,9 +6294,16 @@ Page({
       console.warn('🔧 [发送验证] ⚠️ 用户ID缺失或无效，尝试修复');
       
       // 🔥 【HOTFIX-v1.3.46】尝试从多个来源恢复有效的用户ID
-      const fallbackOpenId = app.globalData?.openId || 
-                            wx.getStorageSync('openId') || 
-                            'ojtOs7bmxy-8M5wOTcgrqlYedgyY'; // 使用已知的有效用户ID作为最后备用
+      const fallbackOpenId = app.globalData?.openId || wx.getStorageSync('openId');
+      if (!fallbackOpenId) {
+        console.error('🔧 [发送验证] ❌ 无法恢复openId，终止发送');
+        wx.showToast({
+          title: '用户信息异常，请重新登录',
+          icon: 'none'
+        });
+        this.setData({ isSending: false });
+        return;
+      }
       
       const fallbackUserInfo = app.globalData?.userInfo || 
                               wx.getStorageSync('userInfo') || 
@@ -5958,8 +6331,35 @@ Page({
       console.error('🔧 [发送验证] ❌ 用户ID修复失败，可能导致消息归属问题');
       console.error('🔧 [发送验证] currentUser:', currentUser);
       console.error('🔧 [发送验证] app.globalData.userInfo:', app.globalData.userInfo);
+      this.setData({ isSending: false }); // 🔥 异常返回前清除发送标记
       return; // 🔥 阻止发送消息，避免senderId为undefined
     }
+
+    // 🔥 【HOTFIX-v1.3.29】强化用户信息验证和传递
+    console.log('🔥 [发送消息] 用户信息详细验证:');
+    console.log('🔥 [发送消息] currentUser:', currentUser);
+    console.log('🔥 [发送消息] app.globalData.userInfo:', app.globalData.userInfo);
+    console.log('🔥 [发送消息] 存储中的用户信息:', wx.getStorageSync('userInfo'));
+    console.log('🔥 [发送消息] 存储中的openId:', wx.getStorageSync('openId'));
+    
+    // 🔥 严格验证用户信息
+    if (!currentUser || !currentUser.openId || !currentUser.nickName) {
+      console.error('🔥 [发送消息] ❌ 用户信息不完整，可能导致发送失败');
+      wx.showToast({
+        title: '用户信息异常，请重新登录',
+        icon: 'none'
+      });
+      this.setData({ isSending: false }); // 🔥 异常返回前清除发送标记
+      return;
+    }
+    
+    // 🔥 确保用户信息准确性
+    const validatedUserInfo = {
+      nickName: currentUser.nickName,
+      avatarUrl: currentUser.avatarUrl || '/assets/images/default-avatar.png'
+    };
+    
+    console.log('🔥 [发送消息] 验证后的用户信息:', validatedUserInfo);
 
     // 创建新消息对象
     const newMessage = {
@@ -5981,45 +6381,22 @@ Page({
 
     // 添加到消息列表
     const messages = this.data.messages.concat(newMessage);
-    
-    this.setData({
+    const nextState = {
       messages: messages,
-      inputValue: ''
-    });
-
-    // 🔧 保持键盘展开：聚焦输入框，同时不重置 keyboardHeight
-    try {
-      this.keepKeyboardOpenOnSend = true; // 标记一次发送会话内保持展开
-      this.setData({ inputFocus: true });
-    } catch (e) {}
+      inputFocus: true,
+      keepKeyboardOpenOnSend: true,
+      isSending: true // 🔥 标记正在发送
+    };
+    
+    // 仅在用户主动发送时清空输入框，重试发送保留正在编辑的文本
+    if (!isRetrySend) {
+      nextState.inputValue = '';
+    }
+    
+    this.setData(nextState);
 
     // 滚动到底部
     this.scrollToBottom();
-
-    // 🔥 【HOTFIX-v1.3.29】强化用户信息验证和传递
-    console.log('🔥 [发送消息] 用户信息详细验证:');
-    console.log('🔥 [发送消息] currentUser:', currentUser);
-    console.log('🔥 [发送消息] app.globalData.userInfo:', app.globalData.userInfo);
-    console.log('🔥 [发送消息] 存储中的用户信息:', wx.getStorageSync('userInfo'));
-    console.log('🔥 [发送消息] 存储中的openId:', wx.getStorageSync('openId'));
-    
-    // 🔥 严格验证用户信息
-    if (!currentUser || !currentUser.openId || !currentUser.nickName) {
-      console.error('🔥 [发送消息] ❌ 用户信息不完整，可能导致发送失败');
-      wx.showToast({
-        title: '用户信息异常，请重新登录',
-        icon: 'none'
-      });
-      return;
-    }
-    
-    // 🔥 确保用户信息准确性
-    const validatedUserInfo = {
-      nickName: currentUser.nickName,
-      avatarUrl: currentUser.avatarUrl || '/assets/images/default-avatar.png'
-    };
-    
-    console.log('🔥 [发送消息] 验证后的用户信息:', validatedUserInfo);
 
     // 🔥 使用云函数发送消息 - 传递chatId而不是receiverId
     wx.cloud.callFunction({
@@ -6034,6 +6411,10 @@ Page({
       },
       success: res => {
         console.log('📤 发送消息成功', res);
+        
+        // 🔥 发送完成后清除发送标记
+        this.setData({ isSending: false });
+
         if (res.result && res.result.success) {
           // 更新本地消息状态为已发送
           const updatedMessages = this.data.messages.map(msg => {
@@ -6041,7 +6422,7 @@ Page({
               return { 
                 ...msg, 
                 status: 'sent',
-                id: res.result.messageId // 使用云端返回的消息ID
+                  id: res.result.messageId || newMessage.id // 使用云端返回的消息ID，若不存在则保留本地ID
               };
             }
             return msg;
@@ -6077,6 +6458,8 @@ Page({
       },
       fail: err => {
         console.error('📤 发送消息失败', err);
+        // 🔥 发送失败也要清除发送标记
+        this.setData({ isSending: false });
         // 发送失败
         this.showMessageError(newMessage.id);
       }
@@ -7207,6 +7590,19 @@ Page({
       this.chatCreationTimer = null;
     }
     
+    // 🔥 【鲁棒性】清理标题重试定时器
+    if (this.bEndTitleRetryTimer) {
+      clearInterval(this.bEndTitleRetryTimer);
+      this.bEndTitleRetryTimer = null;
+    }
+    
+    // 🔥 【鲁棒性】清理销毁倒计时映射
+    if (this.destroyTimers) {
+      this.destroyTimers.forEach(timer => clearInterval(timer));
+      this.destroyTimers.clear();
+      this.destroyTimers = null;
+    }
+    
     // 清除参与者监听器
     if (this.participantWatcher) {
       this.participantWatcher.close();
@@ -7543,12 +7939,14 @@ Page({
                         
                         if (!messageExists) {
                           // 🔥 【1008聚焦修复】仅用严格ID判断是否为自己消息，避免误判导致B端收不到A端消息
-                          const isMyMessageStrict = newMessage.senderId === currentUserId;
+                          const isMyMessage = this.isMessageFromCurrentUser(newMessage.senderId, currentUserId);
+                          const isMyMessageStrict = Boolean(currentUserId) && newMessage.senderId === currentUserId;
                           
                           console.log('🔔 [新消息处理] 身份判断:', {
                             senderId: newMessage.senderId,
                             currentUserId: currentUserId,
-                            isMyMessage: isMyMessage,
+                            isMyMessage,
+                            isMyMessageStrict,
                             content: newMessage.content
                           });
                           
@@ -7581,14 +7979,17 @@ Page({
                           }
                           
                           // 格式化新消息
+                          const systemLike = isSystemLikeMessage(newMessage);
                           const formattedMessage = {
                             id: newMessage._id,
                             senderId: newMessage.senderId,
                             content: newMessage.content,
                             timestamp: newMessage.timestamp || Date.now(),
-                            isSelf: newMessage.senderId === currentUserId,
-                            isSystem: newMessage.senderId === 'system',
-                            destroyTimeout: newMessage.destroyTimeout || 10,
+                            isSelf: isMyMessageStrict,
+                            type: newMessage.type || (systemLike ? 'system' : newMessage.type),
+                            isSystem: systemLike,
+                            isSystemMessage: systemLike,
+                            destroyTimeout: newMessage.destroyTimeout || this.data.destroyTimeout || DEFAULT_DESTROY_TIMEOUT,
                             isDestroyed: newMessage.destroyed || false
                           };
                           
@@ -7678,14 +8079,17 @@ Page({
                             }
                           }
                           
+                          const systemLikeMsg = isSystemLikeMessage(message);
                           const formattedMessage = {
                             id: message._id,
                             senderId: message.senderId,
                             content: message.content,
                             timestamp: message.timestamp || Date.now(),
                             isSelf: this.isMessageFromCurrentUser(message.senderId, currentUser?.openId),
-                            isSystem: message.senderId === 'system',
-                            destroyTimeout: message.destroyTimeout || 10,
+                            type: message.type || (systemLikeMsg ? 'system' : message.type),
+                            isSystem: systemLikeMsg,
+                            isSystemMessage: systemLikeMsg,
+                            destroyTimeout: message.destroyTimeout || this.data.destroyTimeout || DEFAULT_DESTROY_TIMEOUT,
                             isDestroyed: message.destroyed || false
                           };
                           
@@ -9488,9 +9892,9 @@ Page({
          name: 'sendMessage',
          data: {
            chatId: chatId,
-           content: '你好，我是向冬',
-           type: 'text',
-           destroyTimeout: 10
+          content: '你好，我是向冬',
+          type: 'text',
+          destroyTimeout: DEFAULT_DESTROY_TIMEOUT
          },
          success: (res) => {
            console.log('🔧 [调试] 向冬的消息发送成功:', res);
@@ -11727,37 +12131,26 @@ cleanupStaleData: function() {
    permanentlyDeleteMessage: function(messageId) {
      console.log('🗑️ [彻底删除] 永久删除消息:', messageId);
      
+     // 🔥 确保存储键已初始化
+     this.ensureDestroyedMessageStore();
+     
     // 🔥 【URGENT-FIX】确保销毁记录被持久化保存
-    const app = getApp();
-    
-    // 添加到app级别的全局记录
-    if (!app.globalDestroyedMessageIds) {
-      app.globalDestroyedMessageIds = new Set();
-    }
-    app.globalDestroyedMessageIds.add(messageId);
-    
-    // 添加到页面级别的引用
-     if (this.globalDestroyedMessageIds) {
-       this.globalDestroyedMessageIds.add(messageId);
-    }
+    const globalSet = this.globalDestroyedMessageIds || new Set();
+    globalSet.add(messageId);
+    this.globalDestroyedMessageIds = globalSet;
     
     // 🔥 【关键修复】同步保存到本地存储，确保持久化
     try {
-      let destroyedIds = Array.from(app.globalDestroyedMessageIds);
+      let destroyedIds = Array.from(globalSet);
       // 🔧 限制记录上限，防止无限增长（就地裁剪，保持引用不变）
       if (destroyedIds.length > SYSTEM_MESSAGE_DEFAULTS.MAX_DESTROY_RECORDS) {
         const trimmed = destroyedIds.slice(destroyedIds.length - SYSTEM_MESSAGE_DEFAULTS.MAX_DESTROY_RECORDS);
-        // 清空并回填全局Set
-        app.globalDestroyedMessageIds.clear();
-        trimmed.forEach(id => app.globalDestroyedMessageIds.add(id));
-        // 同步页面引用的Set
-        if (this.globalDestroyedMessageIds) {
-          this.globalDestroyedMessageIds.clear();
-          trimmed.forEach(id => this.globalDestroyedMessageIds.add(id));
-        }
+        globalSet.clear();
+        trimmed.forEach(id => globalSet.add(id));
         destroyedIds = trimmed;
       }
-      wx.setStorageSync('destroyedMessageIds', destroyedIds);
+      const storageKey = this.destroyedStoreKey || 'destroyedMessageIds';
+      wx.setStorageSync(storageKey, destroyedIds);
       console.log('🗑️ [彻底删除] 已保存到本地存储，总计:', destroyedIds.length, '条销毁记录');
     } catch (e) {
       console.error('🗑️ [彻底删除] 本地存储保存失败:', e);
@@ -13715,8 +14108,8 @@ cleanupStaleData: function() {
          content: '测试b端消息销毁功能',
          timestamp: Date.now(),
          isSelf: false,
-         isSystem: false,
-         destroyTimeout: 10,
+        isSystem: false,
+        destroyTimeout: DEFAULT_DESTROY_TIMEOUT,
          isDestroyed: false,
          destroying: false,
          remainTime: 0,

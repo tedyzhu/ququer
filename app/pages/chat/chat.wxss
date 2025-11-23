@@ -153,10 +153,11 @@ page {
   flex-direction: column;
   /* 🔥 使用固定视窗高度，不受键盘影响 */
   height: 100vh;
+  min-height: 100vh;
   width: 100vw;
   background-color: #ededed;
-  /* 🔥 使用absolute定位，相对于fixed的page元素 */
-  position: absolute;
+  /* 🔥 使用fixed定位，彻底锁定在视窗内，防止页面滚动时标题被顶出 */
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
@@ -458,17 +459,19 @@ page {
   font-size: 28rpx;
 }
 
-.send-btn {
-  min-width: 112rpx;
-  height: 72rpx;
-  background-color: #07C160;
-  color: #ffffff;
-  font-size: 28rpx;
-  border-radius: 8rpx;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-left: 16rpx;
+.send-btn,
+.send-button,
+button[type="primary"],
+.input-container button,
+.input-container .send-btn {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* 创建聊天状态覆盖层 */

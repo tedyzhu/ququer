@@ -46,7 +46,7 @@ exports.main = async (event, context) => {
       destroyed: false,
       viewTime: null,
       destroyTime: null,
-      destroyTimeout: event.destroyTimeout || 10
+      destroyTimeout: event.destroyTimeout || 30
     };
     
     console.log('🔥 [sendMessage] 准备保存消息:', messageData);
