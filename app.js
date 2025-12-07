@@ -304,7 +304,20 @@ App({
             },
             fail: function (err) {
               // openId获取失败，但仍然有用户信息
-              console.log('未能获取openId，但用户信息有效，可能需要重新登录');
+        console.log('未能获取openId，尝试通过云函数重新登录');
+        that.performCloudLogin()
+          .then((user) => {
+            console.log('云函数登录成功，更新登录时间');
+            that.updateUserLoginTime(user);
+          })
+          .catch((loginErr) => {
+            console.error('云函数登录失败，清除登录状态并提示重新登录:', loginErr);
+            that.cleanLoginStatus();
+            wx.showToast({
+              title: '需要重新登录',
+              icon: 'none'
+            });
+          });
             }
           });
         } else {
@@ -315,7 +328,15 @@ App({
       fail: function (err) {
         // 静默处理未登录状态，不输出错误
         console.log('用户尚未登录（未找到用户信息）');
-        that.cleanLoginStatus();
+      that.cleanLoginStatus();
+      that.performCloudLogin()
+        .then((user) => {
+          console.log('云函数登录成功，更新登录时间');
+          that.updateUserLoginTime(user);
+        })
+        .catch((loginErr) => {
+          console.error('云函数登录失败，保持未登录状态:', loginErr);
+        });
       }
     });
   },
@@ -757,6 +778,18 @@ App({
     if (pendingInvite && (pendingInvite.inviteId || pendingInvite.chatId)) {
       console.log('[邀请流程] 检测到本地存储的邀请:', pendingInvite);
       
+      // 🔥 时效校验：超过15分钟或时间异常（未来时间>5分钟）则清理
+      const now = Date.now();
+      const ts = Number(pendingInvite.timestamp || 0);
+      const maxAge = 15 * 60 * 1000; // 15分钟
+      const isFuture = ts && ts - now > 5 * 60 * 1000; // 未来超过5分钟
+      const isExpired = !ts || now - ts > maxAge || isFuture;
+      if (isExpired) {
+        console.log('[邀请流程] 本地邀请已过期或时间异常，执行清理');
+        this.clearInviteInfo();
+        return null;
+      }
+      
       // 🔥 确保兼容性，如果只有chatId没有inviteId，则复制chatId到inviteId
       if (!pendingInvite.inviteId && pendingInvite.chatId) {
         pendingInvite.inviteId = pendingInvite.chatId;
@@ -823,5 +856,54 @@ App({
     } catch (e) {
       console.error('清除登录存储数据失败:', e);
     }
+  },
+
+  /**
+   * 调用云函数登录，确保获取真实 openId 并缓存
+   * @returns {Promise<Object>} 用户信息
+   */
+  performCloudLogin: function() {
+    return new Promise((resolve, reject) => {
+      if (!wx.cloud) {
+        const error = new Error('wx.cloud 不可用，无法登录');
+        console.error(error);
+        reject(error);
+        return;
+      }
+
+      wx.cloud.callFunction({
+        name: 'login',
+        data: {},
+        success: (res) => {
+          const userInfo = res?.result?.userInfo;
+          const openId = userInfo?.openId;
+
+          if (!openId) {
+            const error = new Error('login 云函数未返回 openId');
+            console.warn(error);
+            reject(error);
+            return;
+          }
+
+          this.globalData.userInfo = userInfo;
+          this.globalData.openId = openId;
+          this.globalData.hasLogin = true;
+
+          try {
+            wx.setStorageSync('userInfo', userInfo);
+            wx.setStorageSync('openId', openId);
+          } catch (storageError) {
+            console.warn('写入本地缓存失败，但继续使用云端登录结果', storageError);
+          }
+
+          console.log('通过云函数登录成功，openId:', openId);
+          resolve(userInfo);
+        },
+        fail: (err) => {
+          console.error('云函数登录失败:', err);
+          reject(err);
+        }
+      });
+    });
   }
 }) 

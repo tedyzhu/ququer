@@ -2522,6 +2522,12 @@ Page({
             return false;
           }
         }
+
+        // 🔒 无论端别，统一移除占位符格式的B端加入消息（如“加入用户的聊天”）
+        if (isPlaceholderJoinMessage(msg.content)) {
+          console.log('🔥 [垃圾数据清理-v4] 移除占位符加入消息:', msg.content);
+          return false;
+        }
         
         // 🔥 【系统消息过滤】过滤错误格式的系统消息
         const shouldRemove = 
@@ -2540,8 +2546,6 @@ Page({
           // 移除重复的"朋友已加入聊天"类型消息
           msg.content === '朋友已加入聊天' ||
           msg.content === '朋友已加入聊天！' ||
-          // 移除占位符格式的B端加入消息
-          isPlaceholderJoinMessage(msg.content) ||
           // 移除格式错误的系统消息
           (msg.content.includes('系统') && msg.content.length < 3);
         
@@ -3315,6 +3319,20 @@ Page({
     const messages = this.data.messages || [];
     const participants = this.data.participants || [];
     let changed = false;
+
+    // 🔒 全局预清理：无论端别，移除占位符格式的加入消息（如“加入用户的聊天”）
+    const placeholderFiltered = (messages || []).filter(m => {
+      if (!m || !isSystemLikeMessage(m) || !m.content) return true;
+      if (isPlaceholderJoinMessage(m.content)) {
+        console.log('🔥 [系统消息预清理] 移除占位符加入消息:', m.content);
+        return false;
+      }
+      return true;
+    });
+    if (placeholderFiltered.length !== messages.length) {
+      this.setData({ messages: placeholderFiltered });
+      changed = true;
+    }
 
     if (isReceiverEnv) {
       // ever：若已显示过B端加入提示，直接返回，防止重复
@@ -4865,7 +4883,7 @@ Page({
   /**
    * 🔥 获取聊天参与者信息（包含真实昵称）
    */
-  fetchChatParticipantsWithRealNames: function(force = false) {
+  fetchChatParticipantsWithRealNames: async function(force = false) {
     const chatId = this.data.contactId;
     if (!chatId) return;
 
@@ -4912,27 +4930,44 @@ Page({
             app.globalData.openId = savedOpenId;
             this.setData({ currentUser });
             console.log('👥 [真实昵称] 用户信息恢复成功:', currentUser);
-          } else {
-            // 使用默认接收方信息
-            currentUser = {
-              nickName: 'Y.',
-              openId: 'ojtOs7bmxy-8M5wOTcgrqlYedgyY',
-              avatarUrl: '/assets/images/default-avatar.png'
-            };
-            app.globalData.userInfo = currentUser;
-            app.globalData.openId = currentUser.openId;
-            this.setData({ currentUser });
-            console.log('👥 [真实昵称] 使用默认接收方信息:', currentUser);
           }
         } catch (e) {
           console.error('👥 [真实昵称] 恢复用户信息失败:', e);
-          currentUser = {
-            nickName: 'Y.',
-            openId: 'ojtOs7bmxy-8M5wOTcgrqlYedgyY',
-            avatarUrl: '/assets/images/default-avatar.png'
-          };
-          this.setData({ currentUser });
         }
+      }
+    }
+
+    // 兜底：调用login云函数获取真实openId，避免使用硬编码占位用户
+    if (!currentUser || !currentUser.openId) {
+      console.log('👥 [真实昵称] 本地恢复失败，调用login云函数获取openId');
+      try {
+        const loginRes = await wx.cloud.callFunction({ name: 'login' });
+        const loginUserInfo = loginRes?.result?.userInfo;
+        const resolvedOpenId = loginUserInfo?.openId;
+
+        if (!resolvedOpenId) {
+          console.warn('👥 [真实昵称] login云函数未返回openId，终止本次获取参与者流程');
+          return;
+        }
+
+        currentUser = {
+          ...(currentUser || {}),
+          ...loginUserInfo,
+          openId: resolvedOpenId
+        };
+        app.globalData.userInfo = currentUser;
+        app.globalData.openId = resolvedOpenId;
+        this.setData({ currentUser });
+        try {
+          wx.setStorageSync('userInfo', currentUser);
+          wx.setStorageSync('openId', resolvedOpenId);
+        } catch (storageErr) {
+          console.warn('⚠️ [真实昵称] 写入用户信息到本地存储失败:', storageErr);
+        }
+        console.log('👥 [真实昵称] 通过login云函数获取并缓存用户信息:', currentUser);
+      } catch (loginErr) {
+        console.error('👥 [真实昵称] login云函数调用失败，终止本次参与者获取:', loginErr);
+        return;
       }
     }
 
