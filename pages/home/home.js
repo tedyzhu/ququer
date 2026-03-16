@@ -123,9 +123,9 @@ Page({
    * 获取状态栏高度
    */
   getStatusBarHeight: function() {
-    const systemInfo = wx.getSystemInfoSync();
+    const windowInfo = wx.getWindowInfo();
     this.setData({
-      statusBarHeight: systemInfo.statusBarHeight
+      statusBarHeight: windowInfo.statusBarHeight
     });
   },
 

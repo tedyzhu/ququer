@@ -3,44 +3,44 @@
   "packOptions": {
     "ignore": [
       {
-        "type": "file",
-        "value": "app/pages/chat/chat-backup.js"
+        "value": "app/pages/chat/chat-backup.js",
+        "type": "file"
       },
       {
-        "type": "file",
-        "value": "app/pages/chat/chat-safe.js"
+        "value": "app/pages/chat/chat-safe.js",
+        "type": "file"
       },
       {
-        "type": "file",
-        "value": "messageReceiveFix.js"
+        "value": "messageReceiveFix.js",
+        "type": "file"
       },
       {
-        "type": "file",
-        "value": "chatIdFixTool.js"
+        "value": "chatIdFixTool.js",
+        "type": "file"
       },
       {
-        "type": "folder",
-        "value": "pages/debug"
+        "value": "pages/debug",
+        "type": "folder"
       },
       {
-        "type": "folder",
-        "value": "pages/test"
+        "value": "pages/test",
+        "type": "folder"
       },
       {
-        "type": "folder",
-        "value": "pages/test-share"
+        "value": "pages/test-share",
+        "type": "folder"
       },
       {
-        "type": "folder",
-        "value": "pages/test-share-fix"
+        "value": "pages/test-share-fix",
+        "type": "folder"
       },
       {
-        "type": "folder",
-        "value": "pages/test-encoding"
+        "value": "pages/test-encoding",
+        "type": "folder"
       },
       {
-        "type": "glob",
-        "value": "temp_*.js"
+        "value": "temp_*.js",
+        "type": "glob"
       }
     ],
     "include": []

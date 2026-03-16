@@ -178,6 +178,12 @@
   height: 40rpx;
 }
 
+.icon-text {
+  font-size: 40rpx;
+  line-height: 1;
+  text-align: center;
+}
+
 .message-input {
   flex: 1;
   height: 72rpx;

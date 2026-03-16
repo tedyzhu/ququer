@@ -104,7 +104,7 @@
   <!-- 底部输入区域 -->
   <view class="input-container" style="bottom: {{keyboardHeight}}px;">
     <view class="voice-btn" bindtap="toggleVoiceInput">
-      <image class="icon" src="/assets/images/mic.png" mode="aspectFit"></image>
+      <text class="icon-text">🎤</text>
     </view>
     
     <input
@@ -125,11 +125,11 @@
     />
     
     <view class="emoji-btn" bindtap="openEmojiPicker">
-      <image class="icon" src="/assets/images/emoji.png" mode="aspectFit"></image>
+      <text class="icon-text">😊</text>
     </view>
     
     <view class="more-btn" bindtap="openMoreFunctions">
-      <image class="icon" src="/assets/images/more.png" mode="aspectFit"></image>
+      <text class="icon-text">＋</text>
     </view>
   </view>
 </view> 

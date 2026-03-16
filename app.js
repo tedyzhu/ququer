@@ -262,11 +262,16 @@ App({
    * 检查用户是否已登录
    */
   checkLoginStatus: function () {
-    // 如果全局数据中已有登录状态，直接使用
     if (this.globalData.hasLogin && this.globalData.userInfo) {
       console.log('全局数据中已有登录状态，无需重新检查');
       return true;
     }
+    
+    if (this._loginCheckInProgress) {
+      console.log('登录检查正在进行中，跳过重复调用');
+      return false;
+    }
+    this._loginCheckInProgress = true;
     
     console.log('开始检查登录状态...');
     
@@ -280,63 +285,59 @@ App({
           console.log('从本地存储获取到用户信息:', res.data.nickName);
           that.globalData.userInfo = res.data;
           that.globalData.hasLogin = true;
+          that._loginCheckInProgress = false;
           
-          // 再尝试获取openId
           wx.getStorage({
             key: 'openId',
             success: function (openIdRes) {
               console.log('从本地存储获取到openId:', openIdRes.data);
               that.globalData.openId = openIdRes.data;
               
-              // 确保用户信息中包含openId
               if (!that.globalData.userInfo.openId && that.globalData.openId) {
                 that.globalData.userInfo.openId = that.globalData.openId;
-                
-                // 更新存储
                 wx.setStorage({
                   key: 'userInfo',
                   data: that.globalData.userInfo
                 });
               }
               
-              // 更新用户登录时间
               that.updateUserLoginTime(that.globalData.userInfo);
             },
             fail: function (err) {
-              // openId获取失败，但仍然有用户信息
-        console.log('未能获取openId，尝试通过云函数重新登录');
+              console.log('未能获取openId，尝试通过云函数重新登录');
+              that.performCloudLogin()
+                .then((user) => {
+                  console.log('云函数登录成功，更新登录时间');
+                  that.updateUserLoginTime(user);
+                })
+                .catch((loginErr) => {
+                  console.error('云函数登录失败，清除登录状态并提示重新登录:', loginErr);
+                  that.cleanLoginStatus();
+                  wx.showToast({
+                    title: '需要重新登录',
+                    icon: 'none'
+                  });
+                });
+            }
+          });
+        } else {
+          console.log('本地存储中的用户信息无效');
+          that.cleanLoginStatus();
+          that._loginCheckInProgress = false;
+        }
+      },
+      fail: function (err) {
+        console.log('用户尚未登录（未找到用户信息）');
+        that.cleanLoginStatus();
+        that._loginCheckInProgress = false;
         that.performCloudLogin()
           .then((user) => {
             console.log('云函数登录成功，更新登录时间');
             that.updateUserLoginTime(user);
           })
           .catch((loginErr) => {
-            console.error('云函数登录失败，清除登录状态并提示重新登录:', loginErr);
-            that.cleanLoginStatus();
-            wx.showToast({
-              title: '需要重新登录',
-              icon: 'none'
-            });
+            console.error('云函数登录失败，保持未登录状态:', loginErr);
           });
-            }
-          });
-        } else {
-          console.log('本地存储中的用户信息无效');
-          that.cleanLoginStatus();
-        }
-      },
-      fail: function (err) {
-        // 静默处理未登录状态，不输出错误
-        console.log('用户尚未登录（未找到用户信息）');
-      that.cleanLoginStatus();
-      that.performCloudLogin()
-        .then((user) => {
-          console.log('云函数登录成功，更新登录时间');
-          that.updateUserLoginTime(user);
-        })
-        .catch((loginErr) => {
-          console.error('云函数登录失败，保持未登录状态:', loginErr);
-        });
       }
     });
   },

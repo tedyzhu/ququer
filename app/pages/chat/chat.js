@@ -260,7 +260,7 @@ Page({
     scrollTop: 0,
     isLoading: false, // 🔧 修改：默认不显示loading，保持界面简洁
     scrollIntoView: '',
-    chatTitle: '你和jerala(2)', // 聊天标题
+    chatTitle: '', // 聊天标题（动态设置）
     dynamicTitle: '', // 动态标题
     // 阅后即焚倒计时配置（秒）
     destroyTimeout: DEFAULT_DESTROY_TIMEOUT,
@@ -380,8 +380,8 @@ Page({
           console.log('🔥 标题栏位置信息 - top:', rect.top, 'left:', rect.left);
           
           // 🔥 如果标题栏不在顶部（考虑安全区），强制修复
-          const systemInfo = wx.getSystemInfoSync();
-          const safeAreaTop = systemInfo.safeArea ? systemInfo.safeArea.top : 0;
+          const windowInfo = wx.getWindowInfo();
+          const safeAreaTop = windowInfo.safeArea ? windowInfo.safeArea.top : 0;
           
           // 标题栏应该在安全区顶部
           if (rect.top < 0 || rect.top > safeAreaTop + 5) {
@@ -444,8 +444,8 @@ Page({
           const safeAreaInsetBottom = 0; // 由样式中 env() 解决，这里仅做 Fallback
           // 使用较小的基础工具栏高度，并在下方用实际测量进行校正
           const baseToolbarHeight = 60; // 约等于 ~120rpx 的 px 值
-          // 消息区底部只需要留出工具栏本身的高度，不再叠加键盘高度，避免出现大面积空白
-          const bottomPaddingPx = baseToolbarHeight + safeAreaInsetBottom;
+          // 🔥 叠加键盘高度，确保键盘弹起时消息区有足够底部留白，不会顶出标题
+          const bottomPaddingPx = baseToolbarHeight + safeHeight + safeAreaInsetBottom;
           this.setData({
             keyboardHeight: safeHeight,
             extraBottomPaddingPx: 0,
@@ -459,6 +459,8 @@ Page({
             } else if (safeHeight > 0 && this.data.hasSystemMessage) {
               console.log('🔥 [系统消息保护-v1.3.80] 检测到系统消息，跳过键盘滚动');
             }
+            // 🔥 强制保持页面不被整体上推，锁定顶部位置
+            wx.pageScrollTo({ scrollTop: 0, duration: 0 });
             // 使用实际DOM高度微调消息区底部留白，确保与输入栏高度一致
             wx.nextTick(() => {
               try {
@@ -485,7 +487,7 @@ Page({
     const app = getApp();
     
     // 检查云环境是否已初始化
-    if (!app.cloudInitialized) {
+    if (!app.globalData.cloudInitialized) {
       console.log('云环境未初始化，开始初始化...');
       app.initCloud();
     }
@@ -1246,7 +1248,7 @@ Page({
         isCreator: !finalIsFromInvite
       }], // 🔥 初始化参与者列表，包含当前用户完整信息
       // 🔥 在开发环境开启调试模式
-      isDebugMode: wx.getSystemInfoSync().platform === 'devtools',
+      isDebugMode: wx.getAppBaseInfo().platform === 'devtools',
       // 🔥 【HOTFIX-v1.3.44c】禁用过时的身份修复弹窗，身份判断已修复
       shouldShowIdentityFix: false
     });
@@ -3933,69 +3935,8 @@ Page({
      const otherParticipant = participants.find(p => (p.openId || p.id) !== currentUserOpenId);
      
      if (otherParticipant && otherParticipant.nickName === '用户') {
-       console.log('🔧 [昵称修复] 发现对方昵称为"用户"，尝试修复');
-       
-       // 检查特定用户ID并强制修复
-       if (otherParticipant.openId === 'ojtOs7bmxy-8M5wOTcgrqlYedgyY') {
-         console.log('🔧 [昵称修复] 强制修复特定用户昵称: Y.');
-         
-         // 更新本地显示
-         const updatedParticipants = participants.map(p => {
-           if ((p.openId || p.id) === 'ojtOs7bmxy-8M5wOTcgrqlYedgyY') {
-             return {
-               ...p,
-               nickName: 'Y.',
-               name: 'Y.'
-             };
-           }
-           return p;
-         });
-         
-         // 更新页面数据
-         this.setData({
-           participants: updatedParticipants
-         });
-         
-         // 更新标题
-         setTimeout(() => {
-           this.updateDynamicTitleWithRealNames();
-         }, 100);
-         
-         // 更新数据库
-         this.updateSpecificUserInfo('ojtOs7bmxy-8M5wOTcgrqlYedgyY', 'Y.');
-         
-         console.log('🔧 [昵称修复] Y. 修复完成');
-       } else if (otherParticipant.openId.startsWith('local_') && otherParticipant.openId.includes('1749384362104')) {
-         // 🔧 修复发送方"向冬"的昵称显示问题
-         console.log('🔧 [昵称修复] 强制修复发送方昵称: 向冬');
-         
-         // 更新本地显示
-         const updatedParticipants = participants.map(p => {
-           if ((p.openId || p.id).includes('1749384362104')) {
-             return {
-               ...p,
-               nickName: '向冬',
-               name: '向冬'
-             };
-           }
-           return p;
-         });
-         
-         // 更新页面数据
-         this.setData({
-           participants: updatedParticipants
-         });
-         
-         // 更新标题
-         setTimeout(() => {
-           this.updateDynamicTitleWithRealNames();
-         }, 100);
-         
-         // 更新数据库
-         this.updateSpecificUserInfo(otherParticipant.openId, '向冬');
-         
-         console.log('🔧 [昵称修复] 向冬 修复完成');
-       } else {
+       console.log('🔧 [昵称修复] 发现对方昵称为"用户"，尝试从URL参数或存储修复');
+       {
          console.log('🔧 [昵称修复] 尝试从URL参数或本地存储获取正确昵称');
          
          // 🔧 尝试从URL参数获取邀请者信息
@@ -5767,6 +5708,29 @@ Page({
             messages: allMessages,
             isLoading: false
           });
+
+        // 🔥 补偿：为仍未进入销毁流程的普通消息启动倒计时（防止刷新后计时丢失）
+        setTimeout(() => {
+          const currentUserId = that.data.currentUser?.openId;
+          const msgs = that.data.messages || [];
+          msgs.forEach(m => {
+            if (
+              m &&
+              !m.isSystem &&
+              m.senderId !== 'system' &&
+              !m.destroyed &&
+              !m.destroying &&
+              !m.fading &&
+              m.id &&
+              (!that.destroyTimers || !that.destroyTimers.has(m.id))
+            ) {
+              // 自己或对方的普通消息都应按规则销毁
+              try { that.startDestroyCountdown(m.id); } catch (e) {
+                console.warn('⚠️ [销毁补偿] 启动倒计时失败:', m.id, e);
+              }
+            }
+          });
+        }, 200); // 给setData一次渲染时间
           
           // 🔥 【系统消息修复-v2】消息获取后进行额外清理
           setTimeout(() => {
@@ -5921,9 +5885,23 @@ Page({
         if (res.result && res.result.success) {
           // 处理消息数据
           const messages = res.result.messages.map(msg => {
-            // 🔥 检查是否是已销毁的消息，如果是则跳过
-            if (destroyedMessageIds.has(msg._id)) {
-              console.log('🔥 [防重复加载] 跳过已销毁的消息:', msg.content);
+            // 🔥 标准化ID集合，便于判重/过滤
+            const msgKeyIds = [];
+            if (msg._id) msgKeyIds.push(msg._id);
+            if (msg.id && msg.id !== msg._id) msgKeyIds.push(msg.id);
+
+            // 🔥 记录服务端的destroyed标记，避免回流
+            if (msg.destroyed === true) {
+              msgKeyIds.forEach(id => {
+                destroyedMessageIds.add(id);
+                if (that.globalDestroyedMessageIds) that.globalDestroyedMessageIds.add(id);
+              });
+            }
+
+            // 🔥 检查是否为已销毁/正在销毁的消息，直接跳过
+            const isDestroyedOrMarked = msg.destroyed === true || msgKeyIds.some(id => destroyedMessageIds.has(id));
+            if (isDestroyedOrMarked) {
+              console.log('🔥 [防重复加载] 跳过已销毁/标记销毁的消息:', msg.content, msgKeyIds);
               return null; // 标记为跳过
             }
             
@@ -6032,7 +6010,18 @@ Page({
             };
           }).filter(msg => msg !== null); // 🔥 过滤掉已销毁的消息和B端不应看到的A端系统消息
           
-          console.log(`🔍 处理后的消息数据 ${messages.length} 条:`, messages);
+          // 🔥 去重保护：按id/_id去重，避免历史消息回流造成重复
+          const uniqueMap = new Map();
+          messages.forEach(m => {
+            if (!m) return;
+            const key = m.id || m._id || `auto_${uniqueMap.size}`;
+            if (!uniqueMap.has(key)) {
+              uniqueMap.set(key, m);
+            }
+          });
+          messages = Array.from(uniqueMap.values());
+
+          console.log(`🔍 处理后的消息数据 ${messages.length} 条(去重后):`, messages);
           
           // 🔥 【B端最终防线】setData前再次清理A端样式系统消息
           if ((typeof that.isReceiverEnvironment === 'function')
@@ -7552,10 +7541,22 @@ Page({
    * 打开表情选择器
    */
   openEmojiPicker: function() {
-    wx.showToast({
-      title: '表情功能开发中',
-      icon: 'none'
-    });
+    // 🔥 直接聚焦输入框，方便用户切换系统表情页
+    try {
+      this.setData({
+        inputFocus: true,
+        keepKeyboardOpenOnSend: true, // 发送后保持键盘，方便连续输入表情
+        scrollIntoView: 'bottom-anchor'
+      });
+      wx.nextTick(() => {
+        try { this.ensureNavbarPosition && this.ensureNavbarPosition(); } catch (e) {}
+      });
+    } catch (e) {
+      wx.showToast({
+        title: '请手动点击输入框切换表情',
+        icon: 'none'
+      });
+    }
   },
 
   /**
@@ -7614,48 +7615,8 @@ Page({
   },
 
   /**
-   * 页面卸载
+   * 页面卸载（声明已移至下方统一的 onUnload）
    */
-  onUnload: function () {
-    console.log('🎯 聊天页面卸载，清理资源');
-    
-    // 清除定时器
-    if (this.chatCreationTimer) {
-      clearInterval(this.chatCreationTimer);
-      this.chatCreationTimer = null;
-    }
-    
-    // 🔥 【鲁棒性】清理标题重试定时器
-    if (this.bEndTitleRetryTimer) {
-      clearInterval(this.bEndTitleRetryTimer);
-      this.bEndTitleRetryTimer = null;
-    }
-    
-    // 🔥 【鲁棒性】清理销毁倒计时映射
-    if (this.destroyTimers) {
-      this.destroyTimers.forEach(timer => clearInterval(timer));
-      this.destroyTimers.clear();
-      this.destroyTimers = null;
-    }
-    
-    // 清除参与者监听器
-    if (this.participantWatcher) {
-      this.participantWatcher.close();
-      this.participantWatcher = null;
-      console.log('🔥 [发送方监听] 参与者监听器已清理');
-    }
-    
-    // 🔥 清除消息监听器
-    this.stopMessageListener();
-    
-    // 🔥 【阅后即焚增强】清理所有资源
-    this.stopOnlineStatusMonitor();
-    this.clearAllDestroyTimers();
-    this.updateUserOnlineStatus(false); // 更新为离线状态
-    
-    // 🔧 清除接收方标题锁定标记
-    this.receiverTitleLocked = false;
-  },
 
   /**
    * 🔄 更新聊天标题
@@ -7877,7 +7838,8 @@ Page({
                   const isMyMessage = this.isMessageFromCurrentUser(newDoc.senderId, currentUserOpenId);
                   console.log('🔥 [ID匹配] 消息归属判断结果:', isMyMessage);
                   
-                  if (!isMyMessage) {
+                  // 🔥 B端容错：若身份误判为自己（同一微信号测试），也要视为新消息
+                  if (!isMyMessage || this.data.isFromInvite) {
                     console.log('🔔 检测到对方发送的新消息，准备刷新');
                     hasNewMessage = true;
                   } else {
@@ -7985,7 +7947,9 @@ Page({
                             content: newMessage.content
                           });
                           
-                          if (isMyMessageStrict) {
+                          // 🔥 B端（邀请方）即使ID相同也需要显示，以兼容同号测试
+                          const shouldSkipSelf = isMyMessageStrict && !this.data.isFromInvite;
+                          if (shouldSkipSelf) {
                             console.log('🔔 [新消息处理] 这是自己发送的消息，跳过添加');
                             return;
                           }
@@ -8084,7 +8048,8 @@ Page({
                             content: message.content
                           });
                           
-                          if (isMyMessage) {
+                          const shouldSkipSelfFallback = isMyMessage && !this.data.isFromInvite;
+                          if (shouldSkipSelfFallback) {
                             console.log('🔔 [备用方案] 这是自己发送的消息，跳过添加');
                             return;
                           }
@@ -8635,28 +8600,9 @@ Page({
           if (otherParticipants.length > 0) {
             console.log('🔧 [手动修复] 发现其他参与者，开始数据处理');
             
-            // 🔧 特别处理：如果发现昵称为"用户"的参与者，尝试修复
             const processedParticipants = participants.map(p => {
               const participantOpenId = p.id || p.openId;
               let nickName = p.nickName || p.name || '用户';
-              
-              // 🔧 如果是对方且昵称为"用户"，强制设置为已知的昵称
-              if (participantOpenId !== currentUserOpenId && nickName === '用户') {
-                // 检查特定的用户ID
-                if (participantOpenId === 'ojtOs7bmxy-8M5wOTcgrqlYedgyY') {
-                  nickName = 'Y.'; // 强制设置为已知昵称
-                  console.log('🔧 [手动修复] 强制修复特定用户昵称:', nickName);
-                  
-                  // 更新数据库中的用户信息
-                  this.updateSpecificUserInfo(participantOpenId, nickName);
-                } else if (participantOpenId.startsWith('local_') && participantOpenId.includes('1749384362104')) {
-                  nickName = '向冬'; // 修复发送方昵称
-                  console.log('🔧 [手动修复] 强制修复发送方昵称:', nickName);
-                  
-                  // 更新数据库中的用户信息
-                  this.updateSpecificUserInfo(participantOpenId, nickName);
-                }
-              }
               
               return {
                 id: participantOpenId,
@@ -9029,11 +8975,10 @@ Page({
    onUnload: function() {
     console.log('🛠️ [系统修复] 页面卸载，开始全面清理');
     
-    // 🔥 【HOTFIX-v1.3.64】清理B端标题重试定时器
+    // 🔥 清理B端标题重试定时器
     if (this.bEndTitleRetryTimer) {
       clearInterval(this.bEndTitleRetryTimer);
       this.bEndTitleRetryTimer = null;
-      console.log('🛠️ [系统修复-v1.3.64] B端标题重试定时器已清理');
     }
     
     // 🛠️ 使用资源管理器统一清理所有资源
@@ -9048,7 +8993,6 @@ Page({
         clearInterval(timer);
       });
       this.destroyTimers.clear();
-      console.log('🛠️ [系统修复] 销毁定时器映射已清理');
     }
     
     // 🛠️ 清理原有的直接定时器引用（向后兼容）
@@ -9068,16 +9012,25 @@ Page({
             clearInterval(this[timerName]);
           }
           this[timerName] = null;
-          console.log(`🛠️ [系统修复] 清理遗留定时器: ${timerName}`);
         } catch (error) {
           ErrorHandler.handle(error, `清理遗留定时器[${timerName}]`);
         }
       }
     });
     
+    // 🔥 停止消息监听器
+    this.stopMessageListener();
+    
+    // 🔥 【阅后即焚增强】清理所有资源
+    this.stopOnlineStatusMonitor();
+    this.clearAllDestroyTimers();
+    this.updateUserOnlineStatus(false);
+    
+    // 🔧 清除接收方标题锁定标记
+    this.receiverTitleLocked = false;
+    
     // 🛠️ 强制清理所有可能的定时器ID（应急方案）
     if (this.data.isDebugMode) {
-      console.log('🛠️ [系统修复] 调试模式：执行强制定时器清理');
       for (let i = 1; i < 10000; i++) {
         clearTimeout(i);
         clearInterval(i);
@@ -9087,7 +9040,7 @@ Page({
     // 🛠️ 标记页面为已销毁状态
     this._isPageDestroyed = true;
     
-    console.log('🛠️ [系统修复] ✅ 页面卸载清理完成，所有资源已释放');
+    console.log('🛠️ [系统修复] ✅ 页面卸载清理完成');
    },
 
    /**
@@ -9156,28 +9109,9 @@ Page({
            if (otherParticipants.length > 0) {
              console.log('🔧 [手动修复] 发现其他参与者，开始数据处理');
              
-             // 🔧 特别处理：如果发现昵称为"用户"的参与者，尝试修复
              const processedParticipants = participants.map(p => {
                const participantOpenId = p.id || p.openId;
                let nickName = p.nickName || p.name || '用户';
-               
-               // 🔧 如果是对方且昵称为"用户"，强制设置为已知的昵称
-               if (participantOpenId !== currentUserOpenId && nickName === '用户') {
-                 // 检查特定的用户ID
-                 if (participantOpenId === 'ojtOs7bmxy-8M5wOTcgrqlYedgyY') {
-                   nickName = 'Y.'; // 强制设置为已知昵称
-                   console.log('🔧 [手动修复] 强制修复特定用户昵称:', nickName);
-                   
-                   // 更新数据库中的用户信息
-                   this.updateSpecificUserInfo(participantOpenId, nickName);
-                 } else if (participantOpenId.startsWith('local_') && participantOpenId.includes('1749384362104')) {
-                   nickName = '向冬'; // 修复发送方昵称
-                   console.log('🔧 [手动修复] 强制修复发送方昵称:', nickName);
-                   
-                   // 更新数据库中的用户信息
-                   this.updateSpecificUserInfo(participantOpenId, nickName);
-                 }
-               }
                
                return {
                  id: participantOpenId,
