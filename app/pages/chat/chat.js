@@ -5884,7 +5884,7 @@ Page({
         
         if (res.result && res.result.success) {
           // 处理消息数据
-          const messages = res.result.messages.map(msg => {
+          let messages = res.result.messages.map(msg => {
             // 🔥 标准化ID集合，便于判重/过滤
             const msgKeyIds = [];
             if (msg._id) msgKeyIds.push(msg._id);
