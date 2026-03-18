@@ -317,6 +317,9 @@ App({
                     title: '需要重新登录',
                     icon: 'none'
                   });
+                })
+                .finally(() => {
+                  that._loginCheckInProgress = false;
                 });
             }
           });
@@ -329,7 +332,6 @@ App({
       fail: function (err) {
         console.log('用户尚未登录（未找到用户信息）');
         that.cleanLoginStatus();
-        that._loginCheckInProgress = false;
         that.performCloudLogin()
           .then((user) => {
             console.log('云函数登录成功，更新登录时间');
@@ -337,6 +339,9 @@ App({
           })
           .catch((loginErr) => {
             console.error('云函数登录失败，保持未登录状态:', loginErr);
+          })
+          .finally(() => {
+            that._loginCheckInProgress = false;
           });
       }
     });
@@ -475,12 +480,13 @@ App({
     // 使用安全编码，避免btoa错误
     const encoding = require('./app/utils/encoding.js');
     const encodedInviter = encoding.safeEncodeNickname(inviter || '朋友');
+    const inviteQuery = `inviter=${encodedInviter}&fromInvite=true&action=join&chatStarted=true`;
     
     // 统一使用inviter参数，不再使用name参数
     return [
-      `/pages/chat/chat?id=${chatId}&inviter=${encodedInviter}`,
-      `../chat/chat?id=${chatId}&inviter=${encodedInviter}`,
-      `/app/pages/chat/chat?id=${chatId}&inviter=${encodedInviter}`
+      `/pages/chat/chat?id=${chatId}&${inviteQuery}`,
+      `../chat/chat?id=${chatId}&${inviteQuery}`,
+      `/app/pages/chat/chat?id=${chatId}&${inviteQuery}`
     ];
   },
 
@@ -864,7 +870,12 @@ App({
    * @returns {Promise<Object>} 用户信息
    */
   performCloudLogin: function() {
-    return new Promise((resolve, reject) => {
+    if (this._cloudLoginPromise) {
+      console.log('云函数登录进行中，复用现有请求');
+      return this._cloudLoginPromise;
+    }
+
+    this._cloudLoginPromise = new Promise((resolve, reject) => {
       if (!wx.cloud) {
         const error = new Error('wx.cloud 不可用，无法登录');
         console.error(error);
@@ -905,6 +916,11 @@ App({
           reject(err);
         }
       });
-    });
+    })
+      .finally(() => {
+        this._cloudLoginPromise = null;
+      });
+
+    return this._cloudLoginPromise;
   }
 }) 

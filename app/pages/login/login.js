@@ -527,31 +527,81 @@ Page({
                     // 🔥【HOTFIX-v1.3.58】如果用户已在聊天中，说明是回访而非新加入
                     if (userAlreadyInChat && participants.length >= 2) {
                       console.log('[邀请流程] ⚠️ 检测到用户已在聊天参与者列表中，这是回访而非新加入');
-                      console.log('[邀请流程] 🎯 确认为回访的创建者，直接进入聊天，跳过joinByInvite');
-                      
-                      // 🔥 【HOTFIX-v1.3.89】存储创建者信息
+                      const meParticipant = participants.find(p => {
+                        const pId = p.openId || p.id;
+                        return pId === currentOpenId;
+                      }) || null;
+                      const meIsCreatorByFlag = !!(meParticipant && meParticipant.isCreator);
                       const creatorKey = `creator_${inviteInfo.chatId}`;
-                      wx.setStorageSync(creatorKey, currentOpenId);
-                      console.log('[邀请流程] 🔥 [v1.3.89] 存储回访创建者信息:', currentOpenId);
-                      
-                      // 清除无效的邀请信息
-                      try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e) {}
-                      wx.removeStorageSync('inviteInfo');
-                      
-                      // 回访者直接进入聊天
-                      const chatPath = `/app/pages/chat/chat?id=${inviteInfo.chatId}&userName=${encodeURIComponent(userInfo.nickName)}`;
-                      console.log('[邀请流程] 🚀 回访者直接进入聊天:', chatPath);
-                      
-                      wx.reLaunch({
-                        url: chatPath,
-                        success: () => {
-                          console.log('[邀请流程] ✅ 回访者成功进入聊天页面');
-                        },
-                        fail: (err) => {
-                          console.error('[邀请流程] ❌ 回访者跳转失败，走普通流程:', err);
-                          this.createAndEnterNewChat(userInfo);
+                      const storedCreator = wx.getStorageSync(creatorKey);
+                      const meIsStoredCreator = storedCreator === currentOpenId;
+                      const meIsCreatorByEvidence = meIsCreatorByFlag;
+
+                      if (meIsStoredCreator && !meIsCreatorByFlag) {
+                        wx.removeStorageSync(creatorKey);
+                        console.warn('[邀请流程] ⚠️ 检测到疑似历史误写创建者缓存，已清理:', currentOpenId);
+                      }
+
+                      if (meIsCreatorByEvidence) {
+                        console.log('[邀请流程] 🎯 确认为回访的创建者，直接进入聊天，跳过joinByInvite');
+                        wx.setStorageSync(creatorKey, currentOpenId);
+                        console.log('[邀请流程] 🔥 [v1.3.96] 存储回访创建者信息:', currentOpenId);
+
+                        /** 清除无效的邀请信息。 */
+                        try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e) {}
+                        wx.removeStorageSync('inviteInfo');
+
+                        /** 创建者回访直接进入聊天，并携带create action避免身份漂移。 */
+                        const chatPath = `/app/pages/chat/chat?id=${inviteInfo.chatId}&action=create&userName=${encodeURIComponent(userInfo.nickName)}`;
+                        console.log('[邀请流程] 🚀 回访创建者直接进入聊天:', chatPath);
+
+                        wx.reLaunch({
+                          url: chatPath,
+                          success: () => {
+                            console.log('[邀请流程] ✅ 回访创建者成功进入聊天页面');
+                          },
+                          fail: (err) => {
+                            console.error('[邀请流程] ❌ 回访创建者跳转失败，走普通流程:', err);
+                            this.createAndEnterNewChat(userInfo);
+                          }
+                        });
+                      } else {
+                        const otherParticipant = others[0] || null;
+                        const inviterName = (otherParticipant && (otherParticipant.nickName || otherParticipant.name)) || inviteInfo.inviter || '朋友';
+                        console.log('[邀请流程] 🎯 确认为回访的接收方，按邀请身份进入聊天:', inviterName);
+
+                        /** 清理可能的错误创建者污染，避免后续在chat页被反向判定为A端。 */
+                        if (storedCreator && storedCreator !== currentOpenId) {
+                          console.log('[邀请流程] [回访接收方] 保留现有创建者记录:', storedCreator);
+                        } else if (storedCreator === currentOpenId) {
+                          wx.removeStorageSync(creatorKey);
+                          console.log('[邀请流程] [回访接收方] 已清除错误创建者记录:', currentOpenId);
                         }
-                      });
+
+                        /** 强化邀请态，让chat页拿到明确fromInvite证据。 */
+                        try {
+                          app.saveInviteInfo && app.saveInviteInfo(inviteInfo.chatId, inviterName, true);
+                        } catch (e) {
+                          console.warn('[邀请流程] 保存回访接收方邀请信息失败，继续跳转', e);
+                        }
+
+                        const chatPath = `/app/pages/chat/chat?id=${inviteInfo.chatId}&inviter=${encodeURIComponent(inviterName)}&fromInvite=true&action=join&chatStarted=true&userName=${encodeURIComponent(userInfo.nickName)}`;
+                        console.log('[邀请流程] 🚀 回访接收方进入聊天:', chatPath);
+
+                        wx.reLaunch({
+                          url: chatPath,
+                          success: () => {
+                            console.log('[邀请流程] ✅ 回访接收方成功进入聊天页面');
+                            setTimeout(() => {
+                              try { app.clearInviteInfo && app.clearInviteInfo(); } catch (e) {}
+                            }, 5000);
+                          },
+                          fail: (err) => {
+                            console.error('[邀请流程] ❌ 回访接收方跳转失败，走普通流程:', err);
+                            this.createAndEnterNewChat(userInfo);
+                          }
+                        });
+                      }
                       return;
                     }
 

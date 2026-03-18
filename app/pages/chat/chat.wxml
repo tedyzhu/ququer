@@ -51,7 +51,7 @@
         <view 
           wx:if="{{item.isSystem}}"
           id="sys-{{index}}"
-          class="message-wrapper system"
+          class="message-wrapper system {{item.collapsing ? 'collapsing' : ''}}"
           style="opacity: {{item.opacity !== undefined ? item.opacity : 1}}"
         >
           <view class="system-message">
@@ -64,7 +64,7 @@
         <view 
           wx:elif="{{!item.destroyed && item.content}}"
           id="msg-{{index}}"
-          class="message-item {{item.isSelf ? 'message-self' : 'message-other'}}"
+          class="message-item {{item.isSelf ? 'message-self' : 'message-other'}} {{item.collapsing ? 'collapsing' : ''}}"
           bindtap="onMessageTap"
           bindlongpress="onMessageLongTap"
           data-msgid="{{item.id}}"

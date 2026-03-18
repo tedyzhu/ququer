@@ -235,8 +235,18 @@ page {
 /* 消息项容器 */
 .message-item {
   margin-bottom: 32rpx;
-  /* 🔥 【HOTFIX-v1.3.73】消息项容器淡出过渡动画，5秒与fading同步 */
-  transition: opacity 5s ease-in-out;
+  overflow: hidden;
+  /* 🔥 【FIX-v2.1】opacity用5s与fading同步；max-height/margin用0.4s做补位滑动 */
+  transition: opacity 5s ease-in-out, max-height 0.4s ease-out, margin-bottom 0.4s ease-out;
+  max-height: 800rpx;
+}
+
+/* 🔥 【FIX-v2.1】消息彻底删除前的折叠过渡，让下方消息平滑上移 */
+.message-item.collapsing {
+  max-height: 0 !important;
+  margin-bottom: 0 !important;
+  opacity: 0 !important;
+  transition: max-height 0.35s ease-out, margin-bottom 0.35s ease-out, opacity 0.1s ease-out;
 }
 
 /* 时间分隔线 */
@@ -319,10 +329,19 @@ page {
 .message-wrapper.system {
   align-self: center;
   max-width: 100%;
-  margin: 6rpx 0; /* 🔥 进一步减少间距 */
-  padding: 0; /* 🔥 移除可能的内边距 */
-  /* 🔥 【HOTFIX-v1.3.73】系统消息淡出过渡动画，5秒与fading同步 */
-  transition: opacity 5s ease-in-out;
+  margin: 6rpx 0;
+  padding: 0;
+  overflow: hidden;
+  /* 🔥 【FIX-v2.1】系统消息也支持折叠补位动画 */
+  transition: opacity 5s ease-in-out, max-height 0.4s ease-out, margin 0.4s ease-out;
+  max-height: 400rpx;
+}
+
+.message-wrapper.system.collapsing {
+  max-height: 0 !important;
+  margin: 0 !important;
+  opacity: 0 !important;
+  transition: max-height 0.35s ease-out, margin 0.35s ease-out, opacity 0.1s ease-out;
 }
 
 .system-message {
