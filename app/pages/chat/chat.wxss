@@ -420,7 +420,7 @@ page {
  * 用 !important 确保覆盖 env() / constant() 声明。
  */
 .input-container.keyboard-up {
-  padding-bottom: 0 !important;
+  padding-bottom: 20rpx !important;
 }
 
 .voice-btn, .emoji-btn, .more-btn {
