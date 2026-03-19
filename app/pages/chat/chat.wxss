@@ -1,60 +1,33 @@
-/* 🔥 页面根元素优化 - 防止键盘影响 */
+/**
+ * 页面根元素 — disableScroll:true(chat.json) 已在原生层禁止页面滚动，
+ * CSS 只需 overflow:hidden 兜底即可。不使用 position:fixed，因为
+ * 小程序的 page 是原生容器，fixed 定位在部分机型/版本上无效。
+ */
 page {
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden; /* 🔥 防止页面滚动影响固定定位元素 */
-  background-color: #ededed;
-  /* 🔥 【HOTFIX-v1.3.75】强制固定视窗大小，不受键盘影响 */
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  /* 🔥 【HOTFIX-v1.3.75】使用GPU加速确保页面固定 */
-  -webkit-transform: translate3d(0, 0, 0);
-  transform: translate3d(0, 0, 0);
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-}
-
-/* 🔥 全局容器优化 */
-.container {
-  height: 100vh;
   overflow: hidden;
-  position: relative;
+  height: 100%;
+  background-color: #ededed;
 }
 
-/* 自定义标题栏 - 修复键盘遮挡问题 */
+/**
+ * 自定义标题栏 — 作为 flex 容器的第一个子元素，无需 position:fixed。
+ * 因为 page 和 chat-container 都禁止滚动，标题栏自然常驻顶部。
+ */
 .custom-navbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  /* 🔥 【HOTFIX-v1.3.75】标题栏内容高度44px + 安全区域 */
   height: 44px;
   min-height: 44px;
+  flex-shrink: 0;
   background-color: #ededed;
   border-bottom: 1rpx solid #d7d7d7;
-  padding: 0 16rpx; /* 🔥 调整左右边距 */
-  /* 🔥 【HOTFIX-v1.3.75】顶部padding用于状态栏区域 */
+  padding: 0 16rpx;
   padding-top: constant(safe-area-inset-top);
   padding-top: env(safe-area-inset-top);
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  /* 🔥 【HOTFIX-v1.3.75】极高z-index，确保在键盘之上 */
-  z-index: 999999;
-  /* 🔥 【HOTFIX-v1.3.75】content-box: padding-top作为额外空间 */
   box-sizing: content-box;
-  /* 🔥 【HOTFIX-v1.3.75】使用translate3d强制GPU加速和固定定位 */
-  -webkit-transform: translate3d(0, 0, 0);
-  transform: translate3d(0, 0, 0);
-  /* 🔥 增强固定定位性能优化 */
-  will-change: auto; /* 改为auto避免过度优化 */
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  /* 🔥 确保在所有情况下保持在顶部 */
-  pointer-events: auto;
+  position: relative;
+  z-index: 10;
 }
 
 .navbar-left {
@@ -148,26 +121,20 @@ page {
   transform: scale(0.95);
 }
 
+/**
+ * 聊天主容器 — position:fixed 锁死在视口，防止键盘推动。
+ * 高度由 JS 通过 windowHeight 内联设置，不依赖 100vh。
+ */
 .chat-container {
-  display: flex;
-  flex-direction: column;
-  /* 🔥 使用固定视窗高度，不受键盘影响 */
-  height: 100vh;
-  min-height: 100vh;
-  width: 100vw;
-  background-color: #ededed;
-  /* 🔥 使用fixed定位，彻底锁定在视窗内，防止页面滚动时标题被顶出 */
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
-  /* 🔥 【HOTFIX-v1.3.74】调整padding-top以匹配新的标题栏高度 */
-  padding-top: calc(44px + constant(safe-area-inset-top));
-  padding-top: calc(44px + env(safe-area-inset-top));
-  /* 🔥 防止键盘推动容器 */
-  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background-color: #ededed;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 /* 销毁计时器 */
@@ -188,13 +155,14 @@ page {
   font-weight: bold;
 }
 
-/* 消息区域 */
+/**
+ * 消息滚动区域 — 高度由 JS 精确计算后通过 inline style 设置，
+ * 始终 = windowHeight - 导航栏 - 输入栏(- 键盘高度)。
+ */
 .messages-container {
   flex: 1;
+  min-height: 0;
   padding: 20rpx 0;
-  /* 🔥 预留底部空间，避免被吸底输入栏遮挡 */
-  padding-bottom: calc(160rpx + constant(safe-area-inset-bottom));
-  padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
   overflow-y: auto;
 }
@@ -438,21 +406,21 @@ page {
   display: flex;
   align-items: center;
   padding: 20rpx 30rpx;
-  /* 🔥 吸底固定 */
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 10000; /* 🔥 调整层级，低于标题栏但高于其他内容 */
+  flex-shrink: 0;
+  z-index: 10;
   background-color: #f6f6f6;
   border-top: 1rpx solid #e6e6e6;
-  /* 🔥 iOS 安全区 */
   padding-bottom: calc(20rpx + constant(safe-area-inset-bottom));
   padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
-  /* 🔥 确保输入区域始终可见 */
   box-sizing: border-box;
-  -webkit-transform: translateZ(0);
-  transform: translateZ(0);
+}
+
+/**
+ * 键盘弹出时移除 safe-area-inset-bottom，
+ * 用 !important 确保覆盖 env() / constant() 声明。
+ */
+.input-container.keyboard-up {
+  padding-bottom: 0 !important;
 }
 
 .voice-btn, .emoji-btn, .more-btn {

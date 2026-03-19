@@ -20,6 +20,9 @@ const DEBUG_FLAGS = {
 };
 
 const DEFAULT_DESTROY_TIMEOUT = 30;
+const ENABLE_HOMOGENEOUS_UI_MODE = true;
+/** @description 首次打开键盘时尚无实测高度，用此值立即缩小容器，防止原生上推。 */
+const DEFAULT_KEYBOARD_HEIGHT = 300;
 
 const PLACEHOLDER_JOIN_MESSAGE_REGEX = /^加入(朋友|好友|用户|邀请者|发送方|a端用户|a端发送方)的聊天[！!]?$/i;
 
@@ -487,73 +490,201 @@ Page({
     isBurnAfterReadingCleaning: false, // 🔥 是否正在进行阅后即焚清理
     lastCleanupTime: null,     // 🔥 最后清理时间
     cleanupCooldownPeriod: 60000, // 🔥 清理冷却期（60秒）
-    // 🔥 软键盘自适应
+    // 🔥 软键盘自适应 & 布局尺寸（由 JS 精确计算）
+    windowHeight: 0,
+    scrollViewHeight: 300,
     keyboardHeight: 0,
-    extraBottomPaddingPx: 0,
-    bottomPaddingPx: 0,
+    keyboardVisible: false,
+    containerHeight: 700,
     inputFocus: false,
-    // 🔥 保持键盘状态的标记
     keepKeyboardOpenOnSend: false
+  },
+
+  /**
+   * @description 计算有效键盘高度，优先取事件值，失败时用窗口高度差值兜底。
+   * @param {number} rawHeight 键盘事件原始高度（px）
+   * @returns {number} 最终可用的键盘高度（px）
+   */
+  getEffectiveKeyboardHeight: function(rawHeight) {
+    var kbH = rawHeight > 0 ? rawHeight : 0;
+    try {
+      var baseWinH = (this._layoutInfo && this._layoutInfo.windowHeight) || this.data.windowHeight || 0;
+      if (baseWinH > 0 && wx.getWindowInfo) {
+        var info = wx.getWindowInfo();
+        var currentWinH = (info && info.windowHeight) ? info.windowHeight : 0;
+        var inferredKbH = baseWinH - currentWinH;
+        if (inferredKbH > kbH) kbH = inferredKbH;
+      }
+    } catch (e) {}
+    if (kbH < 0) kbH = 0;
+    return Math.floor(kbH);
+  },
+
+  /**
+   * @description 在渲染完成后吸底，避免高频 setData 场景丢滚动。
+   * @param {number} [delayMs=0] 延迟毫秒
+   * @returns {void}
+   */
+  scheduleScrollToBottom: function(delayMs) {
+    var self = this;
+    var delay = typeof delayMs === 'number' ? delayMs : 0;
+    if (self._scrollBottomTimer) {
+      clearTimeout(self._scrollBottomTimer);
+      self._scrollBottomTimer = null;
+    }
+    self._scrollBottomTimer = setTimeout(function() {
+      self._scrollBottomTimer = null;
+      wx.nextTick(function() { self.scrollToBottom(); });
+    }, delay);
+  },
+
+  /**
+   * @description A/B端是否启用同构UI模式（布局/键盘/滚动完全一致）。
+   * @returns {boolean} 是否启用同构UI模式
+   */
+  isHomogeneousUiMode: function() {
+    return ENABLE_HOMOGENEOUS_UI_MODE;
   },
   
   /**
+   * @description 注册/重新注册全局键盘高度监听。
+   * wx.onKeyboardHeightChange 是全局回调，多页面栈中最后注册者生效。
+   * 因此 onShow 也需要调用，确保当前可见页面始终能收到键盘事件。
+   */
+  _registerKeyboardListener: function() {
+    try {
+      if (!wx.onKeyboardHeightChange) return;
+      var self = this;
+      wx.onKeyboardHeightChange(function(res) {
+        var rawKbH = (res && res.height) ? res.height : 0;
+        var kbH = self.getEffectiveKeyboardHeight(rawKbH);
+        var side = self.data.isSender ? 'A端' : 'B端';
+        console.log('🔥 [onKeyboardHeightChange][' + side + '] 键盘高度变化:', kbH, 'containerHeight:', self.data.containerHeight, 'windowHeight:', (self._layoutInfo && self._layoutInfo.windowHeight));
+        if (!self.data.isPageActive) kbH = 0;
+
+        if (kbH > 0) {
+          if (self._kbResetTimer) { clearTimeout(self._kbResetTimer); self._kbResetTimer = null; }
+          self._lastKnownKeyboardHeight = kbH;
+          var winH = (self._layoutInfo && self._layoutInfo.windowHeight) || self.data.windowHeight || 700;
+          var patch = {
+            keyboardHeight: kbH,
+            keyboardVisible: true,
+            containerHeight: winH - kbH,
+            scrollIntoView: '',
+            scrollTop: self.data.scrollTop === 99999 ? 99998 : 99999
+          };
+          wx.pageScrollTo({ scrollTop: 0, duration: 0 });
+          self.setData(patch, function() {
+            self.scheduleScrollToBottom();
+            wx.pageScrollTo({ scrollTop: 0, duration: 0 });
+          });
+        } else {
+          /**
+           * kbH === 0 时只更新 keyboardHeight，不立即重置 containerHeight。
+           * 这样可以避免键盘打开瞬间 0→实际高度 序列导致的 UI 抖动。
+           * containerHeight 的完整重置由 onInputBlur 负责；
+           * 安全计时器兜底处理键盘被系统关闭而 onInputBlur 未触发的情况。
+           */
+          if (self.data.inputFocus || self._kbTransitionGuard) {
+            return;
+          }
+          self.setData({ keyboardHeight: 0, keyboardVisible: false });
+          if (self._kbResetTimer) clearTimeout(self._kbResetTimer);
+          self._kbResetTimer = setTimeout(function() {
+            self._kbResetTimer = null;
+            if (self.data.keyboardHeight === 0 && !self.data.inputFocus && !self._kbTransitionGuard) {
+              var winH = (self._layoutInfo && self._layoutInfo.windowHeight) || self.data.windowHeight || 700;
+              if (self.data.containerHeight !== winH) {
+                self.setData({ containerHeight: winH });
+              }
+            }
+          }, 300);
+        }
+      });
+    } catch (e) {
+      console.log('⚠️ 键盘高度监听不可用:', e);
+    }
+  },
+
+  /**
    * 输入框聚焦/失焦：优化滚动与吸底表现，确保标题栏不受影响
    */
-  onInputFocus: function() {
+  onInputFocus: function(e) {
     try {
-      console.log('🔥 键盘弹出 - 输入框获得焦点');
+      if (this._kbResetTimer) { clearTimeout(this._kbResetTimer); this._kbResetTimer = null; }
+      var rawKbH = (e && e.detail && e.detail.height) ? e.detail.height : 0;
+      var kbH = this.getEffectiveKeyboardHeight(rawKbH);
+      if (kbH <= 0 && this._lastKnownKeyboardHeight > 0) kbH = this._lastKnownKeyboardHeight;
+      if (kbH <= 0 && this.data.keyboardHeight > 0) kbH = this.data.keyboardHeight;
+      if (kbH <= 0) kbH = DEFAULT_KEYBOARD_HEIGHT;
+      var side = this.data.isSender ? 'A端' : 'B端';
+      console.log('🔥 [' + side + '] 键盘弹出 - 输入框获得焦点, 键盘高度:', kbH, 'windowHeight:', (this._layoutInfo && this._layoutInfo.windowHeight), 'containerHeight:', this.data.containerHeight);
       // 🔧 仅保留一次“保持展开”行为，恢复正常 blur 逻辑
       if (this.data.keepKeyboardOpenOnSend) {
         this.setData({ keepKeyboardOpenOnSend: false });
       }
-      
-      // 🔥 【HOTFIX-v1.3.80】检查是否有系统消息，如果有则不自动滚动到底部
-      const hasSystemMsg = this.data.hasSystemMessage;
-      if (hasSystemMsg) {
-        console.log('🔥 [系统消息保护-v1.3.80] 检测到系统消息，跳过自动滚动');
-        this.setData({ 
-          inputFocus: true
-          // 不设置 scrollIntoView
-        });
-      } else {
-        this.setData({ 
-          inputFocus: true,
-          scrollIntoView: 'bottom-anchor' 
-        });
-      }
-      
-      // 🔥 强制确保标题栏保持在顶部
-      this.ensureNavbarPosition();
-    } catch (e) {
-      console.error('输入框聚焦处理失败:', e);
+
+      var winH = (this._layoutInfo && this._layoutInfo.windowHeight) || this.data.windowHeight || 700;
+      var self = this;
+      wx.pageScrollTo({ scrollTop: 0, duration: 0 });
+      this.setData({
+        inputFocus: true,
+        keyboardVisible: true,
+        keyboardHeight: kbH,
+        containerHeight: winH - kbH,
+        scrollIntoView: '',
+        scrollTop: this.data.scrollTop === 99999 ? 99998 : 99999
+      }, function() {
+        self.scheduleScrollToBottom();
+        wx.pageScrollTo({ scrollTop: 0, duration: 0 });
+      });
+
+    } catch (err) {
+      console.error('输入框聚焦处理失败:', err);
     }
   },
-  
+
+  /** @description 阻止 chat-container 上的触摸滚动穿透到页面层 */
+  preventPageScroll: function() {},
+
   onInputBlur: function() {
     try {
       console.log('🔥 键盘收起 - 输入框失去焦点');
       
-    // 若发送后需要保持展开，立即重新聚焦并阻止收起
     if (this.data.keepKeyboardOpenOnSend) {
+      if (this._kbResetTimer) { clearTimeout(this._kbResetTimer); this._kbResetTimer = null; }
+      if (this._kbFocusProbeTimer) { clearTimeout(this._kbFocusProbeTimer); this._kbFocusProbeTimer = null; }
+      var self = this;
+      self._kbTransitionGuard = true;
       this.setData({
         inputFocus: false,
         keepKeyboardOpenOnSend: false
       }, () => {
         wx.nextTick(() => {
-          this.setData({ inputFocus: true });
+          self._kbTransitionGuard = false;
+          self.setData({ inputFocus: true, keyboardVisible: true });
         });
       });
       return;
     }
       
-      this.setData({ 
+      if (this._kbResetTimer) { clearTimeout(this._kbResetTimer); this._kbResetTimer = null; }
+      if (this._kbFocusProbeTimer) { clearTimeout(this._kbFocusProbeTimer); this._kbFocusProbeTimer = null; }
+      this.setData({
         inputFocus: false,
-        keyboardHeight: 0, 
-        extraBottomPaddingPx: 0 
+        keyboardVisible: false
       });
-      
-      // 🔥 确保页面布局恢复正常
-      this.ensureNavbarPosition();
+      var self = this;
+      this._kbResetTimer = setTimeout(function() {
+        self._kbResetTimer = null;
+        if (!self.data.inputFocus && !self._kbTransitionGuard) {
+          var winH = (self._layoutInfo && self._layoutInfo.windowHeight) || self.data.windowHeight || 700;
+          self.setData({
+            keyboardHeight: 0,
+            containerHeight: winH
+          });
+        }
+      }, 300);
     } catch (e) {
       console.error('输入框失焦处理失败:', e);
     }
@@ -561,7 +692,7 @@ Page({
 
   /**
    * 🔥 确保标题栏位置正确的方法
-   * 增强版：确保标题栏始终固定在顶部，不受键盘影响
+   * 仅做检测日志，不再执行 pageScrollTo/setData 以避免键盘期抖动。
    */
   ensureNavbarPosition: function() {
     try {
@@ -578,17 +709,7 @@ Page({
           // 标题栏应该在安全区顶部
           if (rect.top < 0 || rect.top > safeAreaTop + 5) {
             console.warn('🔥 检测到标题栏位置异常，当前top:', rect.top, '预期:', safeAreaTop);
-            
-            // 🔥 方法1：触发页面重新渲染
-            this.setData({ _navbarFix: Date.now() });
-            
-            // 🔥 方法2：强制页面滚动到顶部（如果有滚动）
-            wx.pageScrollTo({
-              scrollTop: 0,
-              duration: 0
-            });
-            
-            console.log('🔥 已触发标题栏位置修复');
+            console.log('🔥 [键盘期保护] 仅记录异常，跳过强制修复动作');
           } else {
             console.log('✅ 标题栏位置正常');
           }
@@ -631,50 +752,39 @@ Page({
     }
     console.log('🔥 [页面初始化-v1.3.65] 重置系统消息防重复标记');
     
-    // 🔥 软键盘高度监听
+    /**
+     * @description 一次性计算并缓存布局尺寸，后续键盘事件仅做减法。
+     *   windowHeight 取自 wx.getWindowInfo()，不受键盘弹出影响。
+     */
     try {
-      if (wx.onKeyboardHeightChange) {
-        wx.onKeyboardHeightChange(res => {
-          const height = res && res.height ? res.height : 0;
-          // 仅当页面处于显示状态时更新
-          const safeHeight = this.data.isPageActive ? height : 0;
-          const safeAreaInsetBottom = 0; // 由样式中 env() 解决，这里仅做 Fallback
-          // 使用较小的基础工具栏高度，并在下方用实际测量进行校正
-          const baseToolbarHeight = 60; // 约等于 ~120rpx 的 px 值
-          // 🔥 叠加键盘高度，确保键盘弹起时消息区有足够底部留白，不会顶出标题
-          const bottomPaddingPx = baseToolbarHeight + safeHeight + safeAreaInsetBottom;
-          this.setData({
-            keyboardHeight: safeHeight,
-            extraBottomPaddingPx: 0,
-            bottomPaddingPx
-          });
-          try {
-            // 🔥 【HOTFIX-v1.3.80】键盘弹起时，检查是否有系统消息，如果有则不滚动
-            if (safeHeight > 0 && !this.data.hasSystemMessage) {
-              this.setData({ scrollIntoView: 'bottom-anchor' });
-              console.log('🔥 [键盘处理-v1.3.80] 键盘弹起，滚动到底部');
-            } else if (safeHeight > 0 && this.data.hasSystemMessage) {
-              console.log('🔥 [系统消息保护-v1.3.80] 检测到系统消息，跳过键盘滚动');
-            }
-            // 🔥 强制保持页面不被整体上推，锁定顶部位置
-            wx.pageScrollTo({ scrollTop: 0, duration: 0 });
-            // 使用实际DOM高度微调消息区底部留白，确保与输入栏高度一致
-            wx.nextTick(() => {
-              try {
-                this.refreshToolbarHeightPadding && this.refreshToolbarHeightPadding();
-              } catch (e) {}
-              try {
-                this.ensureNavbarPosition && this.ensureNavbarPosition();
-              } catch (e) {
-                console.warn('⚠️ [键盘处理] 标题栏位置校验失败:', e);
-              }
-            });
-          } catch (e) {}
-        });
-      }
+      var wInfo = wx.getWindowInfo();
+      var statusBarH = wInfo.statusBarHeight || 0;
+      var navContentH = 44;
+      var navTotalH = navContentH + statusBarH;
+      var safeBottom = wInfo.safeArea
+        ? (wInfo.screenHeight - wInfo.safeArea.bottom)
+        : 0;
+      var inputApproxH = 56 + safeBottom;
+      var winH = wInfo.windowHeight;
+      this._layoutInfo = {
+        windowHeight: winH,
+        navTotalHeight: navTotalH,
+        inputHeight: inputApproxH,
+        safeAreaBottom: safeBottom
+      };
+      this.setData({
+        windowHeight: winH,
+        containerHeight: winH,
+        scrollViewHeight: winH - navTotalH - inputApproxH
+      });
     } catch (e) {
-      console.log('⚠️ 键盘高度监听不可用:', e);
+      var fallbackH = 700;
+      this._layoutInfo = { windowHeight: fallbackH, navTotalHeight: 88, inputHeight: 56, safeAreaBottom: 0 };
+      this.setData({ windowHeight: fallbackH, containerHeight: fallbackH, scrollViewHeight: fallbackH - 88 - 56 });
     }
+
+    // 🔥 软键盘高度监听（提取为方法以便 onShow 中重新注册）
+    this._registerKeyboardListener();
     console.log('[聊天页面] 页面加载，携带参数:', options);
     
     // 🛠️ 【系统性修复】初始化资源管理器
@@ -2073,6 +2183,10 @@ Page({
    * 🔥 【双端显示修复】立即修复标题和系统消息
    */
   fixBEndDisplayImmediately: function() {
+    if (this.isHomogeneousUiMode()) {
+      console.log('🔥 [同构UI模式] 跳过B端专用显示修复，复用统一UI状态机');
+      return;
+    }
     console.log('🔥 [双端显示修复] 开始检查并修复显示问题');
     
     const { isFromInvite, isSender, currentUser } = this.data;
@@ -3433,10 +3547,20 @@ Page({
       this._hasReplacedCreatorMessage = true;
       
       this._localMessageCache = updatedMessages;
-      this.setData({
+      var kbActive = !!(this.data.inputFocus || this.data.keyboardVisible || this.data.keyboardHeight > 0);
+      var replacePatch = {
         messages: updatedMessages,
-        scrollIntoView: '',
         hasSystemMessage: true
+      };
+      if (kbActive) {
+        replacePatch.scrollIntoView = '';
+        replacePatch.scrollTop = this.data.scrollTop === 99999 ? 99998 : 99999;
+      } else {
+        replacePatch.scrollIntoView = '';
+      }
+      var self = this;
+      this.setData(replacePatch, function() {
+        if (kbActive) { self.scheduleScrollToBottom(); }
       });
       
       console.log('🔥 [系统消息替换-v1.3.83] ✅ 创建消息已替换为加入消息:', `${participantName}加入聊天`);
@@ -6004,6 +6128,8 @@ Page({
           that.setData({
             messages: allMessages,
             isLoading: false
+          }, function() {
+            that.scheduleScrollToBottom();
           });
 
         // 🔥 补偿：为仍未进入销毁流程的普通消息启动倒计时（防止刷新后计时丢失）
@@ -6035,7 +6161,7 @@ Page({
           }, 100);
           
           // 滚动到底部
-          that.scrollToBottom();
+          that.scheduleScrollToBottom();
         } else {
           console.log('🔍 获取消息失败，保持本地消息');
           // 获取失败时保持当前消息不变
@@ -6408,11 +6534,14 @@ Page({
           
           // 🔥 【HOTFIX-v1.3.84】检查是否有系统消息，如果有则滚动到顶部
           const hasSystemMessage = messages.some(msg => isSystemLikeMessage(msg));
-          const scrollTarget = hasSystemMessage ? 'sys-0' : '';
+          const shouldKeepBottom = !!(that.data.inputFocus || that.data.keyboardVisible || that.data.keyboardHeight > 0);
+          const scrollTarget = (hasSystemMessage && !shouldKeepBottom) ? 'sys-0' : '';
           
           console.log('🔥 [滚动控制-v1.3.84] 消息列表中是否有系统消息:', hasSystemMessage);
-          if (hasSystemMessage) {
+          if (hasSystemMessage && !shouldKeepBottom) {
             console.log('🔥 [滚动控制-v1.3.84] 将滚动到顶部系统消息 sys-0');
+          } else if (hasSystemMessage && shouldKeepBottom) {
+            console.log('🔥 [滚动控制-v1.3.84] 键盘可见，保持底部，不执行顶部定位');
           }
           
           // 🔥 【核心修复-v4】当 watcher 活跃时，使用非破坏性合并防止覆盖 watcher 已添加的消息
@@ -6446,6 +6575,10 @@ Page({
             isLoading: false,
             scrollIntoView: scrollTarget,
             hasSystemMessage: hasSystemMessage
+          }, function() {
+            if (!hasSystemMessage || that.data.inputFocus || that.data.keyboardVisible || that.data.keyboardHeight > 0) {
+              that.scheduleScrollToBottom();
+            }
           });
           
           try { that.normalizeSystemMessagesAfterLoad && that.normalizeSystemMessagesAfterLoad(); } catch (e) {}
@@ -6508,7 +6641,7 @@ Page({
           that.checkAndFixConnection(messages);
           
           // 滚动到底部
-          that.scrollToBottom();
+          that.scheduleScrollToBottom();
         } else {
           console.log('🔍 获取消息失败，使用模拟数据');
           // 获取失败时使用模拟数据
@@ -6599,27 +6732,15 @@ Page({
   },
 
   /**
-   * 滚动到聊天底部
+   * @description 可靠滚动到底部：交替 scrollTop 大值触发重新渲染。
+   *   微信小程序 scroll-view 不会在 scrollTop 值不变时重新滚动，
+   *   因此每次在两个大值之间切换来保证触发。
    */
   scrollToBottom: function () {
-    wx.createSelectorQuery()
-      .select('#message-container')
-      .boundingClientRect(function (rect) {
-        // 使用ScrollView的scroll-top实现滚动到底部
-        wx.createSelectorQuery()
-          .select('#scroll-view')
-          .boundingClientRect(function (scrollRect) {
-            // 计算需要滚动的高度
-            if (rect && scrollRect) {
-              const scrollTop = rect.height;
-              this.setData({
-                scrollTop: scrollTop
-              });
-            }
-          }.bind(this))
-          .exec();
-      }.bind(this))
-      .exec();
+    this.setData({
+      scrollIntoView: '',
+      scrollTop: this.data.scrollTop === 99999 ? 99998 : 99999
+    });
   },
 
   /**
@@ -6803,6 +6924,7 @@ Page({
     const nextState = {
       messages: messages,
       inputFocus: true,
+      keyboardVisible: true,
       keepKeyboardOpenOnSend: true,
       isSending: true
     };
@@ -6811,10 +6933,10 @@ Page({
       nextState.inputValue = '';
     }
     
-    this.setData(nextState);
-
-    // 滚动到底部
-    this.scrollToBottom();
+    var self = this;
+    this.setData(nextState, function() {
+      wx.nextTick(function() { self.scrollToBottom(); });
+    });
 
     // 🔥 使用云函数发送消息 - 传递chatId而不是receiverId
     wx.cloud.callFunction({
@@ -7074,13 +7196,28 @@ Page({
     }
     
     this._localMessageCache = messages;
-    this.setData({
+    const shouldKeepBottom = !!(this.data.inputFocus || this.data.keyboardVisible || this.data.keyboardHeight > 0);
+    const patch = {
       messages: messages,
-      scrollIntoView: 'sys-0',
       hasSystemMessage: true
+    };
+    if (!shouldKeepBottom && position === 'top') {
+      patch.scrollIntoView = 'sys-0';
+    } else {
+      patch.scrollIntoView = '';
+      patch.scrollTop = this.data.scrollTop === 99999 ? 99998 : 99999;
+    }
+    this.setData(patch, () => {
+      if (shouldKeepBottom) {
+        this.scheduleScrollToBottom();
+      }
     });
     
-    console.log('📝 [系统消息-v1.3.83] ✅ 系统消息已添加，滚动到顶部sys-0');
+    if (!shouldKeepBottom && position === 'top') {
+      console.log('📝 [系统消息-v1.3.83] ✅ 系统消息已添加，滚动到顶部sys-0');
+    } else {
+      console.log('📝 [系统消息-v1.3.83] ✅ 系统消息已添加，保持底部可见');
+    }
 
     // B端加入提示：设置处理标记，防重复
     if (this.data && this.data.isFromInvite && /^加入.+的聊天$/.test(content)) {
@@ -7836,11 +7973,10 @@ Page({
     try {
       this.setData({
         inputFocus: true,
-        keepKeyboardOpenOnSend: true, // 发送后保持键盘，方便连续输入表情
-        scrollIntoView: 'bottom-anchor'
-      });
-      wx.nextTick(() => {
-        try { this.ensureNavbarPosition && this.ensureNavbarPosition(); } catch (e) {}
+        keyboardVisible: true,
+        keepKeyboardOpenOnSend: true,
+        scrollIntoView: '',
+        scrollTop: this.data.scrollTop === 99999 ? 99998 : 99999
       });
     } catch (e) {
       wx.showToast({
@@ -7956,6 +8092,9 @@ Page({
       isPageActive: true,
       lastActivityTime: Date.now()
     });
+
+    // 🔥 重新注册键盘监听器，确保当前页面实例能收到键盘事件
+    this._registerKeyboardListener();
     
     // 🔥 【阅后即焚增强】重新进入页面时，启动在线状态监听
     this.startOnlineStatusMonitor();
@@ -7983,7 +8122,11 @@ Page({
       });
       if (cleanedMessages.length !== beforeCount) {
         this._localMessageCache = cleanedMessages;
-        this.setData({ messages: cleanedMessages });
+        this.setData({ messages: cleanedMessages }, () => {
+          if (this.data.inputFocus || this.data.keyboardVisible || this.data.keyboardHeight > 0) {
+            this.scheduleScrollToBottom();
+          }
+        });
         console.log('🧹 [B端onShow清理] 已移除', beforeCount - cleanedMessages.length, '条A端样式系统消息');
       }
     }
@@ -8046,15 +8189,12 @@ Page({
       this.checkAndFixNicknames();
     }, 2000);
     
-    // 🔥 【B端专用修复】B端用户标题和系统消息立即修复
-    setTimeout(() => {
-      this.fixBEndDisplayImmediately();
-    }, 1000);
-    
-    // 🔥 【标题栏固定】确保标题栏始终保持吸顶，不受键盘影响
-    setTimeout(() => {
-      this.ensureNavbarPosition();
-    }, 300);
+    // 🔥 【同构UI模式】禁用B端专用显示修复，避免与统一键盘/滚动状态机冲突
+    if (!this.isHomogeneousUiMode()) {
+      setTimeout(() => {
+        this.fixBEndDisplayImmediately();
+      }, 1000);
+    }
     
     // 🧪 【开发调试】添加测试方法
     if (DEBUG_FLAGS.ENABLE_TEST_APIS) {
@@ -8288,7 +8428,9 @@ Page({
                     if (batchNewMessages.length > 0) {
                       var merged = existingMessages.concat(batchNewMessages);
                       this._localMessageCache = merged;
-                      this.setData({ messages: merged });
+                      this.setData({ messages: merged }, () => {
+                        this.scheduleScrollToBottom();
+                      });
                       this._watcherDirectAddSuccess = true;
                       console.log('🔔 [新消息处理] ✅ 批量添加', batchNewMessages.length, '条新消息');
 
@@ -8303,7 +8445,6 @@ Page({
                           }, 150);
                         }
                       });
-                      this.scrollToBottom();
                     }
                   } else {
                     console.log('🔔 [调试] snapshot.docChanges 为空，尝试备用方案');
@@ -8394,7 +8535,9 @@ Page({
                       if (fbBatch.length > 0) {
                         var fbMerged = fbExisting.concat(fbBatch);
                         this._localMessageCache = fbMerged;
-                        this.setData({ messages: fbMerged });
+                        this.setData({ messages: fbMerged }, () => {
+                          this.scheduleScrollToBottom();
+                        });
                         this._watcherDirectAddSuccess = true;
                         console.log('🔔 [备用方案] ✅ 批量添加', fbBatch.length, '条新消息');
 
@@ -8409,7 +8552,6 @@ Page({
                             }, 150);
                           }
                         });
-                        this.scrollToBottom();
                       }
                     }
                   }
@@ -9311,6 +9453,11 @@ Page({
    onUnload: function() {
     console.log('🛠️ [系统修复] 页面卸载，开始全面清理');
     this.uninstallMessageSetDataDebugHook();
+
+    this._kbTransitionGuard = false;
+    if (this._kbResetTimer) { clearTimeout(this._kbResetTimer); this._kbResetTimer = null; }
+    if (this._kbFocusProbeTimer) { clearTimeout(this._kbFocusProbeTimer); this._kbFocusProbeTimer = null; }
+    if (this._scrollBottomTimer) { clearTimeout(this._scrollBottomTimer); this._scrollBottomTimer = null; }
     
     // 🔥 清理B端标题重试定时器
     if (this.bEndTitleRetryTimer) {
@@ -9387,10 +9534,20 @@ Page({
      console.log('[聊天页面] 页面隐藏，暂停监听');
      
      // 🔥 【阅后即焚增强】更新页面活跃状态
+     var winH = (this._layoutInfo && this._layoutInfo.windowHeight) || this.data.windowHeight || 700;
      this.setData({
        isPageActive: false,
-       backgroundTime: Date.now()
+       backgroundTime: Date.now(),
+       inputFocus: false,
+       keyboardHeight: 0,
+       keyboardVisible: false,
+       containerHeight: winH
      });
+
+     this._kbTransitionGuard = false;
+     if (this._kbResetTimer) { clearTimeout(this._kbResetTimer); this._kbResetTimer = null; }
+     if (this._kbFocusProbeTimer) { clearTimeout(this._kbFocusProbeTimer); this._kbFocusProbeTimer = null; }
+     if (this._scrollBottomTimer) { clearTimeout(this._scrollBottomTimer); this._scrollBottomTimer = null; }
      
      // 🔥 【阅后即焚增强】停止在线状态监听
      this.stopOnlineStatusMonitor();

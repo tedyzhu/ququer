@@ -1,4 +1,4 @@
-<view class="chat-container">
+<view class="chat-container" style="height: {{containerHeight}}px;" catchtouchmove="preventPageScroll">
   <!-- 自定义标题栏 -->
   <view class="custom-navbar">
     <view class="navbar-left" bindtap="showChatMenu">
@@ -34,9 +34,8 @@
     class="messages-container"
     scroll-y="true"
     scroll-into-view="{{scrollIntoView}}"
+    scroll-top="{{scrollTop}}"
     enable-flex="true"
-    style="padding-bottom: {{bottomPaddingPx}}px;"
-    bindscrolltolower="refreshToolbarHeightPadding"
   >
     <!-- 正在加载 -->
     <view wx:if="{{isLoading}}" class="loading-container">
@@ -102,7 +101,7 @@
   </scroll-view>
   
   <!-- 底部输入区域 -->
-  <view class="input-container" style="bottom: {{keyboardHeight}}px;">
+  <view class="input-container {{keyboardVisible ? 'keyboard-up' : ''}}">
     <view class="voice-btn" bindtap="toggleVoiceInput">
       <text class="icon-text">🎤</text>
     </view>
@@ -119,8 +118,8 @@
       confirm-type="send"
       bindconfirm="sendMessage"
       confirm-hold="true"
-      cursor-spacing="16"
-      adjust-position="false"
+      cursor-spacing="0"
+      adjust-position="{{false}}"
       disabled="{{isCreatingChat}}"
     />
     
