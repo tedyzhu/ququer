@@ -21,27 +21,42 @@ exports.main = async (event, context) => {
   const wxContext = cloud.getWXContext();
   const db = cloud.database();
   
-  // 🔥 确保返回openId
+  // 🔥 确保返回openId，并正确合并前端传来的用户信息
+  const frontendUserInfo = event.userInfo || {};
   const userInfo = {
     openId: wxContext.OPENID,
     appId: wxContext.APPID,
     unionId: wxContext.UNIONID,
-    ...event
+    nickName: frontendUserInfo.nickName || '用户',
+    avatarUrl: frontendUserInfo.avatarUrl || '/assets/images/default-avatar.png'
   };
   
   console.log('🔥 [login] 用户信息:', userInfo);
   
   try {
-    // 更新用户信息到数据库
-    await db.collection('users').doc(wxContext.OPENID).set({
+    // 更新用户信息到数据库（使用 set 实现 upsert）
+    const docId = wxContext.OPENID;
+    if (!docId) {
+      console.error('❌ [login] 无法获取 OPENID');
+      return {
+        success: false,
+        error: '无法获取用户身份',
+        userInfo,
+        tcbContext: wxContext
+      };
+    }
+    
+    await db.collection('users').doc(docId).set({
       data: {
         ...userInfo,
         lastLoginTime: db.serverDate()
       }
     });
     
+    // 🔧 修复：同时在顶层返回 openId，方便前端获取
     return {
       success: true,
+      openId: wxContext.OPENID,
       userInfo,
       tcbContext: wxContext
     };

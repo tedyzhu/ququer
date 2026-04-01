@@ -288,6 +288,11 @@ exports.main = async (event, context) => {
     
     for (const participant of tempParticipants) {
       const participantId = participant.id || participant.openId;
+      // 🔧 修复：跳过 undefined/null/空字符串 的参与者ID
+      if (!participantId) {
+        console.log('[云函数] 跳过无效参与者（缺少ID）:', JSON.stringify(participant));
+        continue;
+      }
       if (!seenIds.has(participantId)) {
         seenIds.add(participantId);
         uniqueParticipants.push(participant);

@@ -51,9 +51,25 @@ exports.main = async (event, context) => {
         // 聊天已存在，仅更新当前用户的状态
         const participants = existingChat.data.participants || [];
         
-        // 检查当前用户是否已在参与者列表中
-        if (!participants.includes(userId)) {
-          participants.push(userId);
+        // 🔧 修复：支持对象数组和字符串数组两种格式
+        const isInChat = participants.some(p => {
+          if (typeof p === 'string') return p === userId;
+          if (typeof p === 'object') return (p.id === userId || p.openId === userId);
+          return false;
+        });
+        
+        if (!isInChat) {
+          // 根据现有格式添加参与者
+          const isObjectArray = participants.length > 0 && typeof participants[0] === 'object';
+          const newParticipant = isObjectArray ? {
+            id: userId,
+            openId: userId,
+            nickName: event.userName || '用户',
+            isCreator: participants.length === 0,
+            joinTime: db.serverDate()
+          } : userId;
+          
+          participants.push(newParticipant);
           await db.collection('conversations').doc(chatId).update({
             data: {
               participants: participants,
@@ -110,11 +126,20 @@ exports.main = async (event, context) => {
     // 创建新聊天记录
     const timestamp = db.serverDate();
     
+    // 🔧 修复：使用对象格式存储参与者，与 joinByInvite 保持一致
+    const creatorParticipant = {
+      id: userId,
+      openId: userId,
+      nickName: event.userName || '用户',
+      isCreator: true,
+      joinTime: timestamp
+    };
+    
     // 首次创建聊天记录
     await db.collection('conversations').add({
       data: {
         _id: chatId,
-        participants: participantIds,
+        participants: [creatorParticipant],
         createdBy: userId,
         createdAt: timestamp,
         updatedAt: timestamp,

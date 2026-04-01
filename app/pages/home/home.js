@@ -342,7 +342,6 @@ Page({
    * 通知对方已加入会话
    */
   notifyPartnerJoined: function(conversationId, userInfo) {
-    // 这里应该调用云函数通知对方
     console.log('通知对方已加入会话:', conversationId, userInfo);
     
     // 调用云函数通知邀请者
@@ -359,21 +358,6 @@ Page({
         console.error('通知对方失败:', err);
       }
     });
-    
-    // 模拟对方收到通知后的响应
-    setTimeout(() => {
-      if (this.data.messages.length === 1) {
-        // 添加一条来自对方的消息
-        const messages = this.data.messages.concat({
-          id: Date.now(),
-          content: '很高兴你能加入，开始聊天吧！',
-          isSelf: false,
-          timestamp: new Date().toISOString()
-        });
-        
-        this.setData({ messages });
-      }
-    }, 2000);
   },
   
   /**
@@ -385,11 +369,11 @@ Page({
     // 清除可能存在的旧定时器
     this.stopCheckFriendJoinedTimer();
     
-    // 创建新的定时器，每1秒检查一次
+    // 创建新的定时器，每5秒检查一次（避免过于频繁的云函数调用）
     const timerID = setInterval(() => {
       console.log('[轮询] 定时检查触发');
       this.checkFriendJoined();
-    }, 1000);
+    }, 5000);
     
     // 保存定时器ID
     this.setData({
@@ -477,9 +461,8 @@ Page({
             
             // 自动跳转到聊天页面，使用正确的参数格式
             const chatUrls = [
-              `/pages/chat/chat?id=${this.data.conversationId}&inviter=${inviterParam}`,
-              `../chat/chat?id=${this.data.conversationId}&inviter=${inviterParam}`,
-              `/app/pages/chat/chat?id=${this.data.conversationId}&inviter=${inviterParam}`
+              `/app/pages/chat/chat?id=${this.data.conversationId}&inviter=${inviterParam}`,
+              `../chat/chat?id=${this.data.conversationId}&inviter=${inviterParam}`
             ];
             
             console.log('[检查] 准备跳转URL:', chatUrls[0]);
@@ -600,16 +583,15 @@ Page({
         });
         
         // 获取跳转参数，确保格式一致，使用安全编码
-        const encoding = require('../../app/utils/encoding.js');
+        const encoding = require('../../utils/encoding.js');
         const nickname = encoding.safeEncodeNickname(this.data.userInfo.nickName || '用户');
         
         console.log('[开始聊天] 当前用户昵称:', this.data.userInfo.nickName, '编码后:', nickname);
         
         // 跳转到聊天页面，使用id和inviter参数，参数顺序与checkFriendJoined保持一致
         const chatUrls = [
-          `/pages/chat/chat?id=${this.data.conversationId}&inviter=${nickname}`,
-          `../chat/chat?id=${this.data.conversationId}&inviter=${nickname}`,
-          `/app/pages/chat/chat?id=${this.data.conversationId}&inviter=${nickname}`
+          `/app/pages/chat/chat?id=${this.data.conversationId}&inviter=${nickname}`,
+          `../chat/chat?id=${this.data.conversationId}&inviter=${nickname}`
         ];
         
         console.log('[开始聊天] 尝试跳转到:', chatUrls[0]);
@@ -644,9 +626,8 @@ Page({
         
         // 即使通知失败也继续跳转，保持相同的URL参数顺序
         const chatUrls = [
-          `/pages/chat/chat?id=${this.data.conversationId}&inviter=${nickname}`,
-          `../chat/chat?id=${this.data.conversationId}&inviter=${nickname}`,
-          `/app/pages/chat/chat?id=${this.data.conversationId}&inviter=${nickname}`
+          `/app/pages/chat/chat?id=${this.data.conversationId}&inviter=${nickname}`,
+          `../chat/chat?id=${this.data.conversationId}&inviter=${nickname}`
         ];
         
         this.tryNavigateToUrls(chatUrls, 0);
@@ -808,24 +789,31 @@ Page({
    * 将消息发送到服务器
    */
   sendMessageToServer: function(message) {
-    // 这里调用云函数发送消息
     console.log('发送消息到服务器:', message);
-    // wx.cloud.callFunction 实现...
     
-    // 模拟对方收到消息后的回复
-    if (Math.random() > 0.5) { // 50%概率回复
-      setTimeout(() => {
-        const reply = {
-          id: Date.now(),
-          content: '收到你的消息了！',
-          isSelf: false,
-          timestamp: new Date().toISOString()
-        };
-        
-        const messages = this.data.messages.concat(reply);
-        this.setData({ messages });
-      }, 1500 + Math.random() * 1000); // 随机1.5-2.5秒回复
+    if (!this.data.conversationId) {
+      console.error('缺少会话ID，无法发送消息');
+      return;
     }
+    
+    wx.cloud.callFunction({
+      name: 'sendMessage',
+      data: {
+        chatId: this.data.conversationId,
+        content: message.content,
+        type: 'text'
+      },
+      success: res => {
+        console.log('消息发送成功:', res);
+      },
+      fail: err => {
+        console.error('消息发送失败:', err);
+        wx.showToast({
+          title: '发送失败',
+          icon: 'none'
+        });
+      }
+    });
   },
   
   /**
@@ -852,8 +840,8 @@ Page({
       this.startCheckFriendJoinedTimer();
     }
     
-      const userNickname = app.globalData.userInfo.nickName || '用户';
-  const shareTitle = `${userNickname}邀请你加入蛐曲儿私密聊天`;
+    const userNickname = (app.globalData.userInfo && app.globalData.userInfo.nickName) || '用户';
+    const shareTitle = `${userNickname}邀请你加入蛐曲儿私密聊天`;
   
   // 🔥 修复：直接跳转到新版聊天页面，简化分享流程
   const sharePath = `/app/pages/chat/chat?id=${conversationId}&inviter=${encodeURIComponent(userNickname)}&fromInvite=true`;

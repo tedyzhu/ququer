@@ -122,14 +122,24 @@ page {
 }
 
 /**
- * 聊天主容器 — position:fixed 锁死在视口，防止键盘推动。
- * 高度由 JS 通过 windowHeight 内联设置，不依赖 100vh。
+ * 全屏背景兜底层 — 永远铺满视口，保证页面恢复时不出现灰色间隙。
  */
-.chat-container {
+.chat-page-backdrop {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
+  bottom: 0;
+  background-color: #ededed;
+  overflow: hidden;
+}
+
+/**
+ * 聊天主容器 — 默认 height:100% 撑满背景层；
+ * 键盘弹出时由内联 style 覆盖为精确高度值。
+ */
+.chat-container {
+  height: 100%;
   display: flex;
   flex-direction: column;
   background-color: #ededed;
@@ -204,17 +214,39 @@ page {
 .message-item {
   margin-bottom: 32rpx;
   overflow: hidden;
-  /* 🔥 【FIX-v2.1】opacity用5s与fading同步；max-height/margin用0.4s做补位滑动 */
-  transition: opacity 5s ease-in-out, max-height 0.4s ease-out, margin-bottom 0.4s ease-out;
+  position: relative;
+  z-index: 0;
+  /**
+   * opacity 使用 5s 与 JS fading 逻辑同步；
+   * max-height / margin-bottom 默认不做 transition，仅在 collapsing 时激活，
+   * 避免正常渲染时产生意外动画。
+   */
+  transition: opacity 5s ease-in-out;
   max-height: 800rpx;
 }
 
-/* 🔥 【FIX-v2.1】消息彻底删除前的折叠过渡，让下方消息平滑上移 */
+/**
+ * fading 阶段：先完成 opacity 淡出（5s），淡出结束后再快速收缩高度（0.3s）。
+ * 这样消息完全不可见后空间才开始收缩，避免透明重叠。
+ */
+.message-item.fading-collapse {
+  max-height: 0 !important;
+  margin-bottom: 0 !important;
+  overflow: visible !important;
+  z-index: 2;
+  transition: opacity 5s ease-in-out,
+              max-height 0.3s ease-out 5s,
+              margin-bottom 0.3s ease-out 5s;
+}
+
+/**
+ * 最终折叠：消息已完全不可见，快速收缩残余空间后从 DOM 移除。
+ */
 .message-item.collapsing {
   max-height: 0 !important;
   margin-bottom: 0 !important;
   opacity: 0 !important;
-  transition: max-height 0.35s ease-out, margin-bottom 0.35s ease-out, opacity 0.1s ease-out;
+  transition: max-height 0.3s ease-out, margin-bottom 0.3s ease-out, opacity 0.05s ease-out;
 }
 
 /* 时间分隔线 */
@@ -300,16 +332,27 @@ page {
   margin: 6rpx 0;
   padding: 0;
   overflow: hidden;
-  /* 🔥 【FIX-v2.1】系统消息也支持折叠补位动画 */
-  transition: opacity 5s ease-in-out, max-height 0.4s ease-out, margin 0.4s ease-out;
+  position: relative;
+  z-index: 0;
+  transition: opacity 5s ease-in-out;
   max-height: 400rpx;
+}
+
+.message-wrapper.system.fading-collapse {
+  max-height: 0 !important;
+  margin: 0 !important;
+  overflow: visible !important;
+  z-index: 2;
+  transition: opacity 5s ease-in-out,
+              max-height 0.3s ease-out 5s,
+              margin 0.3s ease-out 5s;
 }
 
 .message-wrapper.system.collapsing {
   max-height: 0 !important;
   margin: 0 !important;
   opacity: 0 !important;
-  transition: max-height 0.35s ease-out, margin 0.35s ease-out, opacity 0.1s ease-out;
+  transition: max-height 0.3s ease-out, margin 0.3s ease-out, opacity 0.05s ease-out;
 }
 
 .system-message {
@@ -405,7 +448,8 @@ page {
 .input-container {
   display: flex;
   align-items: center;
-  padding: 20rpx 30rpx;
+  padding: 20rpx 20rpx;
+  padding-right: 40rpx;
   flex-shrink: 0;
   z-index: 10;
   background-color: #f6f6f6;
@@ -447,7 +491,8 @@ page {
   height: 72rpx;
   background-color: #ffffff;
   border-radius: 8rpx;
-  margin: 0 16rpx;
+  margin: 0;
+  margin-right: 16rpx;
   padding: 0 20rpx;
   font-size: 28rpx;
 }
@@ -694,4 +739,155 @@ button[type="primary"],
 .message-self .bubble-content image,
 .self-bubble .bubble-content image {
   display: block !important;
-} 
+}
+
+/* ========== 语音输入 ========== */
+
+.voice-record-btn {
+  flex: 1;
+  height: 72rpx;
+  background-color: #ffffff;
+  border-radius: 8rpx;
+  margin: 0 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  color: #333;
+  user-select: none;
+}
+
+.voice-record-btn.recording {
+  background-color: #c9c9c9;
+}
+
+/* 录音浮层 */
+.voice-recording-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.voice-recording-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 320rpx;
+  height: 320rpx;
+  background-color: rgba(0, 0, 0, 0.75);
+  border-radius: 24rpx;
+}
+
+.voice-recording-icon {
+  width: 120rpx;
+  height: 120rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 64rpx;
+  margin-bottom: 20rpx;
+}
+
+.voice-recording-icon.cancel {
+  color: #ff4d4f;
+}
+
+.voice-recording-tip {
+  font-size: 28rpx;
+  color: #ffffff;
+  margin-bottom: 8rpx;
+}
+
+.voice-recording-duration {
+  font-size: 48rpx;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* ========== 语音消息气泡 ========== */
+
+.voice-bubble {
+  display: flex;
+  align-items: center;
+  min-width: 120rpx;
+  padding: 0;
+}
+
+.self-bubble .voice-bubble {
+  flex-direction: row-reverse;
+}
+
+.voice-icon {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 40rpx;
+  height: 40rpx;
+  position: relative;
+}
+
+.voice-icon-self {
+  flex-direction: row-reverse;
+}
+
+.voice-wave {
+  width: 4rpx;
+  background-color: #333;
+  border-radius: 2rpx;
+  margin: 0 2rpx;
+}
+
+.voice-icon-self .voice-wave {
+  background-color: #333;
+}
+
+.voice-icon-other .voice-wave {
+  background-color: #333;
+}
+
+.voice-wave-1 {
+  height: 12rpx;
+}
+
+.voice-wave-2 {
+  height: 22rpx;
+}
+
+.voice-wave-3 {
+  height: 32rpx;
+}
+
+.voice-playing .voice-wave {
+  animation: voiceWaveAnim 1s ease-in-out infinite;
+}
+
+.voice-playing .voice-wave-1 {
+  animation-delay: 0s;
+}
+
+.voice-playing .voice-wave-2 {
+  animation-delay: 0.15s;
+}
+
+.voice-playing .voice-wave-3 {
+  animation-delay: 0.3s;
+}
+
+@keyframes voiceWaveAnim {
+  0%, 100% { height: 8rpx; }
+  50% { height: 32rpx; }
+}
+
+.voice-duration {
+  font-size: 28rpx;
+  color: #333;
+  margin: 0 12rpx;
+}

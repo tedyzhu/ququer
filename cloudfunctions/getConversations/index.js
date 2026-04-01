@@ -96,13 +96,71 @@ exports.main = async (event, context) => {
     const conversationsCollection = db.collection('conversations');
     
     // 获取用户的会话列表
-    const result = await conversationsCollection
-      .where({
-        participants: userId
-      })
-      .orderBy('updateTime', 'desc')
-      .limit(event.limit || 10)
-      .get();
+    // 🔧 修复：participants 可能是字符串数组或对象数组，需要同时查询两种格式
+    let result;
+    try {
+      // 先尝试查询对象数组格式（participants[].openId 或 participants[].id）
+      const objectResult = await conversationsCollection
+        .where({
+          'participants.openId': userId
+        })
+        .orderBy('updateTime', 'desc')
+        .limit(event.limit || 10)
+        .get();
+      
+      // 再查询字符串数组格式
+      const stringResult = await conversationsCollection
+        .where({
+          participants: userId
+        })
+        .orderBy('updateTime', 'desc')
+        .limit(event.limit || 10)
+        .get();
+      
+      // 合并去重
+      const allConversations = [...(objectResult.data || [])];
+      const existingIds = new Set(allConversations.map(c => c._id));
+      for (const conv of (stringResult.data || [])) {
+        if (!existingIds.has(conv._id)) {
+          allConversations.push(conv);
+          existingIds.add(conv._id);
+        }
+      }
+      
+      // 也查询 participants[].id 格式
+      const idResult = await conversationsCollection
+        .where({
+          'participants.id': userId
+        })
+        .orderBy('updateTime', 'desc')
+        .limit(event.limit || 10)
+        .get();
+      
+      for (const conv of (idResult.data || [])) {
+        if (!existingIds.has(conv._id)) {
+          allConversations.push(conv);
+          existingIds.add(conv._id);
+        }
+      }
+      
+      // 按 updateTime 排序
+      allConversations.sort((a, b) => {
+        const timeA = a.updateTime || a.createTime || 0;
+        const timeB = b.updateTime || b.createTime || 0;
+        return timeB - timeA;
+      });
+      
+      result = { data: allConversations.slice(0, event.limit || 10) };
+    } catch (queryError) {
+      console.error('🔥 [getConversations] 查询失败，使用降级方案:', queryError);
+      result = await conversationsCollection
+        .where({
+          participants: userId
+        })
+        .orderBy('updateTime', 'desc')
+        .limit(event.limit || 10)
+        .get();
+    }
     
     console.log('🔥 [getConversations] 查询结果数量:', result.data?.length || 0);
     

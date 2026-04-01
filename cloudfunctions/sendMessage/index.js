@@ -4,7 +4,7 @@
 const cloud = require('wx-server-sdk');
 
 cloud.init({
-  env: 'ququer-env-6g35f0nv28c446e7'
+  env: cloud.DYNAMIC_CURRENT_ENV
 });
 
 exports.main = async (event, context) => {
@@ -41,6 +41,7 @@ exports.main = async (event, context) => {
       receiverId: event.receiverId || 'group',
       type: event.type,
       content: event.content,
+      duration: event.duration || 0,
       sendTime: db.serverDate(),
       status: 'sent',
       destroyed: false,

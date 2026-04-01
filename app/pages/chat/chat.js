@@ -497,7 +497,14 @@ Page({
     keyboardVisible: false,
     containerHeight: 700,
     inputFocus: false,
-    keepKeyboardOpenOnSend: false
+    keepKeyboardOpenOnSend: false,
+
+    // 语音输入
+    isVoiceMode: false,
+    isRecording: false,
+    recordingDuration: 0,
+    voiceCancelMove: false,
+    playingVoiceId: ''
   },
 
   /**
@@ -555,55 +562,125 @@ Page({
     try {
       if (!wx.onKeyboardHeightChange) return;
       var self = this;
-      wx.onKeyboardHeightChange(function(res) {
-        var rawKbH = (res && res.height) ? res.height : 0;
-        var kbH = self.getEffectiveKeyboardHeight(rawKbH);
-        var side = self.data.isSender ? 'A端' : 'B端';
-        console.log('🔥 [onKeyboardHeightChange][' + side + '] 键盘高度变化:', kbH, 'containerHeight:', self.data.containerHeight, 'windowHeight:', (self._layoutInfo && self._layoutInfo.windowHeight));
-        if (!self.data.isPageActive) kbH = 0;
+      if (!this._keyboardHeightChangeHandler) {
+        /**
+         * @description 固定引用供 offKeyboardHeightChange 解绑，避免 onShow 重复注册导致回调堆积卡死模拟器。
+         */
+        this._keyboardHeightChangeHandler = function(res) {
+          var rawKbH = (res && res.height) ? res.height : 0;
+          var kbH = self.getEffectiveKeyboardHeight(rawKbH);
+          var side = self.data.isSender ? 'A端' : 'B端';
+          console.log('🔥 [onKeyboardHeightChange][' + side + '] 键盘高度变化:', kbH, 'containerHeight:', self.data.containerHeight, 'windowHeight:', (self._layoutInfo && self._layoutInfo.windowHeight));
+          if (!self.data.isPageActive) kbH = 0;
 
-        if (kbH > 0) {
-          if (self._kbResetTimer) { clearTimeout(self._kbResetTimer); self._kbResetTimer = null; }
-          self._lastKnownKeyboardHeight = kbH;
-          var winH = (self._layoutInfo && self._layoutInfo.windowHeight) || self.data.windowHeight || 700;
-          var patch = {
-            keyboardHeight: kbH,
-            keyboardVisible: true,
-            containerHeight: winH - kbH,
-            scrollIntoView: '',
-            scrollTop: self.data.scrollTop === 99999 ? 99998 : 99999
-          };
-          wx.pageScrollTo({ scrollTop: 0, duration: 0 });
-          self.setData(patch, function() {
-            self.scheduleScrollToBottom();
+          if (kbH > 0) {
+            if (self._kbResetTimer) { clearTimeout(self._kbResetTimer); self._kbResetTimer = null; }
+            self._lastKnownKeyboardHeight = kbH;
+            var winH = (self._layoutInfo && self._layoutInfo.windowHeight) || self.data.windowHeight || 700;
+            var patch = {
+              keyboardHeight: kbH,
+              keyboardVisible: true,
+              containerHeight: winH - kbH,
+              scrollIntoView: '',
+              scrollTop: self.data.scrollTop === 99999 ? 99998 : 99999
+            };
             wx.pageScrollTo({ scrollTop: 0, duration: 0 });
-          });
-        } else {
-          /**
-           * kbH === 0 时只更新 keyboardHeight，不立即重置 containerHeight。
-           * 这样可以避免键盘打开瞬间 0→实际高度 序列导致的 UI 抖动。
-           * containerHeight 的完整重置由 onInputBlur 负责；
-           * 安全计时器兜底处理键盘被系统关闭而 onInputBlur 未触发的情况。
-           */
-          if (self.data.inputFocus || self._kbTransitionGuard) {
-            return;
-          }
-          self.setData({ keyboardHeight: 0, keyboardVisible: false });
-          if (self._kbResetTimer) clearTimeout(self._kbResetTimer);
-          self._kbResetTimer = setTimeout(function() {
-            self._kbResetTimer = null;
-            if (self.data.keyboardHeight === 0 && !self.data.inputFocus && !self._kbTransitionGuard) {
-              var winH = (self._layoutInfo && self._layoutInfo.windowHeight) || self.data.windowHeight || 700;
-              if (self.data.containerHeight !== winH) {
-                self.setData({ containerHeight: winH });
-              }
+            self.setData(patch, function() {
+              self.scheduleScrollToBottom();
+              wx.pageScrollTo({ scrollTop: 0, duration: 0 });
+            });
+          } else {
+            if (self.data.inputFocus || self._kbTransitionGuard) {
+              return;
             }
-          }, 300);
+            self.setData({ keyboardHeight: 0, keyboardVisible: false });
+            if (self._kbResetTimer) clearTimeout(self._kbResetTimer);
+            self._kbResetTimer = setTimeout(function() {
+              self._kbResetTimer = null;
+              if (self.data.keyboardHeight === 0 && !self.data.inputFocus && !self._kbTransitionGuard) {
+                var winH2 = (self._layoutInfo && self._layoutInfo.windowHeight) || self.data.windowHeight || 700;
+                if (self.data.containerHeight !== winH2) {
+                  self.setData({ containerHeight: winH2 });
+                }
+              }
+            }, 300);
+          }
+        };
+      }
+      if (typeof wx.offKeyboardHeightChange === 'function' && this._keyboardHeightChangeHandler) {
+        try {
+          wx.offKeyboardHeightChange(this._keyboardHeightChangeHandler);
+        } catch (offErr) {
+          try { wx.offKeyboardHeightChange(); } catch (offErr2) { /* 部分基础库仅支持无参 off */ }
         }
-      });
+      }
+      wx.onKeyboardHeightChange(this._keyboardHeightChangeHandler);
     } catch (e) {
       console.log('⚠️ 键盘高度监听不可用:', e);
     }
+  },
+
+  /**
+   * @description 初始化录音管理器与音频播放上下文，绑定生命周期回调（单页仅绑定一次，防止 onStop 重复触发导致 setData 风暴）。
+   */
+  _initRecorderManager: function() {
+    if (this._recorderHooksBound) {
+      return;
+    }
+    this._recorderHooksBound = true;
+    var self = this;
+    this._recorderManager = wx.getRecorderManager();
+    this._innerAudioCtx = wx.createInnerAudioContext();
+    this._recordingTimer = null;
+    this._voiceTouchStartY = 0;
+
+    this._recorderManager.onStart(function() {
+      console.log('🎙️ 录音开始');
+      if (self._recordingTimer) {
+        clearInterval(self._recordingTimer);
+        self._recordingTimer = null;
+      }
+      self.setData({ isRecording: true, recordingDuration: 0, voiceCancelMove: false });
+      self._recordingTimer = setInterval(function() {
+        var d = self.data.recordingDuration + 1;
+        self.setData({ recordingDuration: d });
+        if (d >= 60) {
+          self._recorderManager.stop();
+        }
+      }, 1000);
+    });
+
+    this._recorderManager.onStop(function(res) {
+      console.log('🎙️ 录音结束', res);
+      if (self._recordingTimer) { clearInterval(self._recordingTimer); self._recordingTimer = null; }
+      var wasCancel = self.data.voiceCancelMove;
+      self.setData({ isRecording: false, recordingDuration: 0, voiceCancelMove: false });
+      if (wasCancel) {
+        console.log('🎙️ 录音已取消');
+        return;
+      }
+      if (res.duration < 1000) {
+        wx.showToast({ title: '说话时间太短', icon: 'none' });
+        return;
+      }
+      self._sendVoiceMessage(res.tempFilePath, Math.ceil(res.duration / 1000));
+    });
+
+    this._recorderManager.onError(function(err) {
+      console.error('🎙️ 录音失败:', err);
+      if (self._recordingTimer) { clearInterval(self._recordingTimer); self._recordingTimer = null; }
+      self.setData({ isRecording: false, recordingDuration: 0, voiceCancelMove: false });
+      wx.showToast({ title: '录音失败', icon: 'none' });
+    });
+
+    this._innerAudioCtx.onEnded(function() {
+      self.setData({ playingVoiceId: '' });
+    });
+    this._innerAudioCtx.onError(function(err) {
+      console.error('🔊 语音播放失败:', err);
+      self.setData({ playingVoiceId: '' });
+      wx.showToast({ title: '播放失败', icon: 'none' });
+    });
   },
 
   /**
@@ -785,6 +862,10 @@ Page({
 
     // 🔥 软键盘高度监听（提取为方法以便 onShow 中重新注册）
     this._registerKeyboardListener();
+
+    // 语音录音管理器初始化
+    this._initRecorderManager();
+
     console.log('[聊天页面] 页面加载，携带参数:', options);
     
     // 🛠️ 【系统性修复】初始化资源管理器
@@ -5974,6 +6055,7 @@ Page({
               isSelf: isSelf,
               content: msg.content,
               type: msg.type,
+              duration: msg.duration || 0,
               time: that.formatTime(new Date(msg.sendTime)),
               timeDisplay: that.formatTime(new Date(msg.sendTime)),
               timestamp: numericTs,
@@ -6450,6 +6532,7 @@ Page({
               isSelf: isSelf,
               content: msg.content,
               type: msg.type || (systemLikeMsg ? 'system' : 'text'),
+              duration: msg.duration || 0,
               time: msgTime,
               timeDisplay: msgTime,
               timestamp: numericTimestamp,
@@ -7876,6 +7959,12 @@ Page({
    * 🔥 消息点击处理（阅后即焚触发）
    */
   onMessageTap: function(e) {
+    var msgType = e.currentTarget.dataset.msgtype;
+    if (msgType === 'voice') {
+      this.playVoice(e);
+      return;
+    }
+
     const messageId = e.currentTarget.dataset.msgid;
     console.log('🔥 [消息点击] 用户点击消息:', messageId);
     
@@ -7987,13 +8076,225 @@ Page({
   },
 
   /**
-   * 开启语音输入
+   * @description 切换语音/键盘输入模式
    */
   toggleVoiceInput: function() {
-    wx.showToast({
-      title: '语音功能开发中',
-      icon: 'none'
+    var toVoice = !this.data.isVoiceMode;
+    if (toVoice) {
+      this.setData({ isVoiceMode: true, inputFocus: false });
+    } else {
+      this.setData({ isVoiceMode: false, inputFocus: true });
+    }
+  },
+
+  /**
+   * @description 语音按钮 touchstart — 检查权限后开始录音
+   */
+  onVoiceTouchStart: function(e) {
+    this._voiceTouchStartY = e.touches[0].clientY;
+    var self = this;
+    wx.getSetting({
+      success: function(res) {
+        if (res.authSetting['scope.record'] === false) {
+          wx.openSetting({
+            success: function(settingRes) {
+              if (settingRes.authSetting['scope.record']) {
+                self._startRecording();
+              }
+            }
+          });
+          return;
+        }
+        if (res.authSetting['scope.record']) {
+          self._startRecording();
+        } else {
+          wx.authorize({
+            scope: 'scope.record',
+            success: function() { self._startRecording(); },
+            fail: function() {
+              wx.showToast({ title: '需要录音权限才能发送语音', icon: 'none' });
+            }
+          });
+        }
+      }
     });
+  },
+
+  /** @description 实际调用录音管理器开始录音 */
+  _startRecording: function() {
+    if (!this._recorderManager) return;
+    this._recorderManager.start({
+      duration: 60000,
+      sampleRate: 16000,
+      numberOfChannels: 1,
+      encodeBitRate: 48000,
+      format: 'mp3'
+    });
+  },
+
+  /**
+   * @description 语音按钮 touchmove — 检测上滑取消手势
+   */
+  /**
+   * @description 上滑取消检测；仅在状态变化时 setData，避免 touchmove 高频触发导致主线程卡死。
+   */
+  onVoiceTouchMove: function(e) {
+    if (!this.data.isRecording) return;
+    var moveY = e.touches[0].clientY;
+    var diff = this._voiceTouchStartY - moveY;
+    var cancel = diff > 50;
+    if (this.data.voiceCancelMove === cancel) {
+      return;
+    }
+    this.setData({ voiceCancelMove: cancel });
+  },
+
+  /**
+   * @description 语音按钮 touchend — 停止或取消录音
+   */
+  onVoiceTouchEnd: function() {
+    if (!this.data.isRecording) return;
+    if (this.data.voiceCancelMove) {
+      this._recorderManager.stop();
+    } else {
+      this._recorderManager.stop();
+    }
+  },
+
+  /**
+   * @description 语音按钮 touchcancel — 取消录音
+   */
+  onVoiceTouchCancel: function() {
+    if (!this.data.isRecording) return;
+    this.setData({ voiceCancelMove: true });
+    this._recorderManager.stop();
+  },
+
+  /**
+   * @description 上传语音文件到云存储并发送语音消息
+   * @param {string} tempFilePath 录音临时文件路径
+   * @param {number} duration 语音时长（秒）
+   */
+  _sendVoiceMessage: function(tempFilePath, duration) {
+    var self = this;
+    var app = getApp();
+    var currentUser = this.data.currentUser || app.globalData.userInfo;
+
+    if (!currentUser || !currentUser.openId) {
+      wx.showToast({ title: '用户信息异常', icon: 'none' });
+      return;
+    }
+
+    wx.showLoading({ title: '发送中...', mask: true });
+
+    var timestamp = Date.now();
+    var cloudPath = 'voice/' + timestamp + '_' + Math.floor(Math.random() * 1000) + '.mp3';
+
+    wx.cloud.uploadFile({
+      cloudPath: cloudPath,
+      filePath: tempFilePath,
+      success: function(uploadRes) {
+        var fileID = uploadRes.fileID;
+        console.log('🎙️ 语音上传成功:', fileID);
+
+        var nowTs = Date.now();
+        var userAvatar = currentUser.avatarUrl || '/assets/images/default-avatar.png';
+        var newMessage = {
+          id: nowTs.toString(),
+          senderId: currentUser.openId,
+          isSelf: true,
+          content: fileID,
+          type: 'voice',
+          duration: duration,
+          time: self.formatTime(new Date()),
+          timeDisplay: self.formatTime(new Date()),
+          timestamp: nowTs,
+          sendTime: nowTs,
+          showTime: true,
+          status: 'sending',
+          destroyed: false,
+          destroying: false,
+          remainTime: 0,
+          avatar: userAvatar,
+          isSystem: false,
+          _localTemp: true
+        };
+
+        var messages = (self._localMessageCache || self.data.messages).concat(newMessage);
+        self._localMessageCache = messages;
+        self.setData({
+          messages: messages,
+          scrollTop: self.data.scrollTop === 99999 ? 99998 : 99999
+        }, function() {
+          wx.nextTick(function() { self.scrollToBottom(); });
+        });
+
+        wx.cloud.callFunction({
+          name: 'sendMessage',
+          data: {
+            chatId: self.data.contactId,
+            content: fileID,
+            type: 'voice',
+            duration: duration,
+            destroyTimeout: self.data.destroyTimeout,
+            senderId: currentUser.openId,
+            currentUserInfo: {
+              nickName: currentUser.nickName,
+              avatarUrl: currentUser.avatarUrl || '/assets/images/default-avatar.png'
+            }
+          },
+          success: function(res) {
+            wx.hideLoading();
+            console.log('🎙️ 语音消息发送成功', res);
+            if (res.result && res.result.success) {
+              var updatedMessages = self.data.messages.map(function(msg) {
+                if (msg.id === newMessage.id) {
+                  return Object.assign({}, msg, {
+                    status: 'sent',
+                    id: res.result.messageId || newMessage.id
+                  });
+                }
+                return msg;
+              });
+              self._localMessageCache = updatedMessages;
+              self.setData({ messages: updatedMessages });
+            }
+          },
+          fail: function(err) {
+            wx.hideLoading();
+            console.error('🎙️ 语音消息发送失败:', err);
+            wx.showToast({ title: '发送失败', icon: 'none' });
+          }
+        });
+      },
+      fail: function(err) {
+        wx.hideLoading();
+        console.error('🎙️ 语音上传失败:', err);
+        wx.showToast({ title: '语音发送失败', icon: 'none' });
+      }
+    });
+  },
+
+  /**
+   * @description 播放/停止语音消息
+   */
+  playVoice: function(e) {
+    var msgId = e.currentTarget.dataset.msgid;
+    if (!msgId) return;
+
+    if (this.data.playingVoiceId === msgId) {
+      this._innerAudioCtx.stop();
+      this.setData({ playingVoiceId: '' });
+      return;
+    }
+
+    var msg = this.data.messages.find(function(m) { return m.id === msgId; });
+    if (!msg || msg.type !== 'voice') return;
+
+    this._innerAudioCtx.stop();
+    this._innerAudioCtx.src = msg.content;
+    this._innerAudioCtx.play();
+    this.setData({ playingVoiceId: msgId });
   },
 
   /**
@@ -8087,11 +8388,40 @@ Page({
   onShow: function () {
     console.log('[邀请流程] 聊天页面显示');
     
-    // 🔥 【阅后即焚增强】更新页面活跃状态
+    // 🔥 页面恢复时强制清理可能残留的系统弹层/遮罩
+    try { wx.hideLoading(); } catch (_e) {}
+    try { wx.hideToast(); } catch (_e) {}
+
+    // 🔥 重置全部 UI 状态，keyboardVisible=false 使内联 height 不生效，容器回到 height:100%
+    var winH = 700;
+    try {
+      var wInfo = wx.getWindowInfo();
+      if (wInfo && wInfo.windowHeight > 0) winH = wInfo.windowHeight;
+    } catch (_e) {}
+    if (!winH || winH <= 0) winH = (this._layoutInfo && this._layoutInfo.windowHeight) || this.data.windowHeight || 700;
     this.setData({
       isPageActive: true,
-      lastActivityTime: Date.now()
+      lastActivityTime: Date.now(),
+      containerHeight: winH,
+      keyboardHeight: 0,
+      keyboardVisible: false,
+      inputFocus: false,
+      isCreatingChat: false,
+      chatCreationStatus: ''
     });
+    console.log('🔥 [onShow] 页面恢复, keyboardVisible=false, containerHeight:', winH);
+
+    // 🔥 延迟二次保障：200ms 后再次强制重置，覆盖可能的异步竞态
+    var self = this;
+    wx.nextTick(function() {
+      wx.pageScrollTo({ scrollTop: 0, duration: 0 });
+    });
+    setTimeout(function() {
+      if (self.data.keyboardVisible || self.data.keyboardHeight > 0) {
+        console.log('🔥 [onShow-fallback] 延迟重置 keyboardVisible');
+        self.setData({ keyboardVisible: false, keyboardHeight: 0, containerHeight: winH });
+      }
+    }, 200);
 
     // 🔥 重新注册键盘监听器，确保当前页面实例能收到键盘事件
     this._registerKeyboardListener();
@@ -8417,6 +8747,7 @@ Page({
                         sendTime: normalizedTimestamp,
                         isSelf: isMyMessageStrict,
                         type: newMessage.type || (systemLike ? 'system' : newMessage.type),
+                        duration: newMessage.duration || 0,
                         isSystem: systemLike,
                         isSystemMessage: systemLike,
                         destroyTimeout: newMessage.destroyTimeout || _self.data.destroyTimeout || DEFAULT_DESTROY_TIMEOUT,
@@ -8524,6 +8855,7 @@ Page({
                           sendTime: fbTimestamp,
                           isSelf: isMyMsg,
                           type: message.type || (sysLike ? 'system' : message.type),
+                          duration: message.duration || 0,
                           isSystem: sysLike,
                           isSystemMessage: sysLike,
                           destroyTimeout: message.destroyTimeout || fbSelf.data.destroyTimeout || DEFAULT_DESTROY_TIMEOUT,
@@ -9454,10 +9786,19 @@ Page({
     console.log('🛠️ [系统修复] 页面卸载，开始全面清理');
     this.uninstallMessageSetDataDebugHook();
 
+    try {
+      if (typeof wx.offKeyboardHeightChange === 'function' && this._keyboardHeightChangeHandler) {
+        wx.offKeyboardHeightChange(this._keyboardHeightChangeHandler);
+      }
+    } catch (kbOffErr) {}
+
     this._kbTransitionGuard = false;
     if (this._kbResetTimer) { clearTimeout(this._kbResetTimer); this._kbResetTimer = null; }
     if (this._kbFocusProbeTimer) { clearTimeout(this._kbFocusProbeTimer); this._kbFocusProbeTimer = null; }
     if (this._scrollBottomTimer) { clearTimeout(this._scrollBottomTimer); this._scrollBottomTimer = null; }
+
+    if (this._recordingTimer) { clearInterval(this._recordingTimer); this._recordingTimer = null; }
+    if (this._innerAudioCtx) { this._innerAudioCtx.destroy(); this._innerAudioCtx = null; }
     
     // 🔥 清理B端标题重试定时器
     if (this.bEndTitleRetryTimer) {
@@ -9532,17 +9873,35 @@ Page({
     */
    onHide: function() {
      console.log('[聊天页面] 页面隐藏，暂停监听');
+
+     if (this._recorderManager && this.data.isRecording) {
+       if (this._recordingTimer) {
+         clearInterval(this._recordingTimer);
+         this._recordingTimer = null;
+       }
+       this.setData({ voiceCancelMove: true });
+       try {
+         this._recorderManager.stop();
+       } catch (recErr) {
+         console.warn('🎙️ 页面隐藏时停止录音:', recErr);
+       }
+     }
      
-     // 🔥 【阅后即焚增强】更新页面活跃状态
-     var winH = (this._layoutInfo && this._layoutInfo.windowHeight) || this.data.windowHeight || 700;
-     this.setData({
-       isPageActive: false,
-       backgroundTime: Date.now(),
-       inputFocus: false,
-       keyboardHeight: 0,
-       keyboardVisible: false,
-       containerHeight: winH
-     });
+    // 🔥 页面隐藏时重置键盘状态，keyboardVisible=false 让 CSS bottom:0 兜底全屏
+    var winH = 700;
+    try {
+      var wInfo = wx.getWindowInfo();
+      if (wInfo && wInfo.windowHeight > 0) winH = wInfo.windowHeight;
+    } catch (_e) {}
+    if (!winH || winH <= 0) winH = (this._layoutInfo && this._layoutInfo.windowHeight) || this.data.windowHeight || 700;
+    this.setData({
+      isPageActive: false,
+      backgroundTime: Date.now(),
+      inputFocus: false,
+      keyboardHeight: 0,
+      keyboardVisible: false,
+      containerHeight: winH
+    });
 
      this._kbTransitionGuard = false;
      if (this._kbResetTimer) { clearTimeout(this._kbResetTimer); this._kbResetTimer = null; }
@@ -9558,10 +9917,9 @@ Page({
      // 🔥 页面隐藏时停止消息监听，节省资源
      this.stopMessageListener();
 
-     // 🔥 解绑键盘监听避免重复注册
      try {
-       if (wx.offKeyboardHeightChange) {
-         wx.offKeyboardHeightChange();
+       if (typeof wx.offKeyboardHeightChange === 'function' && this._keyboardHeightChangeHandler) {
+         wx.offKeyboardHeightChange(this._keyboardHeightChangeHandler);
        }
      } catch (e) {}
    },
@@ -12573,7 +12931,9 @@ cleanupStaleData: function() {
 
     console.log('🗑️ [彻底删除] 已添加到全局销毁记录:', messageId);
 
-    // 🔥 【FIX-v2.1】先播放折叠动画（高度→0），再从数组移除，实现平滑补位
+    /**
+     * fadingCollapse 已在淡出阶段同步收缩高度，此处只需短暂 collapsing 收缩残余间距后移除 DOM。
+     */
     const messages = this.data.messages || [];
     const collapseIdx = messages.findIndex(m => m && m.id === messageId);
     if (collapseIdx !== -1) {
@@ -12585,14 +12945,13 @@ cleanupStaleData: function() {
         var _cci = _cCache.findIndex(function(m) { return m && m.id === messageId; });
         if (_cci !== -1) { _cCache[_cci] = Object.assign({}, _cCache[_cci], { collapsing: true }); }
       }
-      console.log('🗑️ [彻底删除] 开始折叠动画:', messageId);
 
       setTimeout(() => {
         const current = (this._localMessageCache || this.data.messages).filter(msg => msg.id !== messageId);
         this._localMessageCache = current;
         this.setData({ messages: current });
         console.log('🗑️ [彻底删除] 本地删除完成，剩余消息数量:', current.length);
-      }, 380);
+      }, 350);
     } else {
       const remaining = messages.filter(msg => msg.id !== messageId);
       this._localMessageCache = remaining;
@@ -12746,6 +13105,29 @@ cleanupStaleData: function() {
       return;
     }
 
+    /**
+     * @description 保证旧消息先于新消息淡出：遍历所有比当前消息更早发送、且尚未进入 fade 的消息，优先触发它们的淡出。
+     */
+    var targetTime = current.sendTime || current.timestamp || 0;
+    if (targetTime > 0) {
+      var msgs = this.data.messages;
+      for (var oi = 0; oi < msgs.length; oi++) {
+        var om = msgs[oi];
+        if (!om || om.id === messageId || om.isSystem) continue;
+        if (om.fading || om.destroyed || om.fadingCollapse) continue;
+        var omTime = om.sendTime || om.timestamp || 0;
+        if (omTime > 0 && omTime < targetTime) {
+          console.log('🔥 [销毁顺序修正] 先淡出更旧的消息:', om.id, om.content);
+          if (this.destroyTimers && this.destroyTimers.has(om.id)) {
+            clearInterval(this.destroyTimers.get(om.id));
+            clearTimeout(this.destroyTimers.get(om.id));
+            this.destroyTimers.delete(om.id);
+          }
+          this.startFadingDestroy(om.id, null, fadeDuration);
+        }
+      }
+    }
+
     var fadeInitData = {};
     fadeInitData['messages[' + actualIndex + '].fading'] = true;
     fadeInitData['messages[' + actualIndex + '].destroying'] = false;
@@ -12779,21 +13161,22 @@ cleanupStaleData: function() {
 
       const fadeStartData = {};
       fadeStartData[`messages[${checkIndex}].opacity`] = 0;
+      fadeStartData[`messages[${checkIndex}].fadingCollapse`] = true;
       this.setData(fadeStartData);
 
       var fc = _fadeSelf._localMessageCache;
       if (fc) {
         var fci = fc.findIndex(function(m) { return m && m.id === messageId; });
-        if (fci !== -1) { fc[fci] = Object.assign({}, fc[fci], { opacity: 0 }); }
+        if (fci !== -1) { fc[fci] = Object.assign({}, fc[fci], { opacity: 0, fadingCollapse: true }); }
       }
 
-      console.log('🔥 [透明度渐变-v1.3.78] ✅ 第二步：已设置opacity=0，CSS transition将在', fadeDuration, '秒内完成淡出');
+      console.log('🔥 [透明度渐变-v1.3.78] ✅ 第二步：已设置opacity=0 + fadingCollapse，CSS transition将在', fadeDuration, '秒内完成淡出');
 
-      // 🔥 【HOTFIX-v1.3.78】等待CSS transition完成后删除消息
+      // 🔥 【HOTFIX-v1.3.78】等待CSS transition完成后删除消息（opacity 5s + height collapse 0.3s delay后0.3s）
       const fadeTimer = setTimeout(() => {
         console.log('🔥 [透明度渐变-v1.3.78] CSS transition完成，开始彻底删除消息:', messageId);
         this.permanentlyDeleteMessage(messageId);
-      }, fadeDuration * 1000); // 等待CSS transition完成
+      }, fadeDuration * 1000 + 400); // opacity完成后再等0.4s确保height collapse也完成
 
       // 更新定时器引用
       if (this.destroyTimers) {

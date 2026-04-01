@@ -5,20 +5,7 @@ const cloud = require('wx-server-sdk');
 
 // 初始化云环境
 cloud.init({
-  env: 'ququer-env-6g35f0nv28c446e7',
-  // 添加安全相关配置
-  securityHeaders: {
-    enableCrossOriginIsolation: true,
-    crossOriginOpenerPolicy: {
-      value: 'same-origin'
-    },
-    crossOriginEmbedderPolicy: {
-      value: 'require-corp'
-    },
-    crossOriginResourcePolicy: {
-      value: 'same-origin'
-    }
-  }
+  env: cloud.DYNAMIC_CURRENT_ENV
 });
 
 // 获取数据库引用
@@ -71,6 +58,18 @@ exports.main = async (event, context) => {
     // 检查是否有参与者
     const participants = chat.data.participants || [];
     
+    // 🔧 修复：正确计算参与者数量，支持对象数组和字符串数组
+    let participantCount = participants.length;
+    // 如果是对象数组，统计有效的唯一参与者
+    if (participantCount > 0 && typeof participants[0] === 'object') {
+      const uniqueIds = new Set();
+      participants.forEach(p => {
+        const pid = p.id || p.openId;
+        if (pid) uniqueIds.add(pid);
+      });
+      participantCount = uniqueIds.size;
+    }
+    
     // 检查是否有朋友加入标记
     const friendJoined = chat.data.friendJoined === true;
     
@@ -81,12 +80,12 @@ exports.main = async (event, context) => {
     const result = {
       success: true,
       exists: true,
-      joined: friendJoined || participants.length > 1,
+      joined: friendJoined || participantCount > 1,
       chatStarted: chatStarted,
       chatStartedBy: chat.data.chatStartedBy || '',
       chatStartedByName: chat.data.chatStartedByName || '',
       friendName: chat.data.friendName || '朋友',
-      participants: participants.length,
+      participants: participantCount,
       createdBy: chat.data.createdBy,
       isChatCreator: chat.data.createdBy === userId
     };

@@ -6,20 +6,7 @@ const cloud = require('wx-server-sdk');
 
 // 初始化云环境
 cloud.init({
-  env: 'ququer-env-6g35f0nv28c446e7',
-  // 添加安全相关配置
-  securityHeaders: {
-    enableCrossOriginIsolation: true,
-    crossOriginOpenerPolicy: {
-      value: 'same-origin'
-    },
-    crossOriginEmbedderPolicy: {
-      value: 'require-corp'
-    },
-    crossOriginResourcePolicy: {
-      value: 'same-origin'
-    }
-  }
+  env: cloud.DYNAMIC_CURRENT_ENV
 });
 
 // 获取数据库引用
@@ -119,29 +106,43 @@ exports.main = async (event, context) => {
     if (conversation.data.chatStarted) {
       console.log('[云函数] 会话已经处于开始状态');
       
+      // 🔧 修复：正确处理对象数组格式的 participants
+      const existingParticipants = conversation.data.participants || [];
+      const isObjectArray = existingParticipants.length > 0 && typeof existingParticipants[0] === 'object';
+      
+      let participantsUpdate;
+      if (isObjectArray) {
+        // 对象数组格式：检查用户是否已存在
+        const alreadyIn = existingParticipants.some(p => 
+          (p.id === userId || p.openId === userId)
+        );
+        if (!alreadyIn) {
+          participantsUpdate = [...existingParticipants, {
+            id: userId,
+            openId: userId,
+            nickName: userName || '用户',
+            isCreator: false,
+            joinTime: db.serverDate()
+          }];
+        } else {
+          participantsUpdate = existingParticipants;
+        }
+      } else {
+        // 字符串数组格式：使用 addToSet
+        participantsUpdate = db.command.addToSet(userId);
+      }
+      
       // 只更新时间戳和最后消息
       await db.collection('conversations').doc(conversationId).update({
         data: {
           updatedAt: db.serverDate(),
           lastMessage: `${userName || '用户'}加入了私密聊天`,
           lastMessageTime: db.serverDate(),
-          // 确保当前用户在参与者列表中
-          participants: db.command.addToSet(userId)
+          participants: participantsUpdate
         }
       });
       
-      // 添加系统消息
-      await db.collection('messages').add({
-        data: {
-          chatId: conversationId,
-          content: `${userName || '用户'}加入了私密聊天`,
-          senderId: 'system',
-          type: 'system',
-          sendTime: db.serverDate(),
-          status: 'sent',
-          destroyed: false
-        }
-      });
+      // 🔧 修复：不再添加系统消息，避免与 joinByInvite 重复
       
       return {
         success: true,
@@ -151,6 +152,30 @@ exports.main = async (event, context) => {
         alreadyStarted: true,
         updatedAt: new Date().toISOString()
       };
+    }
+    
+    // 🔧 修复：正确处理对象数组格式的 participants
+    const existingParticipants2 = conversation.data.participants || [];
+    const isObjectArray2 = existingParticipants2.length > 0 && typeof existingParticipants2[0] === 'object';
+    
+    let participantsUpdate2;
+    if (isObjectArray2) {
+      const alreadyIn2 = existingParticipants2.some(p => 
+        (p.id === userId || p.openId === userId)
+      );
+      if (!alreadyIn2) {
+        participantsUpdate2 = [...existingParticipants2, {
+          id: userId,
+          openId: userId,
+          nickName: userName || '用户',
+          isCreator: false,
+          joinTime: db.serverDate()
+        }];
+      } else {
+        participantsUpdate2 = existingParticipants2;
+      }
+    } else {
+      participantsUpdate2 = db.command.addToSet(userId);
     }
     
     // 更新会话状态为已开始
@@ -163,8 +188,7 @@ exports.main = async (event, context) => {
         updatedAt: db.serverDate(),
         lastMessage: `${userName || '用户'} 开始了聊天`,
         lastMessageTime: db.serverDate(),
-        // 确保当前用户在参与者列表中
-        participants: db.command.addToSet(userId)
+        participants: participantsUpdate2
       }
     });
     

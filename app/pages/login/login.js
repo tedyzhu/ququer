@@ -417,11 +417,13 @@ Page({
         
         // 检查所有可能的位置
         if (res.result && res.result.openId) {
-          // 直接从结果中获取
           openId = res.result.openId;
           console.log('🔥 [ID统一] 从result.openId中获取到openId:', openId);
+        } else if (res.result && res.result.userInfo && res.result.userInfo.openId) {
+          // 🔧 修复：login云函数实际返回 { userInfo: { openId: ... } }
+          openId = res.result.userInfo.openId;
+          console.log('🔥 [ID统一] 从result.userInfo.openId中获取到openId:', openId);
         } else if (res.result && res.result.tcbContext && res.result.tcbContext.OPENID) {
-          // 从tcbContext中获取
           openId = res.result.tcbContext.OPENID;
           console.log('🔥 [ID统一] 从tcbContext中获取到openId:', openId);
         } else {
@@ -687,7 +689,7 @@ Page({
                       wx.removeStorageSync('inviteInfo');
                       
                       // A端创建者直接进入聊天，使用create action
-                      const chatPath = `/pages/chat/chat?id=${inviteInfo.chatId}&action=create&userName=${encodeURIComponent(userInfo.nickName)}`;
+                      const chatPath = `/app/pages/chat/chat?id=${inviteInfo.chatId}&action=create&userName=${encodeURIComponent(userInfo.nickName)}`;
                       console.log('[邀请流程] 🚀 A端创建者直接进入聊天:', chatPath);
                       
                       wx.reLaunch({

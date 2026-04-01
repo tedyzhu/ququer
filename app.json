@@ -2,6 +2,7 @@
   "pages": [
     "app/pages/login/login",
     "app/pages/chat/chat",
+    "app/pages/chat/detail",
     "app/pages/index/index"
   ],
   "entryPagePath": "app/pages/login/login",
@@ -43,5 +44,10 @@
     "downloadFile": 10000
   },
   "debug": false,
-  "cloud": true
+  "cloud": true,
+  "permission": {
+    "scope.record": {
+      "desc": "用于语音消息录制"
+    }
+  }
 }

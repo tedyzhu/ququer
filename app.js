@@ -366,20 +366,9 @@ App({
     
     console.log('调用云函数更新登录时间');
     
-    // 额外保护：确保云环境正确初始化
-    try {
-      if (!wx.cloud) {
-        console.error('wx.cloud不可用，跳过登录时间更新');
-        return;
-      }
-      
-      // 尝试重新初始化云环境（确保环境ID正确）
-      wx.cloud.init({
-        env: 'ququer-env-6g35f0nv28c446e7',
-        traceUser: true
-      });
-    } catch (initError) {
-      console.error('重新初始化云环境失败:', initError);
+    // 额外保护：确保云环境可用
+    if (!wx.cloud) {
+      console.error('wx.cloud不可用，跳过登录时间更新');
       return;
     }
     
@@ -651,12 +640,17 @@ App({
         
         if (urlParams.get('inviter')) {
           try {
-            // 🔧 处理双重编码
-            inviter = decodeURIComponent(decodeURIComponent(urlParams.get('inviter')));
+            // 🔧 修复：安全解码，先尝试单次解码，只有在结果仍包含编码字符时才二次解码
+            let decoded = decodeURIComponent(urlParams.get('inviter'));
+            // 检查是否还有编码字符（如 %E4 等）
+            if (/%[0-9A-Fa-f]{2}/.test(decoded)) {
+              decoded = decodeURIComponent(decoded);
+            }
+            inviter = decoded;
             console.log('[邀请流程] 从path解析到邀请者:', inviter);
           } catch (e) {
-            inviter = decodeURIComponent(urlParams.get('inviter'));
-            console.log('[邀请流程] 单次解码邀请者:', inviter);
+            inviter = urlParams.get('inviter');
+            console.log('[邀请流程] 解码失败，使用原始值:', inviter);
           }
         }
         
@@ -683,9 +677,13 @@ App({
       inviteId = options.query.chatId || options.query.inviteId || options.query.id;
       if (options.query.inviter) {
         try {
-          inviter = decodeURIComponent(decodeURIComponent(options.query.inviter));
+          let decoded = decodeURIComponent(options.query.inviter);
+          if (/%[0-9A-Fa-f]{2}/.test(decoded)) {
+            decoded = decodeURIComponent(decoded);
+          }
+          inviter = decoded;
         } catch (e) {
-          inviter = decodeURIComponent(options.query.inviter);
+          inviter = options.query.inviter;
         }
       } else {
         inviter = '朋友';

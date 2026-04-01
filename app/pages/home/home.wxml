@@ -36,7 +36,7 @@
               value="{{inputContent}}"
               confirm-type="send"
               bindconfirm="sendMessage"
-              adjust-position="false"
+              adjust-position="{{false}}"
               cursor-spacing="16"
             />
             <view class="emoji-btn" bindtap="openEmojiPicker">

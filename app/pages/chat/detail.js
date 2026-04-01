@@ -214,7 +214,7 @@ Page({
     
     return {
       title: '加入我的秘密聊天',
-      path: '/pages/share/share?id=' + this.data.chatId,
+      path: '/app/pages/share/share?id=' + this.data.chatId,
       imageUrl: '/assets/images/logo.svg'
     };
   }

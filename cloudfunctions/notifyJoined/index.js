@@ -5,20 +5,7 @@ const cloud = require('wx-server-sdk');
 
 // 初始化云环境
 cloud.init({
-  env: 'ququer-env-6g35f0nv28c446e7',
-  // 添加安全相关配置
-  securityHeaders: {
-    enableCrossOriginIsolation: true,
-    crossOriginOpenerPolicy: {
-      value: 'same-origin'
-    },
-    crossOriginEmbedderPolicy: {
-      value: 'require-corp'
-    },
-    crossOriginResourcePolicy: {
-      value: 'same-origin'
-    }
-  }
+  env: cloud.DYNAMIC_CURRENT_ENV
 });
 
 // 获取数据库引用
@@ -77,6 +64,30 @@ exports.main = async (event, context) => {
       });
     } else {
       // 会话存在，更新状态
+      // 🔧 修复：正确处理对象数组格式的 participants
+      const existingParticipants = conversation.data.participants || [];
+      const isObjectArray = existingParticipants.length > 0 && typeof existingParticipants[0] === 'object';
+      
+      let participantsUpdate;
+      if (isObjectArray) {
+        const alreadyIn = existingParticipants.some(p => 
+          (p.id === userId || p.openId === userId)
+        );
+        if (!alreadyIn) {
+          participantsUpdate = [...existingParticipants, {
+            id: userId,
+            openId: userId,
+            nickName: userName || '用户',
+            isCreator: false,
+            joinTime: db.serverDate()
+          }];
+        } else {
+          participantsUpdate = existingParticipants;
+        }
+      } else {
+        participantsUpdate = db.command.addToSet(userId);
+      }
+      
       await db.collection('conversations').doc(conversationId).update({
         data: {
           friendJoined: true,
@@ -84,24 +95,43 @@ exports.main = async (event, context) => {
           updatedAt: db.serverDate(),
           lastMessage: `${userName || '用户'}加入了聊天`,
           lastMessageTime: db.serverDate(),
-          // 确保当前用户在参与者列表中
-          participants: db.command.addToSet(userId)
+          participants: participantsUpdate
         }
       });
     }
     
-    // 添加系统消息
-    await db.collection('messages').add({
-      data: {
+    // 添加系统消息 - 🔧 修复：检查是否已有相同的系统消息，避免重复
+    const recentMessages = await db.collection('messages')
+      .where({
         chatId: conversationId,
-        content: `${userName || '用户'}加入了聊天`,
-        senderId: 'system',
         type: 'system',
-        sendTime: db.serverDate(),
-        status: 'sent',
-        destroyed: false
-      }
-    });
+        senderId: 'system'
+      })
+      .orderBy('sendTime', 'desc')
+      .limit(3)
+      .get();
+    
+    const duplicateContent = `${userName || '用户'}加入了聊天`;
+    const hasDuplicate = (recentMessages.data || []).some(msg => 
+      msg.content === duplicateContent || 
+      msg.content === `加入${userName || '用户'}的聊天`
+    );
+    
+    if (!hasDuplicate) {
+      await db.collection('messages').add({
+        data: {
+          chatId: conversationId,
+          content: duplicateContent,
+          senderId: 'system',
+          type: 'system',
+          sendTime: db.serverDate(),
+          status: 'sent',
+          destroyed: false
+        }
+      });
+    } else {
+      console.log('[云函数] 跳过重复系统消息:', duplicateContent);
+    }
     
     return {
       success: true,

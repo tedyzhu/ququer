@@ -1,4 +1,5 @@
-<view class="chat-container" style="height: {{containerHeight}}px;" catchtouchmove="preventPageScroll">
+<view class="chat-page-backdrop" catchtouchmove="preventPageScroll">
+<view class="chat-container" style="{{keyboardVisible ? 'height: ' + containerHeight + 'px;' : ''}}">
   <!-- 自定义标题栏 -->
   <view class="custom-navbar">
     <view class="navbar-left" bindtap="showChatMenu">
@@ -50,7 +51,7 @@
         <view 
           wx:if="{{item.isSystem}}"
           id="sys-{{index}}"
-          class="message-wrapper system {{item.collapsing ? 'collapsing' : ''}}"
+          class="message-wrapper system {{item.collapsing ? 'collapsing' : ''}} {{item.fadingCollapse ? 'fading-collapse' : ''}}"
           style="opacity: {{item.opacity !== undefined ? item.opacity : 1}}"
         >
           <view class="system-message">
@@ -59,37 +60,38 @@
         </view>
         
         <!-- 普通消息 - 微信原生样式 -->
-        <!-- 🔥 【HOTFIX-v1.3.74】修复空白气泡：只渲染未被销毁的消息 -->
         <view 
           wx:elif="{{!item.destroyed && item.content}}"
           id="msg-{{index}}"
-          class="message-item {{item.isSelf ? 'message-self' : 'message-other'}} {{item.collapsing ? 'collapsing' : ''}}"
+          class="message-item {{item.isSelf ? 'message-self' : 'message-other'}} {{item.collapsing ? 'collapsing' : ''}} {{item.fadingCollapse ? 'fading-collapse' : ''}}"
           bindtap="onMessageTap"
           bindlongpress="onMessageLongTap"
           data-msgid="{{item.id}}"
+          data-msgtype="{{item.type}}"
         >
-          <!-- 时间显示（与气泡同步淡出） -->
+          <!-- 时间显示 -->
           <view wx:if="{{item.showTime}}" class="message-time-divider" style="opacity: {{item.opacity !== undefined ? item.opacity : 1}}">
             <text class="time-text">{{item.timeDisplay}}</text>
           </view>
           
           <view class="message-row">
-            <!-- 🔥 确保没有头像元素渲染 -->
-            <!-- 消息气泡 -->
             <view class="message-bubble-wrapper {{item.isSelf ? 'self-bubble' : 'other-bubble'}}">
               <view 
                 class="message-bubble {{item.destroying ? 'destroying' : ''}} {{item.fading ? 'fading' : ''}} {{item.destroyed ? 'destroyed' : ''}}"
                 style="opacity: {{item.opacity !== undefined ? item.opacity : 1}}"
               >
-                <!-- 🔥 消息内容：已销毁的消息隐藏内容 -->
-                <view class="bubble-content" wx:if="{{!item.destroyed}}">{{item.content}}</view>
-                <view class="bubble-content destroyed-content" wx:else>
-                  <!-- 已销毁的消息不显示任何内容 -->
+                <!-- 语音消息气泡 -->
+                <view wx:if="{{item.type === 'voice' && !item.destroyed}}" class="voice-bubble {{playingVoiceId === item.id ? 'voice-playing' : ''}}" style="width: {{80 + (item.duration > 60 ? 60 : item.duration) * 3}}rpx;">
+                  <view class="voice-icon {{item.isSelf ? 'voice-icon-self' : 'voice-icon-other'}}">
+                    <view class="voice-wave voice-wave-1"></view>
+                    <view class="voice-wave voice-wave-2"></view>
+                    <view class="voice-wave voice-wave-3"></view>
+                  </view>
+                  <text class="voice-duration">{{item.duration}}"</text>
                 </view>
-                
-                <!-- 🔥 销毁倒计时提示 - 已移除所有倒计时显示 -->
-                
-                <!-- 🔥 点击查看提示 - 已移除，现在采用自动销毁方式 -->
+                <!-- 文本消息 -->
+                <view wx:elif="{{!item.destroyed}}" class="bubble-content">{{item.content}}</view>
+                <view class="bubble-content destroyed-content" wx:else></view>
               </view>
             </view>
           </view>
@@ -102,10 +104,6 @@
   
   <!-- 底部输入区域 -->
   <view class="input-container {{keyboardVisible ? 'keyboard-up' : ''}}">
-    <view class="voice-btn" bindtap="toggleVoiceInput">
-      <text class="icon-text">🎤</text>
-    </view>
-    
     <input
       class="message-input"
       type="text"
@@ -126,9 +124,6 @@
     <view class="emoji-btn" bindtap="openEmojiPicker">
       <text class="icon-text">😊</text>
     </view>
-    
-    <view class="more-btn" bindtap="openMoreFunctions">
-      <text class="icon-text">＋</text>
-    </view>
   </view>
-</view> 
+</view>
+</view>
