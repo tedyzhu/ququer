@@ -3,14 +3,6 @@
   "functionRoot": "./",
   "functions": [
     {
-      "name": "testDeploy",
-      "timeout": 5,
-      "envVariables": {},
-      "runtime": "Nodejs16.13",
-      "memorySize": 256,
-      "handler": "index.main"
-    },
-    {
       "name": "createInvite",
       "timeout": 5,
       "envVariables": {},

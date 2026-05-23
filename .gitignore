@@ -9,6 +9,20 @@
 *.swp
 *.swo
 
-# 微信小程序相关
+# 微信小程序 / 云开发相关
 miniprogram_npm/
 node_modules/
+**/node_modules/
+.cloudbase/
+cloudfunctions/**/node_modules/
+
+# 日志与诊断输出
+*.log
+diagnostic-report-*.txt
+
+# 临时文件
+temp_*.js
+*.tmp
+
+# 微信开发者工具私有配置(包含本机路径,不应入库)
+project.private.config.json

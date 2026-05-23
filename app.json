@@ -18,18 +18,6 @@
       "pages": [
         "share"
       ]
-    },
-    {
-      "root": "app/pages/test",
-      "pages": [
-        "test"
-      ]
-    },
-    {
-      "root": "app/pages/chat-new",
-      "pages": [
-        "chat-new"
-      ]
     }
   ],
   "window": {
