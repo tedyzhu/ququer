@@ -19,6 +19,7 @@ const {
   isSystemLikeMessage,
   ensureSystemFlags
 } = ChatHelpers;
+const MessageDebugHook = require('./modules/message-debug-hook.js');
 
 Page({
   disableScroll: true,
@@ -215,33 +216,7 @@ Page({
    * @returns {boolean} 是否开启消息Diff日志
    */
   shouldEnableMessageDiffDebug: function(options) {
-    const storageKey = 'chat_debug_message_diff';
-    try {
-      const query = options || {};
-      const queryValue = query.debugMsgDiff !== undefined
-        ? query.debugMsgDiff
-        : (query.debugMessages !== undefined ? query.debugMessages : query.msgDebug);
-
-      if (queryValue !== undefined) {
-        const parsed = this.parseDebugBoolean(queryValue);
-        wx.setStorageSync(storageKey, parsed);
-        return parsed;
-      }
-
-      const stored = wx.getStorageSync(storageKey);
-      if (stored !== '' && stored !== null && stored !== undefined) {
-        return this.parseDebugBoolean(stored);
-      }
-    } catch (error) {
-      try { console.warn('⚠️ [消息Diff调试] 读取开关失败，使用默认策略:', error); } catch (_) {}
-    }
-
-    try {
-      if (DEBUG_FLAGS.ENABLE_MESSAGE_DIFF_LOGS) return true;
-      return wx.getAppBaseInfo && wx.getAppBaseInfo().platform === 'devtools';
-    } catch (error) {
-      return !!DEBUG_FLAGS.ENABLE_MESSAGE_DIFF_LOGS;
-    }
+    return MessageDebugHook.shouldEnable(options);
   },
 
   /**
@@ -269,74 +244,7 @@ Page({
    * @returns {void}
    */
   installMessageSetDataDebugHook: function() {
-    if (this._messageSetDataHookInstalled) {
-      return;
-    }
-    if (typeof this.setData !== 'function') {
-      return;
-    }
-
-    const page = this;
-    const rawSetData = this.setData;
-    this._rawSetDataWithMessageDebug = rawSetData;
-
-    this.setData = function(dataPatch, callback) {
-      const hasMessagesPatch = !!(dataPatch && Object.prototype.hasOwnProperty.call(dataPatch, 'messages'));
-      if (!page._messageDiffDebugEnabled || !hasMessagesPatch) {
-        return rawSetData.call(this, dataPatch, callback);
-      }
-
-      const beforeMessages = Array.isArray(page.data?.messages) ? page.data.messages : [];
-      const patchMessages = Array.isArray(dataPatch.messages) ? dataPatch.messages : [];
-      const beforeIds = page.extractMessageIdsForDebug(beforeMessages);
-      const patchIds = page.extractMessageIdsForDebug(patchMessages);
-      const beforeDiff = page.summarizeMessageIdDiff(beforeIds, patchIds);
-
-      const tag = dataPatch._debugTag || dataPatch.debugTag || 'setData(messages)';
-      console.log('🧪 [消息Diff-BEFORE]', {
-        tag,
-        beforeCount: beforeIds.length,
-        patchCount: patchIds.length,
-        addedCount: beforeDiff.added.length,
-        removedCount: beforeDiff.removed.length,
-        movedCount: beforeDiff.movedCount,
-        duplicateCount: beforeDiff.duplicateIds.length,
-        addedPreview: beforeDiff.added.slice(0, 8),
-        removedPreview: beforeDiff.removed.slice(0, 8),
-        duplicatePreview: beforeDiff.duplicateIds.slice(0, 8)
-      });
-
-      const wrappedCallback = function() {
-        try {
-          const committedMessages = Array.isArray(page.data?.messages) ? page.data.messages : [];
-          const committedIds = page.extractMessageIdsForDebug(committedMessages);
-          const afterDiff = page.summarizeMessageIdDiff(patchIds, committedIds);
-          console.log('🧪 [消息Diff-AFTER]', {
-            tag,
-            patchCount: patchIds.length,
-            committedCount: committedIds.length,
-            addedCount: afterDiff.added.length,
-            removedCount: afterDiff.removed.length,
-            movedCount: afterDiff.movedCount,
-            duplicateCount: afterDiff.duplicateIds.length,
-            addedPreview: afterDiff.added.slice(0, 8),
-            removedPreview: afterDiff.removed.slice(0, 8),
-            duplicatePreview: afterDiff.duplicateIds.slice(0, 8)
-          });
-        } catch (error) {
-          try { console.warn('⚠️ [消息Diff调试] AFTER日志输出失败:', error); } catch (_) {}
-        }
-
-        if (typeof callback === 'function') {
-          callback.call(this);
-        }
-      };
-
-      return rawSetData.call(this, dataPatch, wrappedCallback);
-    };
-
-    this._messageSetDataHookInstalled = true;
-    console.log('🧪 [消息Diff调试] 已安装 setData(messages) 调试钩子');
+    MessageDebugHook.install(this);
   },
 
   /**
@@ -344,13 +252,7 @@ Page({
    * @returns {void}
    */
   uninstallMessageSetDataDebugHook: function() {
-    if (!this._messageSetDataHookInstalled) return;
-    if (typeof this._rawSetDataWithMessageDebug === 'function') {
-      this.setData = this._rawSetDataWithMessageDebug;
-    }
-    this._rawSetDataWithMessageDebug = null;
-    this._messageSetDataHookInstalled = false;
-    console.log('🧪 [消息Diff调试] 已卸载 setData(messages) 调试钩子');
+    MessageDebugHook.uninstall(this);
   },
   /**
    * 页面初始数据
