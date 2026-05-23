@@ -26,3 +26,6 @@ temp_*.js
 
 # 微信开发者工具私有配置(包含本机路径,不应入库)
 project.private.config.json
+
+# 临时脚本工具(只用于本机重构辅助)
+.tools/

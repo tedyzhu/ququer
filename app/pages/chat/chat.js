@@ -6,65 +6,19 @@
 const ResourceManager = require('../../../utils/resource-manager.js');
 const ErrorHandler = require('../../../utils/error-handler.js');
 
-// 🔧 系统消息与销毁记录默认配置 + 调试开关
-const SYSTEM_MESSAGE_DEFAULTS = {
-  AUTO_FADE_STAY_SECONDS: 3,
-  FADE_SECONDS: 5,
-  MAX_DESTROY_RECORDS: 200
-};
-
-const DEBUG_FLAGS = {
-  ENABLE_VERBOSE_LOGS: false, // 设置为true以启用详细日志
-  ENABLE_TEST_APIS: false,    // 设置为true以暴露测试API
-  ENABLE_MESSAGE_DIFF_LOGS: false // 临时调试：setData(messages) 差异日志
-};
-
-const DEFAULT_DESTROY_TIMEOUT = 30;
-const ENABLE_HOMOGENEOUS_UI_MODE = true;
-/** @description 首次打开键盘时尚无实测高度，用此值立即缩小容器，防止原生上推。 */
-const DEFAULT_KEYBOARD_HEIGHT = 300;
-
-const PLACEHOLDER_JOIN_MESSAGE_REGEX = /^加入(朋友|好友|用户|邀请者|发送方|a端用户|a端发送方)的聊天[！!]?$/i;
-
-function isPlaceholderJoinMessage(content) {
-  if (!content || typeof content !== 'string') return false;
-  return PLACEHOLDER_JOIN_MESSAGE_REGEX.test(content.trim());
-}
-
-/**
- * 判断消息是否属于系统消息
- * @param {Object} message - 原始或格式化后的消息对象
- * @returns {boolean} 是否视为系统消息
- */
-function isSystemLikeMessage(message) {
-  if (!message) return false;
-  if (message.isSystem === true || message.isSystemMessage === true) return true;
-  if (message.fromSystem === true) return true;
-  const type = typeof message.type === 'string' ? message.type.toLowerCase() : '';
-  if (type === 'system') return true;
-  const senderId = typeof message.senderId === 'string' ? message.senderId.toLowerCase() : '';
-  if (senderId === 'system') return true;
-  const sender = typeof message.sender === 'string' ? message.sender.toLowerCase() : '';
-  if (sender === 'system') return true;
-  return false;
-}
-
-/**
- * 为系统消息补齐标记字段
- * @param {Object} message - 消息对象
- * @returns {Object} 处理后的消息对象
- */
-function ensureSystemFlags(message) {
-  if (!message) return message;
-  if (isSystemLikeMessage(message)) {
-    message.isSystem = true;
-    message.isSystemMessage = true;
-    if (!message.type) {
-      message.type = 'system';
-    }
-  }
-  return message;
-}
+// 聊天页通用工具与常量(详见 ./modules/chat-helpers.js)
+const ChatHelpers = require('./modules/chat-helpers.js');
+const {
+  SYSTEM_MESSAGE_DEFAULTS,
+  DEBUG_FLAGS,
+  DEFAULT_DESTROY_TIMEOUT,
+  ENABLE_HOMOGENEOUS_UI_MODE,
+  DEFAULT_KEYBOARD_HEIGHT,
+  PLACEHOLDER_JOIN_MESSAGE_REGEX,
+  isPlaceholderJoinMessage,
+  isSystemLikeMessage,
+  ensureSystemFlags
+} = ChatHelpers;
 
 Page({
   disableScroll: true,
@@ -111,19 +65,12 @@ Page({
     }
   },
   /**
-   * 判断是否为占位符昵称
-   * @param {string} name - 昵称
-   * @returns {boolean} 是否为占位符
+   * 判断昵称是否为占位符,详见 modules/chat-helpers.js#isPlaceholderNickname
+   * @param {string} name
+   * @returns {boolean}
    */
   isPlaceholderNickname: function(name) {
-    if (!name || typeof name !== 'string') return true;
-    const trimmed = name.trim();
-    if (!trimmed) return true;
-    const placeholders = ['用户', '新用户', '朋友', '好友', '邀请者', '发送方', 'a端用户', 'A端用户', 'a端发送方', 'A端发送方'];
-    if (placeholders.includes(trimmed)) return true;
-    if (/^用户[_\-\dA-Za-z]+$/.test(trimmed)) return true;
-    if (/^user[_\-\dA-Za-z]*$/i.test(trimmed)) return true;
-    return false;
+    return ChatHelpers.isPlaceholderNickname(name);
   },
 
   /**
@@ -258,15 +205,7 @@ Page({
    * @returns {boolean} 解析后的布尔值
    */
   parseDebugBoolean: function(value) {
-    if (value === true || value === false) return value;
-    if (value === 1 || value === '1') return true;
-    if (value === 0 || value === '0') return false;
-    if (typeof value === 'string') {
-      const normalized = value.trim().toLowerCase();
-      if (normalized === 'true' || normalized === 'yes' || normalized === 'on') return true;
-      if (normalized === 'false' || normalized === 'no' || normalized === 'off') return false;
-    }
-    return !!value;
+    return ChatHelpers.parseDebugBoolean(value);
   },
 
   /**
@@ -311,12 +250,7 @@ Page({
    * @returns {Array<string>} 消息ID列表（缺失ID会生成NO_ID占位）
    */
   extractMessageIdsForDebug: function(messages) {
-    const list = Array.isArray(messages) ? messages : [];
-    return list.map((item, index) => {
-      if (!item) return `NULL_ITEM#${index}`;
-      const resolvedId = item.id || item._id;
-      return resolvedId ? String(resolvedId) : `NO_ID#${index}`;
-    });
+    return ChatHelpers.extractMessageIdsForDebug(messages);
   },
 
   /**
@@ -326,33 +260,7 @@ Page({
    * @returns {{added: Array<string>, removed: Array<string>, movedCount: number, duplicateIds: Array<string>}} 差异摘要
    */
   summarizeMessageIdDiff: function(beforeIds, afterIds) {
-    const prev = Array.isArray(beforeIds) ? beforeIds : [];
-    const next = Array.isArray(afterIds) ? afterIds : [];
-    const prevSet = new Set(prev);
-    const nextSet = new Set(next);
-
-    const added = next.filter(id => !prevSet.has(id));
-    const removed = prev.filter(id => !nextSet.has(id));
-
-    const prevIndexMap = new Map();
-    prev.forEach((id, index) => {
-      if (!prevIndexMap.has(id)) prevIndexMap.set(id, index);
-    });
-
-    let movedCount = 0;
-    next.forEach((id, index) => {
-      if (!prevIndexMap.has(id)) return;
-      const prevIndex = prevIndexMap.get(id);
-      if (prevIndex !== index) movedCount += 1;
-    });
-
-    const counter = {};
-    next.forEach(id => {
-      counter[id] = (counter[id] || 0) + 1;
-    });
-    const duplicateIds = Object.keys(counter).filter(id => counter[id] > 1);
-
-    return { added, removed, movedCount, duplicateIds };
+    return ChatHelpers.summarizeMessageIdDiff(beforeIds, afterIds);
   },
 
   /**
@@ -7188,10 +7096,7 @@ Page({
    * @returns {String} 格式化的时间字符串
    */
   formatTime: function (date) {
-    const hours = date.getHours();
-    const minutes = date.getMinutes();
-    
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    return ChatHelpers.formatTime(date);
   },
 
   /**
