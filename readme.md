@@ -29,7 +29,7 @@
 - 微信小程序原生框架(WXML / WXSS / JS)
 - 后端:微信云开发(云函数 + 云数据库 + 云存储)
 - AppID:`wx1848888960aefcb5`
-- 云环境 ID:`ququer-env-6g35f0nv28c446e7`
+- 云环境 ID:`cloud1-d8g0b5fni24b9cb89`
 
 ## 项目结构
 
@@ -94,7 +94,7 @@ ququer/
 
 1. 用微信开发者工具打开项目根目录
 2. 工具中切换为自己的 AppID(或保留 `wx1848888960aefcb5` 直接调试)
-3. 开通云开发,创建/绑定环境 `ququer-env-6g35f0nv28c446e7`(也可改为自有环境,改 `app.js` 中 `wx.cloud.init` 的 `env`)
+3. 开通云开发,创建/绑定环境 `cloud1-d8g0b5fni24b9cb89`(也可改为自有环境,改 `app.js` 中 `wx.cloud.init` 的 `env`)
 4. 在云开发面板上传部署 `cloudfunctions/` 下所有云函数
 5. 创建数据库集合 `users` `messages` `conversations`,并按需配置权限
 

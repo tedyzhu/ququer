@@ -71,5 +71,5 @@
   "cloudfunctionTemplateRoot": "cloudfunctionTemplate/",
   "cloudfunctionRoot": "cloudfunctions/",
   "cloudbaseRoot": "./",
-  "cloudenv": "ququer-env-6g35f0nv28c446e7"
+  "cloudenv": "cloud1-d8g0b5fni24b9cb89"
 }

@@ -32,10 +32,5 @@
     "downloadFile": 10000
   },
   "debug": false,
-  "cloud": true,
-  "permission": {
-    "scope.record": {
-      "desc": "用于语音消息录制"
-    }
-  }
+  "cloud": true
 }

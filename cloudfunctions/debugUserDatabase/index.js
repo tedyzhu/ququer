@@ -11,7 +11,7 @@
 const cloud = require('wx-server-sdk');
 
 cloud.init({
-  env: 'ququer-env-6g35f0nv28c446e7'
+  env: 'cloud1-d8g0b5fni24b9cb89'
 });
 
 /**

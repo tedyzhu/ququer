@@ -183,7 +183,7 @@ App({
         // 基础的云环境初始化，仅启用必要功能
         if (wx.cloud) {
           wx.cloud.init({
-            env: 'ququer-env-6g35f0nv28c446e7', // 明确指定云环境ID
+            env: 'cloud1-d8g0b5fni24b9cb89', // 明确指定云环境ID
             traceUser: false // 在安全模式下关闭用户追踪
           });
           
@@ -215,7 +215,7 @@ App({
     try {
       console.log('尝试简单初始化云环境');
       wx.cloud.init({
-        env: 'ququer-env-6g35f0nv28c446e7',
+        env: 'cloud1-d8g0b5fni24b9cb89',
         traceUser: true,
         timeout: 5000 // 减少到5秒
       });
