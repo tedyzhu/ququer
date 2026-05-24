@@ -314,7 +314,7 @@ function attach(page) {
     };
 
     // 🔥 【新增】添加B端标题修复测试方法
-    this.testBEndTitleFix = function() {
+    page.testBEndTitleFix = function() {
     console.log('🔧 [B端测试] 开始测试b端标题显示修复效果');
     
     const { isFromInvite, currentUser, participants } = this.data;
