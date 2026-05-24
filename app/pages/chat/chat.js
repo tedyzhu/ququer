@@ -21,6 +21,7 @@ const {
 } = ChatHelpers;
 const MessageDebugHook = require('./modules/message-debug-hook.js');
 const DestroyedStore = require('./modules/destroyed-store.js');
+const IdentityUtils = require('./modules/identity-utils.js');
 
 Page({
   disableScroll: true,
@@ -50,61 +51,7 @@ Page({
    * @returns {boolean} 是否应按B端逻辑处理
    */
   isReceiverEnvironment: function() {
-    const data = this.data || {};
-    if (data.isFromInvite === true) return true;
-    if (data.isSender === false) return true;
-    if (typeof this.finalIsFromInvite === 'boolean') {
-      return this.finalIsFromInvite;
-    }
-    if (typeof this.isSender === 'boolean') {
-      return this.isSender === false;
-    }
-
-    const participants = Array.isArray(data.participants) ? data.participants : [];
-    const currentUserOpenId = data.currentUser?.openId;
-
-    if (participants.length && currentUserOpenId) {
-      const selfParticipant = participants.find(p => {
-        const pid = p && (p.openId || p.id);
-        return pid && pid === currentUserOpenId;
-      });
-
-      if (selfParticipant) {
-        if (selfParticipant.isJoiner === true ||
-            selfParticipant.isReceiver === true ||
-            selfParticipant.role === 'receiver') {
-          return true;
-        }
-        if (selfParticipant.isCreator === true ||
-            selfParticipant.isSender === true ||
-            selfParticipant.role === 'creator') {
-          return false;
-        }
-      }
-
-      const otherHasCreatorFlag = participants.some(p => {
-        if (!p || p === selfParticipant) return false;
-        return p.isCreator === true || p.isSender === true || p.role === 'creator';
-      });
-      if (otherHasCreatorFlag && (!selfParticipant || selfParticipant.isCreator !== true)) {
-        return true;
-      }
-    }
-
-    try {
-      const contactId = data.contactId || this.data?.contactId;
-      if (contactId && currentUserOpenId && typeof wx !== 'undefined' && wx.getStorageSync) {
-        const creatorKey = `creator_${contactId}`;
-        const storedCreator = wx.getStorageSync(creatorKey);
-        if (storedCreator && storedCreator !== currentUserOpenId) {
-          return true;
-        }
-      }
-    } catch (error) {
-      try { console.warn('⚠️ [B端检测] 本地创建者比对失败:', error); } catch (_) {}
-    }
-
-    return false;
+    return IdentityUtils.isReceiverEnvironment(this);
   },
 
   /**
@@ -114,24 +61,7 @@ Page({
    * @returns {boolean} 是否为当前用户消息
    */
   isMessageFromCurrentUser: function(senderId, currentUserOpenId) {
-    try {
-      if (!senderId || senderId === 'system') return false;
-      const app = getApp();
-      const sid = String(senderId);
-      const uid = String(
-        currentUserOpenId ||
-        this.data.currentUser?.openId ||
-        app?.globalData?.userInfo?.openId ||
-        app?.globalData?.openId ||
-        ''
-      );
-      if (!uid) return false;
-      if (sid === uid) return true;
-      return false;
-    } catch (e) {
-      try { console.warn('⚠️ [身份匹配] 判断失败，安全返回false:', e); } catch (_) {}
-      return false;
-    }
+    return IdentityUtils.isMessageFromCurrentUser(this, senderId, currentUserOpenId);
   },
   
   /**
@@ -140,16 +70,7 @@ Page({
    * @returns {boolean} 是否曾经显示过B端加入消息
    */
   hasBEndJoinEver: function(chatId) {
-    try {
-      const id = chatId || this.data?.contactId;
-      if (!id) return false;
-      const key = `bEndJoinEver_${id}`;
-      const val = wx.getStorageSync(key);
-      return !!val;
-    } catch (e) {
-      try { console.warn('⚠️ [B端一次性防护] 读取持久化标记失败，安全返回false:', e); } catch (_) {}
-      return false;
-    }
+    return IdentityUtils.hasBEndJoinEver(this, chatId);
   },
   
   /**
@@ -158,17 +79,7 @@ Page({
    * @returns {void}
    */
   markBEndJoinEver: function(chatId) {
-    try {
-      const id = chatId || this.data?.contactId;
-      if (!id) return;
-      const key = `bEndJoinEver_${id}`;
-      wx.setStorageSync(key, true);
-      // 同步内存标记，进一步降低重复添加概率
-      this.bEndSystemMessageProcessed = true;
-      this.globalBEndMessageAdded = true;
-    } catch (e) {
-      try { console.warn('⚠️ [B端一次性防护] 写入持久化标记失败:', e); } catch (_) {}
-    }
+    IdentityUtils.markBEndJoinEver(this, chatId);
   },
 
   /**
