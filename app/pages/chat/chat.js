@@ -6538,9 +6538,9 @@ Page({
     wx.navigateBack({
       delta: 1,
       fail: () => {
-        // 如果返回失败，则跳转到首页
+        // 如果返回失败,则跳转到首页
         wx.reLaunch({
-          url: '/pages/home/home'
+          url: '/app/pages/home/home'
         });
       }
     });
