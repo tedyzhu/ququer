@@ -24,6 +24,7 @@ const DestroyedStore = require('./modules/destroyed-store.js');
 const IdentityUtils = require('./modules/identity-utils.js');
 const TestMethods = require('./modules/test-methods.js');
 const VoiceRecorder = require('./modules/voice-recorder.js');
+const ShareUtils = require('./modules/share-utils.js');
 
 Page({
   disableScroll: true,
@@ -1521,35 +1522,11 @@ Page({
   },
 
   /**
-   * 用户点击右上角分享
+   * 用户点击右上角分享(详见 modules/share-utils.js#buildSharePayload)
+   * @returns {{title: string, path: string, imageUrl: string}}
    */
   onShareAppMessage: function() {
-    console.log('🎯 [新版] 聊天页面分享');
-    
-    const app = getApp();
-    const userInfo = app.globalData.userInfo || {};
-    const nickName = userInfo.nickName || '好友';
-    const chatId = this.data.contactId;
-    
-    console.log('🎯 [新版] 分享聊天ID:', chatId);
-    console.log('🎯 [新版] 邀请者信息:', { nickName, openId: userInfo.openId });
-
-    // 启动监听被邀请者加入（无需调用createInvite，直接监听）
-    this.startWatchingForNewParticipants(chatId);
-    
-    // 🔥 【HOTFIX-v1.3.45】增强分享配置，确保b端能正确识别
-    const encodedNickname = encodeURIComponent(nickName);
-    const sharePath = `/app/pages/chat/chat?id=${chatId}&inviter=${encodedNickname}&fromInvite=true&action=join`;
-    
-    console.log('🎯 [新版] 分享路径:', sharePath);
-    console.log('🎯 [新版] 编码前昵称:', nickName);
-    console.log('🎯 [新版] 编码后昵称:', encodedNickname);
-    
-    return {
-      title: `${nickName}邀请你加入私密聊天`,
-      path: sharePath,
-      imageUrl: '/assets/images/logo.png'
-    };
+    return ShareUtils.buildSharePayload(this);
   },
 
   /**
@@ -3147,42 +3124,12 @@ Page({
   },
 
   /**
-   * 🔥 【增强检测】记录聊天访问历史
-   * @param {string} chatId - 聊天ID
-   * @param {string} userId - 用户ID
+   * 记录聊天访问历史(详见 modules/share-utils.js#recordChatVisit)
+   * @param {string} chatId
+   * @param {string} userId
    */
   recordChatVisit: function(chatId, userId) {
-    if (!chatId || !userId) return;
-    
-    try {
-      // 记录访问历史
-      const visitHistory = wx.getStorageSync('chat_visit_history') || {};
-      const visitKey = chatId;
-      visitHistory[visitKey] = (visitHistory[visitKey] || 0) + 1;
-      wx.setStorageSync('chat_visit_history', visitHistory);
-      
-      // 记录访问的聊天列表
-      const visitedChats = wx.getStorageSync('visited_chats') || [];
-      if (!visitedChats.includes(chatId)) {
-        visitedChats.push(chatId);
-        wx.setStorageSync('visited_chats', visitedChats);
-      }
-      
-      // 记录创建者候选列表（频繁访问者）
-      if (visitHistory[visitKey] >= 2) {
-        const app = getApp();
-        app.globalData.chatCreators = app.globalData.chatCreators || [];
-        const creatorKey = userId + '_' + chatId;
-        if (!app.globalData.chatCreators.includes(creatorKey)) {
-          app.globalData.chatCreators.push(creatorKey);
-          console.log('🔥 [访问历史] 添加创建者候选:', creatorKey, '访问次数:', visitHistory[visitKey]);
-        }
-      }
-      
-      console.log('🔥 [访问历史] 记录聊天访问:', chatId, '用户:', userId, '次数:', visitHistory[visitKey]);
-    } catch (e) {
-      console.error('🔥 [访问历史] 记录失败:', e);
-    }
+    ShareUtils.recordChatVisit(chatId, userId);
   },
   /**
    * 🔥 【新增】替换创建消息为加入消息
@@ -3886,94 +3833,6 @@ Page({
     }
   },
 
-  /**
-   * 🔗 生成真实分享链接供普通编译测试
-   */
-  generateRealShareLink: function() {
-    const chatId = this.data.contactId;
-    const app = getApp();
-    const userInfo = app.globalData.userInfo;
-    
-    if (!chatId || !userInfo) {
-      wx.showToast({
-        title: '❌ 信息不完整，无法生成分享链接',
-        icon: 'none'
-      });
-      return;
-    }
-
-    const inviterName = encodeURIComponent(encodeURIComponent(userInfo.nickName || '好友'));
-    const shareUrl = `app/pages/chat/chat?id=${chatId}&inviter=${inviterName}&fromInvite=true`;
-    
-    console.log('🔗 [真实分享] 生成的分享链接:', shareUrl);
-    console.log('🔗 [真实分享] 邀请者原始昵称:', userInfo.nickName);
-    console.log('🔗 [真实分享] 双重编码后:', inviterName);
-
-    // 显示分享链接信息
-    wx.showModal({
-      title: '🔗 真实分享链接',
-      content: `链接: ${shareUrl}\n\n邀请者: ${userInfo.nickName}\n聊天ID: ${chatId}`,
-      showCancel: true,
-      cancelText: '复制链接',
-      confirmText: '模拟分享',
-      success: (res) => {
-        if (res.cancel) {
-          // 复制链接
-          wx.setClipboardData({
-            data: shareUrl,
-            success: () => {
-              wx.showToast({
-                title: '📋 链接已复制',
-                icon: 'success'
-              });
-            }
-          });
-        } else if (res.confirm) {
-          // 模拟分享流程
-          this.simulateRealShare(chatId, userInfo.nickName);
-        }
-      }
-    });
-  },
-
-  /**
-   * 🔗 模拟真实的分享流程
-   */
-  simulateRealShare: function(chatId, inviterName) {
-    console.log('🔗 [模拟分享] 开始模拟真实分享流程');
-    
-    // 模拟小程序的onShareAppMessage
-    const shareObject = {
-      title: `${inviterName}邀请你加入私密聊天`,
-      path: `app/pages/chat/chat?id=${chatId}&inviter=${encodeURIComponent(encodeURIComponent(inviterName))}&fromInvite=true`,
-      imageUrl: '/assets/images/share-image.png' // 如果有的话
-    };
-    
-    console.log('🔗 [模拟分享] 分享对象:', shareObject);
-    
-    // 展示可以在真实设备上测试的信息
-    wx.showModal({
-      title: '📱 真实设备测试指南',
-      content: `1. 在真实设备上打开小程序\n2. 进入聊天页面\n3. 点击右上角分享\n4. 发送给另一个微信号\n5. 接收方点击进入\n\n或者使用以下路径直接跳转:\n${shareObject.path}`,
-      showCancel: true,
-      cancelText: '手动跳转',
-      confirmText: '了解',
-      success: (res) => {
-        if (res.cancel) {
-          // 手动跳转测试
-          wx.reLaunch({
-            url: '/' + shareObject.path,
-            success: () => {
-              console.log('🔗 [模拟分享] 手动跳转成功');
-            },
-            fail: (err) => {
-              console.error('🔗 [模拟分享] 手动跳转失败:', err);
-            }
-          });
-        }
-      }
-    });
-  },
   /**
    * 🔧 检查并修复昵称显示问题
    */
