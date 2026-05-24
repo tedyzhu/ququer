@@ -7,42 +7,44 @@
 
 ### 1. `getConversations` 云函数:N+1 → 1+1 查询
 
-**问题**:每个会话的每个 participant 单独 `where({openId}).get()`,M*N 次往返。
-**改造**:
-- 提取 `extractParticipantId` / `pickInlineParticipantInfo` / `resolveParticipants` 等辅助
-- 收集所有缺信息的 openId,一次性 `db.command.in([...])` 批量查询 users
-- 三种 participants 形态(string / `{openId}` / `{id}`)合并查询,排序更可预测
-
-**收益**:从 M*N 次查询降为最多 1 次会话查询 + 1 批 in 查询。
-
-文件:`cloudfunctions/getConversations/index.js`
+详见 commit `916e725`。
 
 ### 2. `debugUserDatabase` 加开发环境 guard
 
-**问题**:此云函数包含数据库读写、清理、重建能力,生产环境仍可被前端调用。
-**改造**:入口加 `process.env.DEBUG_TOOLS_ENABLED` guard,生产环境不设此变量则返回 disabled。
-**前端兼容**:chat.js 现有 6 处调用收到失败响应即可优雅降级,无需改动。
+详见 commit `916e725`。需要在云函数环境变量中设 `DEBUG_TOOLS_ENABLED=true` 才生效,生产环境不设即返回 disabled。
 
-部署提示:开发环境需在云开发控制台为 `debugUserDatabase` 函数手动配置环境变量 `DEBUG_TOOLS_ENABLED=true`。
+### 3. chat.js 拆分(已抽出 7 个模块 + 删除 23 个死方法)
 
-文件:`cloudfunctions/debugUserDatabase/index.js`
-
-### 3. chat.js 拆分(已抽出 5 个模块)
-
-由于 `chat.js` 体量超过 15500 行、含 219 处 HOTFIX 注释,采用"小步抽离 + 薄壳兼容"策略:
-
-- 抽出后保留 Page 方法名,内部委托模块,**调用方代码 0 改动**
-- 每抽一组就跑一遍 `node --check` 与冒烟测试
-
-#### 已抽出的 5 个模块
+#### 已抽出的 7 个模块
 
 | 模块 | 文件 | 内容 |
 | --- | --- | --- |
-| `chat-helpers` | `modules/chat-helpers.js` | 7 常量 + 8 纯函数(占位昵称/系统消息识别/调试布尔/消息差异/智能昵称匹配等) |
-| `message-debug-hook` | `modules/message-debug-hook.js` | 在 setData 上猴补的消息 Diff 调试钩子 |
-| `destroyed-store` | `modules/destroyed-store.js` | 已销毁消息记录的全局存储管理 |
-| `identity-utils` | `modules/identity-utils.js` | 4 个轻量身份工具(B 端环境/消息归属/B 端加入标记) |
-| `test-methods` | `modules/test-methods.js` | 21 个调试/测试方法,通过 `attach(page)` 挂载 |
+| `chat-helpers` | `modules/chat-helpers.js` | 7 常量 + 8 纯函数 |
+| `message-debug-hook` | `modules/message-debug-hook.js` | setData 调试钩子 |
+| `destroyed-store` | `modules/destroyed-store.js` | 已销毁消息记录的全局存储 |
+| `identity-utils` | `modules/identity-utils.js` | 4 个轻量身份工具 |
+| `test-methods` | `modules/test-methods.js` | 21 个调试 API,attach 模式 |
+| `voice-recorder` | `modules/voice-recorder.js` | 8 个语音方法 + init 模式 |
+| `share-utils` | `modules/share-utils.js` | recordChatVisit + buildSharePayload |
+
+#### 已删除的死代码方法(共 23 个,通过全项目引用扫描确认无任何调用)
+
+调试方法:
+- generateRealShareLink, simulateRealShare(share-utils 抽离时确认)
+- testFixedLogic, testUnifiedLogic, testSenderListener, testBEndTitleFix, unlockAndResetTitle(本地调试用)
+
+无用薄壳:
+- parseDebugBoolean, extractMessageIdsForDebug, summarizeMessageIdDiff(已在 ChatHelpers 模块导出)
+- getDestroyedStorageKey(已在 DestroyedStore 模块导出)
+
+无生产路径调用的方法:
+- ensureNavbarPosition, refreshToolbarHeightPadding, getOtherParticipantNames,
+  replacePlaceholderWithRealName, addJoinSystemMessage, updateTitleUnified,
+  addJoinMessageForReceiver, fallbackTitleUpdate, addInviteSystemMessage,
+  simulateMessageRead, fetchRealNicknameAndUpdateTitle, startChatCreationCheck,
+  updateChatTitle, testConnectionFix
+
+(均可从 git 历史恢复)
 
 #### 行数变化
 
@@ -52,13 +54,17 @@
 | 抽 chat-helpers | 15405 | -95 |
 | 抽 message-debug-hook | 15307 | -193 |
 | 抽 destroyed-store | 15278 | -222 |
-| 抽 chat-helpers v2(smartNicknameMatch + registerMessageKeys) | 15218 | -282 |
+| chat-helpers v2(smartNicknameMatch + registerMessageKeys) | 15218 | -282 |
 | 抽 identity-utils | 15129 | -371 |
-| 抽 test-methods | **13140** | **-2360 (-15.2%)** |
+| 抽 test-methods | 13140 | -2360 |
+| 抽 voice-recorder + 修 TestMethods 历史 require 遗漏 | 12857 | -2643 |
+| 抽 share-utils + 删 2 个调试方法 | 12716 | -2784 |
+| 删 5 个死调试 + 修 test-methods 一致性 | 12516 | -2984 |
+| 批量删 18 个无引用方法 | **11865** | **-3635 (-23.5%)** |
 
-## 未完成(后续 session 继续)
+## 未完成
 
-按职责优先级,接下来要抽离的核心业务模块:
+按职责优先级,接下来可继续推进的核心业务模块:
 
 1. **`modules/identity-resolver.js`** ⚠️ 最大头
    - 入口:`onLoad` 中 1900 行身份判定逻辑
@@ -70,20 +76,16 @@
    - **难点**:大量 setState 与 wx 云监听 API 耦合,先做接口设计再拆
 
 3. **`modules/system-message.js`**
-   - `addSystemMessage` / `startSystemMessageFade` / `addCreatorSystemMessage` / `addJoinSystemMessage` / `enforceSystemMessages` / `normalizeSystemMessagesAfterLoad` 等
+   - `addSystemMessage` / `startSystemMessageFade` / `addCreatorSystemMessage` / `enforceSystemMessages` / `normalizeSystemMessagesAfterLoad` 等
    - **难点**:防重复机制涉及多个 this 标志位
 
 4. **`modules/title-controller.js`**
-   - `updateTitleUnified` / `updateDynamicTitle` / `updateDynamicTitleWithRealNames` / `protectReceiverTitle` / `unlockAndResetTitle` / `replacePlaceholderWithRealName` 等
+   - `updateDynamicTitle` / `updateDynamicTitleWithRealNames` / `protectReceiverTitle` / `replacePlaceholderWithRealName` 等
    - **难点**:多个标题刷新路径互相覆盖,要先梳理优先级
 
 5. **`modules/burn-after-read.js`**
    - `startFadingDestroy` / `clearAllDestroyTimers` / `simulateMessageRead` 等
    - **难点**:计时器与 wx 全局 store 耦合,要先抽 store(已部分完成 `destroyed-store.js`)
-
-6. **`modules/voice-recorder.js`**(可选)
-   - `_initRecorderManager` / `onVoiceTouchStart/Move/End/Cancel` / `_startRecording` / `_sendVoiceMessage` / `playVoice`
-   - 语音子系统,大概 200 行,相对独立
 
 ## 抽离策略备忘
 
@@ -93,15 +95,18 @@
 **步骤 4**: `node --check chat.js` 确认语法过 + 在小程序里冒烟一次
 **步骤 5**: 提交,只标 refactor 类型,绝不混 fix/feat
 
-### 大段抽离的"猴补 attach"模式(test-methods.js 验证可行)
+### 大段抽离的"猴补 attach"模式(test-methods.js / voice-recorder.js 验证可行)
 
-当一个方法内部以 `this.foo = function() {...}` 形式挂载多个子方法(典型如 addTestMethods 的 21 个方法):
+当一个方法内部以 `this.foo = function() {...}` 形式挂载多个子方法,或一组方法构成完整子系统时:
 
-1. 把整段函数体搬到 `modules/<name>.js` 内的 `function attach(page) { ... }` 里
+1. 把整段函数体搬到 `modules/<name>.js` 内的 `function attach(page) { ... }` 里(或直接 init/export attach API)
 2. **只把外层 `this.xxx = function` 改为 `page.xxx = function`,函数体内 `this` 不动**
    - 因为函数被赋值到 page 上,运行时 `this === page`,行为零差异
-3. 原方法薄壳化为 `Module.attach(this)`
+3. 原方法薄壳化为 `Module.attach(this)` 或直接由 onLoad 调用
 
-这种模式适用于 voice-recorder.js 等子系统抽离。
+### 死代码扫描
 
-待 5 个业务模块抽完,再做"调用方迁移"——把 `this.xxx()` 改为 `Module.xxx(this, ...)`,删掉薄壳。这一步可以拆分为多个独立 PR。
+`/.tools/scan_dead_methods.py` 是个可复用的脚本,扫描候选方法在全项目的引用情况,
+帮助决定哪些可以直接删除。后续如发现更多无引用方法可继续删除。
+
+待 5 个核心业务模块抽完,再做"调用方迁移"——把 `this.xxx()` 改为 `Module.xxx(this, ...)`,删掉薄壳。这一步可以拆分为多个独立 PR。
