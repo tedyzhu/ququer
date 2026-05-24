@@ -20,50 +20,21 @@ const {
   ensureSystemFlags
 } = ChatHelpers;
 const MessageDebugHook = require('./modules/message-debug-hook.js');
+const DestroyedStore = require('./modules/destroyed-store.js');
 
 Page({
   disableScroll: true,
 
   getDestroyedStorageKey: function(chatIdOverride, userOpenIdOverride) {
-    const app = getApp();
-    const resolvedChatId = chatIdOverride || this.data?.contactId || this.options?.id || 'unknownChat';
-    const resolvedUserId = userOpenIdOverride
-      || this.data?.currentUser?.openId
-      || this.actualCurrentUser?.openId
-      || app?.globalData?.openId
-      || 'anonymous';
-    return `destroyedMessageIds_${resolvedUserId}_${resolvedChatId}`;
+    return DestroyedStore.getStorageKey(this, chatIdOverride, userOpenIdOverride);
   },
 
   initializeDestroyedMessageStore: function(chatId, userOpenId) {
-    const app = getApp();
-    if (!app.globalDestroyedMessageStore) {
-      app.globalDestroyedMessageStore = {};
-    }
-    const storageKey = this.getDestroyedStorageKey(chatId, userOpenId);
-    if (!app.globalDestroyedMessageStore[storageKey]) {
-      app.globalDestroyedMessageStore[storageKey] = new Set();
-      console.log('🔥 [销毁消息保护] 创建新的全局销毁消息记录:', storageKey);
-      try {
-        const savedDestroyedIds = wx.getStorageSync(storageKey);
-        if (savedDestroyedIds && Array.isArray(savedDestroyedIds)) {
-          savedDestroyedIds.forEach(id => app.globalDestroyedMessageStore[storageKey].add(id));
-          console.log('🔥 [销毁消息保护] 从本地存储恢复销毁记录:', savedDestroyedIds.length, '条');
-        }
-      } catch (e) {
-        console.log('🔥 [销毁消息保护] 本地存储恢复失败:', e);
-      }
-    } else {
-      console.log('🔥 [销毁消息保护] 使用现有的全局销毁消息记录:', storageKey, '数量:', app.globalDestroyedMessageStore[storageKey].size);
-    }
-    this.globalDestroyedMessageIds = app.globalDestroyedMessageStore[storageKey];
-    this.destroyedStoreKey = storageKey;
+    DestroyedStore.initialize(this, chatId, userOpenId);
   },
 
   ensureDestroyedMessageStore: function() {
-    if (!this.globalDestroyedMessageIds) {
-      this.initializeDestroyedMessageStore(this.data?.contactId, this.data?.currentUser?.openId);
-    }
+    DestroyedStore.ensure(this);
   },
   /**
    * 判断昵称是否为占位符,详见 modules/chat-helpers.js#isPlaceholderNickname
@@ -6103,26 +6074,7 @@ Page({
     const destroyingMessageIds = new Set();
     const destroyingMessageStates = new Map(); // 保存销毁状态
 
-    const registerMessageKeys = (collection, message) => {
-      if (!collection || !message) {
-        return;
-      }
-      const keys = new Set();
-      if (message.id) {
-        keys.add(message.id);
-      }
-      if (message._id) {
-        keys.add(message._id);
-      }
-      if (keys.size === 0 && typeof message === 'string') {
-        keys.add(message);
-      }
-      keys.forEach(key => {
-        if (key) {
-          collection.add(key);
-        }
-      });
-    };
+    const registerMessageKeys = ChatHelpers.registerMessageKeys;
 
     const registerDestroyState = (message, state) => {
       if (!message || !state) {
@@ -7354,48 +7306,7 @@ Page({
    * @returns {boolean} 是否匹配
    */
   smartNicknameMatch: function(name1, name2) {
-    if (!name1 || !name2) return false;
-    
-    // 🔥 【URGENT-FIX】防止空值和默认值误判
-    const defaultNames = ['用户', '朋友', '好友', '邀请者', '我', 'PLACEHOLDER_INVITER'];
-    if (defaultNames.includes(name1) || defaultNames.includes(name2)) {
-      console.log('🔥 [智能昵称] 检测到默认昵称，直接返回false:', name1, name2);
-      return false;
-    }
-    
-    // 标准化处理
-    const normalize = (name) => {
-      try {
-        // 尝试双重解码
-        let decoded = decodeURIComponent(decodeURIComponent(name));
-        return decoded.trim().toLowerCase();
-      } catch {
-        try {
-          // 尝试单次解码
-          let decoded = decodeURIComponent(name);
-          return decoded.trim().toLowerCase();
-        } catch {
-          // 使用原始值
-          return name.trim().toLowerCase();
-        }
-      }
-    };
-    
-    const normalized1 = normalize(name1);
-    const normalized2 = normalize(name2);
-    
-    // 🔥 【关键修复】只使用精确匹配，移除容易误判的包含匹配
-    const exactMatch = normalized1 === normalized2;
-    
-    // 🔥 【增强验证】添加最小长度要求，防止短昵称误匹配
-    const hasMinLength = normalized1.length >= 2 && normalized2.length >= 2;
-    
-    console.log('🔥 [智能昵称] 原始1:', name1, '标准化1:', normalized1);
-    console.log('🔥 [智能昵称] 原始2:', name2, '标准化2:', normalized2);
-    console.log('🔥 [智能昵称] 精确匹配:', exactMatch, '长度合规:', hasMinLength);
-    
-    // 🔥 【严格匹配】只有精确匹配且长度合规才认为匹配
-    return exactMatch && hasMinLength;
+    return ChatHelpers.smartNicknameMatch(name1, name2);
   },
   /**
    * 启动聊天创建状态检查

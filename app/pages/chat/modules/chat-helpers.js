@@ -183,6 +183,81 @@ function formatTime(date) {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 }
 
+/**
+ * 把消息的多个键(id / _id / 字符串本身)登记进 collection。
+ *
+ * collection 通常是 Set,用于消息去重 / 防止已销毁消息回流。
+ * 若 message 是字符串且没有 id/_id,直接把字符串当 key 用。
+ *
+ * @param {Set<string>} collection - 待写入的集合
+ * @param {Object|string} message - 消息对象或消息 ID 字符串
+ */
+function registerMessageKeys(collection, message) {
+  if (!collection || !message) return;
+  const keys = new Set();
+  if (typeof message === 'string') {
+    keys.add(message);
+  } else {
+    if (message.id) keys.add(message.id);
+    if (message._id) keys.add(message._id);
+    if (keys.size === 0 && typeof message === 'string') keys.add(message);
+  }
+  keys.forEach(key => {
+    if (key) collection.add(key);
+  });
+}
+
+/**
+ * 智能昵称匹配
+ *
+ * 用于 A/B 端身份判定的辅助:相同昵称是创建者强证据之一。
+ *
+ * 规则:
+ * - 任一昵称为占位/默认值(用户/朋友/好友/邀请者/我/PLACEHOLDER_INVITER) 直接返回 false
+ * - 双重 URL 解码后做小写、trim 比对
+ * - 最小长度 >= 2(防短昵称误匹配)
+ * - 仅严格相等才算匹配,不做包含/前缀匹配
+ *
+ * @param {string} name1
+ * @param {string} name2
+ * @returns {boolean}
+ */
+function smartNicknameMatch(name1, name2) {
+  if (!name1 || !name2) return false;
+
+  const defaultNames = ['用户', '朋友', '好友', '邀请者', '我', 'PLACEHOLDER_INVITER'];
+  if (defaultNames.includes(name1) || defaultNames.includes(name2)) {
+    console.log('🔥 [智能昵称] 检测到默认昵称,直接返回false:', name1, name2);
+    return false;
+  }
+
+  const normalize = (name) => {
+    try {
+      const decoded = decodeURIComponent(decodeURIComponent(name));
+      return decoded.trim().toLowerCase();
+    } catch {
+      try {
+        const decoded = decodeURIComponent(name);
+        return decoded.trim().toLowerCase();
+      } catch {
+        return name.trim().toLowerCase();
+      }
+    }
+  };
+
+  const normalized1 = normalize(name1);
+  const normalized2 = normalize(name2);
+
+  const exactMatch = normalized1 === normalized2;
+  const hasMinLength = normalized1.length >= 2 && normalized2.length >= 2;
+
+  console.log('🔥 [智能昵称] 原始1:', name1, '标准化1:', normalized1);
+  console.log('🔥 [智能昵称] 原始2:', name2, '标准化2:', normalized2);
+  console.log('🔥 [智能昵称] 精确匹配:', exactMatch, '长度合规:', hasMinLength);
+
+  return exactMatch && hasMinLength;
+}
+
 module.exports = {
   // 常量
   SYSTEM_MESSAGE_DEFAULTS,
@@ -200,5 +275,7 @@ module.exports = {
   parseDebugBoolean,
   extractMessageIdsForDebug,
   summarizeMessageIdDiff,
-  formatTime
+  formatTime,
+  registerMessageKeys,
+  smartNicknameMatch
 };
