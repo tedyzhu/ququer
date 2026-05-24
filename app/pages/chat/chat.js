@@ -22,6 +22,8 @@ const {
 const MessageDebugHook = require('./modules/message-debug-hook.js');
 const DestroyedStore = require('./modules/destroyed-store.js');
 const IdentityUtils = require('./modules/identity-utils.js');
+const TestMethods = require('./modules/test-methods.js');
+const VoiceRecorder = require('./modules/voice-recorder.js');
 
 Page({
   disableScroll: true,
@@ -313,69 +315,6 @@ Page({
   },
 
   /**
-   * @description 初始化录音管理器与音频播放上下文，绑定生命周期回调（单页仅绑定一次，防止 onStop 重复触发导致 setData 风暴）。
-   */
-  _initRecorderManager: function() {
-    if (this._recorderHooksBound) {
-      return;
-    }
-    this._recorderHooksBound = true;
-    var self = this;
-    this._recorderManager = wx.getRecorderManager();
-    this._innerAudioCtx = wx.createInnerAudioContext();
-    this._recordingTimer = null;
-    this._voiceTouchStartY = 0;
-
-    this._recorderManager.onStart(function() {
-      console.log('🎙️ 录音开始');
-      if (self._recordingTimer) {
-        clearInterval(self._recordingTimer);
-        self._recordingTimer = null;
-      }
-      self.setData({ isRecording: true, recordingDuration: 0, voiceCancelMove: false });
-      self._recordingTimer = setInterval(function() {
-        var d = self.data.recordingDuration + 1;
-        self.setData({ recordingDuration: d });
-        if (d >= 60) {
-          self._recorderManager.stop();
-        }
-      }, 1000);
-    });
-
-    this._recorderManager.onStop(function(res) {
-      console.log('🎙️ 录音结束', res);
-      if (self._recordingTimer) { clearInterval(self._recordingTimer); self._recordingTimer = null; }
-      var wasCancel = self.data.voiceCancelMove;
-      self.setData({ isRecording: false, recordingDuration: 0, voiceCancelMove: false });
-      if (wasCancel) {
-        console.log('🎙️ 录音已取消');
-        return;
-      }
-      if (res.duration < 1000) {
-        wx.showToast({ title: '说话时间太短', icon: 'none' });
-        return;
-      }
-      self._sendVoiceMessage(res.tempFilePath, Math.ceil(res.duration / 1000));
-    });
-
-    this._recorderManager.onError(function(err) {
-      console.error('🎙️ 录音失败:', err);
-      if (self._recordingTimer) { clearInterval(self._recordingTimer); self._recordingTimer = null; }
-      self.setData({ isRecording: false, recordingDuration: 0, voiceCancelMove: false });
-      wx.showToast({ title: '录音失败', icon: 'none' });
-    });
-
-    this._innerAudioCtx.onEnded(function() {
-      self.setData({ playingVoiceId: '' });
-    });
-    this._innerAudioCtx.onError(function(err) {
-      console.error('🔊 语音播放失败:', err);
-      self.setData({ playingVoiceId: '' });
-      wx.showToast({ title: '播放失败', icon: 'none' });
-    });
-  },
-
-  /**
    * 输入框聚焦/失焦：优化滚动与吸底表现，确保标题栏不受影响
    */
   onInputFocus: function(e) {
@@ -555,8 +494,8 @@ Page({
     // 🔥 软键盘高度监听（提取为方法以便 onShow 中重新注册）
     this._registerKeyboardListener();
 
-    // 语音录音管理器初始化
-    this._initRecorderManager();
+    // 语音录音管理器初始化(详见 modules/voice-recorder.js)
+    VoiceRecorder.init(this);
 
     console.log('[聊天页面] 页面加载，携带参数:', options);
     
@@ -7702,228 +7641,6 @@ Page({
         icon: 'none'
       });
     }
-  },
-
-  /**
-   * @description 切换语音/键盘输入模式
-   */
-  toggleVoiceInput: function() {
-    var toVoice = !this.data.isVoiceMode;
-    if (toVoice) {
-      this.setData({ isVoiceMode: true, inputFocus: false });
-    } else {
-      this.setData({ isVoiceMode: false, inputFocus: true });
-    }
-  },
-
-  /**
-   * @description 语音按钮 touchstart — 检查权限后开始录音
-   */
-  onVoiceTouchStart: function(e) {
-    this._voiceTouchStartY = e.touches[0].clientY;
-    var self = this;
-    wx.getSetting({
-      success: function(res) {
-        if (res.authSetting['scope.record'] === false) {
-          wx.openSetting({
-            success: function(settingRes) {
-              if (settingRes.authSetting['scope.record']) {
-                self._startRecording();
-              }
-            }
-          });
-          return;
-        }
-        if (res.authSetting['scope.record']) {
-          self._startRecording();
-        } else {
-          wx.authorize({
-            scope: 'scope.record',
-            success: function() { self._startRecording(); },
-            fail: function() {
-              wx.showToast({ title: '需要录音权限才能发送语音', icon: 'none' });
-            }
-          });
-        }
-      }
-    });
-  },
-
-  /** @description 实际调用录音管理器开始录音 */
-  _startRecording: function() {
-    if (!this._recorderManager) return;
-    this._recorderManager.start({
-      duration: 60000,
-      sampleRate: 16000,
-      numberOfChannels: 1,
-      encodeBitRate: 48000,
-      format: 'mp3'
-    });
-  },
-
-  /**
-   * @description 语音按钮 touchmove — 检测上滑取消手势
-   */
-  /**
-   * @description 上滑取消检测；仅在状态变化时 setData，避免 touchmove 高频触发导致主线程卡死。
-   */
-  onVoiceTouchMove: function(e) {
-    if (!this.data.isRecording) return;
-    var moveY = e.touches[0].clientY;
-    var diff = this._voiceTouchStartY - moveY;
-    var cancel = diff > 50;
-    if (this.data.voiceCancelMove === cancel) {
-      return;
-    }
-    this.setData({ voiceCancelMove: cancel });
-  },
-
-  /**
-   * @description 语音按钮 touchend — 停止或取消录音
-   */
-  onVoiceTouchEnd: function() {
-    if (!this.data.isRecording) return;
-    if (this.data.voiceCancelMove) {
-      this._recorderManager.stop();
-    } else {
-      this._recorderManager.stop();
-    }
-  },
-
-  /**
-   * @description 语音按钮 touchcancel — 取消录音
-   */
-  onVoiceTouchCancel: function() {
-    if (!this.data.isRecording) return;
-    this.setData({ voiceCancelMove: true });
-    this._recorderManager.stop();
-  },
-
-  /**
-   * @description 上传语音文件到云存储并发送语音消息
-   * @param {string} tempFilePath 录音临时文件路径
-   * @param {number} duration 语音时长（秒）
-   */
-  _sendVoiceMessage: function(tempFilePath, duration) {
-    var self = this;
-    var app = getApp();
-    var currentUser = this.data.currentUser || app.globalData.userInfo;
-
-    if (!currentUser || !currentUser.openId) {
-      wx.showToast({ title: '用户信息异常', icon: 'none' });
-      return;
-    }
-
-    wx.showLoading({ title: '发送中...', mask: true });
-
-    var timestamp = Date.now();
-    var cloudPath = 'voice/' + timestamp + '_' + Math.floor(Math.random() * 1000) + '.mp3';
-
-    wx.cloud.uploadFile({
-      cloudPath: cloudPath,
-      filePath: tempFilePath,
-      success: function(uploadRes) {
-        var fileID = uploadRes.fileID;
-        console.log('🎙️ 语音上传成功:', fileID);
-
-        var nowTs = Date.now();
-        var userAvatar = currentUser.avatarUrl || '/assets/images/default-avatar.png';
-        var newMessage = {
-          id: nowTs.toString(),
-          senderId: currentUser.openId,
-          isSelf: true,
-          content: fileID,
-          type: 'voice',
-          duration: duration,
-          time: self.formatTime(new Date()),
-          timeDisplay: self.formatTime(new Date()),
-          timestamp: nowTs,
-          sendTime: nowTs,
-          showTime: true,
-          status: 'sending',
-          destroyed: false,
-          destroying: false,
-          remainTime: 0,
-          avatar: userAvatar,
-          isSystem: false,
-          _localTemp: true
-        };
-
-        var messages = (self._localMessageCache || self.data.messages).concat(newMessage);
-        self._localMessageCache = messages;
-        self.setData({
-          messages: messages,
-          scrollTop: self.data.scrollTop === 99999 ? 99998 : 99999
-        }, function() {
-          wx.nextTick(function() { self.scrollToBottom(); });
-        });
-
-        wx.cloud.callFunction({
-          name: 'sendMessage',
-          data: {
-            chatId: self.data.contactId,
-            content: fileID,
-            type: 'voice',
-            duration: duration,
-            destroyTimeout: self.data.destroyTimeout,
-            senderId: currentUser.openId,
-            currentUserInfo: {
-              nickName: currentUser.nickName,
-              avatarUrl: currentUser.avatarUrl || '/assets/images/default-avatar.png'
-            }
-          },
-          success: function(res) {
-            wx.hideLoading();
-            console.log('🎙️ 语音消息发送成功', res);
-            if (res.result && res.result.success) {
-              var updatedMessages = self.data.messages.map(function(msg) {
-                if (msg.id === newMessage.id) {
-                  return Object.assign({}, msg, {
-                    status: 'sent',
-                    id: res.result.messageId || newMessage.id
-                  });
-                }
-                return msg;
-              });
-              self._localMessageCache = updatedMessages;
-              self.setData({ messages: updatedMessages });
-            }
-          },
-          fail: function(err) {
-            wx.hideLoading();
-            console.error('🎙️ 语音消息发送失败:', err);
-            wx.showToast({ title: '发送失败', icon: 'none' });
-          }
-        });
-      },
-      fail: function(err) {
-        wx.hideLoading();
-        console.error('🎙️ 语音上传失败:', err);
-        wx.showToast({ title: '语音发送失败', icon: 'none' });
-      }
-    });
-  },
-
-  /**
-   * @description 播放/停止语音消息
-   */
-  playVoice: function(e) {
-    var msgId = e.currentTarget.dataset.msgid;
-    if (!msgId) return;
-
-    if (this.data.playingVoiceId === msgId) {
-      this._innerAudioCtx.stop();
-      this.setData({ playingVoiceId: '' });
-      return;
-    }
-
-    var msg = this.data.messages.find(function(m) { return m.id === msgId; });
-    if (!msg || msg.type !== 'voice') return;
-
-    this._innerAudioCtx.stop();
-    this._innerAudioCtx.src = msg.content;
-    this._innerAudioCtx.play();
-    this.setData({ playingVoiceId: msgId });
   },
 
   /**
