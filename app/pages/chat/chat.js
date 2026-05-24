@@ -29,9 +29,6 @@ const ShareUtils = require('./modules/share-utils.js');
 Page({
   disableScroll: true,
 
-  getDestroyedStorageKey: function(chatIdOverride, userOpenIdOverride) {
-    return DestroyedStore.getStorageKey(this, chatIdOverride, userOpenIdOverride);
-  },
 
   initializeDestroyedMessageStore: function(chatId, userOpenId) {
     DestroyedStore.initialize(this, chatId, userOpenId);
@@ -85,14 +82,6 @@ Page({
     IdentityUtils.markBEndJoinEver(this, chatId);
   },
 
-  /**
-   * 解析调试布尔值（支持布尔/数字/字符串）。
-   * @param {*} value - 原始开关值
-   * @returns {boolean} 解析后的布尔值
-   */
-  parseDebugBoolean: function(value) {
-    return ChatHelpers.parseDebugBoolean(value);
-  },
 
   /**
    * 根据页面参数与本地缓存决定是否开启消息Diff日志。
@@ -104,24 +93,6 @@ Page({
     return MessageDebugHook.shouldEnable(options);
   },
 
-  /**
-   * 提取消息ID列表用于差异分析。
-   * @param {Array<Object>} messages - 消息数组
-   * @returns {Array<string>} 消息ID列表（缺失ID会生成NO_ID占位）
-   */
-  extractMessageIdsForDebug: function(messages) {
-    return ChatHelpers.extractMessageIdsForDebug(messages);
-  },
-
-  /**
-   * 计算消息ID差异摘要（新增/移除/位移/重复）。
-   * @param {Array<string>} beforeIds - 变更前ID列表
-   * @param {Array<string>} afterIds - 变更后ID列表
-   * @returns {{added: Array<string>, removed: Array<string>, movedCount: number, duplicateIds: Array<string>}} 差异摘要
-   */
-  summarizeMessageIdDiff: function(beforeIds, afterIds) {
-    return ChatHelpers.summarizeMessageIdDiff(beforeIds, afterIds);
-  },
 
   /**
    * 安装setData消息Diff调试钩子。
@@ -399,50 +370,6 @@ Page({
     }
   },
 
-  /**
-   * 🔥 确保标题栏位置正确的方法
-   * 仅做检测日志，不再执行 pageScrollTo/setData 以避免键盘期抖动。
-   */
-  ensureNavbarPosition: function() {
-    try {
-      // 使用查询选择器确保标题栏位置
-      const query = wx.createSelectorQuery();
-      query.select('.custom-navbar').boundingClientRect(rect => {
-        if (rect) {
-          console.log('🔥 标题栏位置信息 - top:', rect.top, 'left:', rect.left);
-          
-          // 🔥 如果标题栏不在顶部（考虑安全区），强制修复
-          const windowInfo = wx.getWindowInfo();
-          const safeAreaTop = windowInfo.safeArea ? windowInfo.safeArea.top : 0;
-          
-          // 标题栏应该在安全区顶部
-          if (rect.top < 0 || rect.top > safeAreaTop + 5) {
-            console.warn('🔥 检测到标题栏位置异常，当前top:', rect.top, '预期:', safeAreaTop);
-            console.log('🔥 [键盘期保护] 仅记录异常，跳过强制修复动作');
-          } else {
-            console.log('✅ 标题栏位置正常');
-          }
-        }
-      }).exec();
-    } catch (e) {
-      console.error('标题栏位置检查失败:', e);
-    }
-  },
-
-  /**
-   * 🤖 动态测量输入工具栏高度，精确同步到底部留白
-   */
-  refreshToolbarHeightPadding: function() {
-    try {
-      const query = wx.createSelectorQuery();
-      query.select('.input-container').boundingClientRect(rect => {
-        if (rect && rect.height) {
-          const bottomPaddingPx = Math.ceil(rect.height);
-          this.setData({ bottomPaddingPx });
-        }
-      }).exec();
-    } catch (e) {}
-  },
 
   /**
    * 生命周期函数--监听页面加载
@@ -2615,23 +2542,6 @@ Page({
     return afterCount;
   },
   
-  /**
-   * 🔧 获取其他参与者的昵称列表
-   */
-  getOtherParticipantNames: function() {
-    const { participants, currentUser } = this.data;
-    var currentUserOpenId = currentUser?.openId
-      || getApp().globalData.userInfo?.openId
-      || getApp().globalData.openId
-      || wx.getStorageSync('openId');
-    
-    return participants
-      .filter(p => {
-        const pOpenId = p.openId || p.id;
-        return pOpenId !== currentUserOpenId;
-      })
-      .map(p => p.nickName || p.name || '好友');
-  },
 
   /**
    * 🔥 接收方专用：用真实昵称更新标题（替换默认的"朋友"昵称）
@@ -2965,86 +2875,6 @@ Page({
     }, 1000);
   },
 
-  /**
-   * 🔥 新增：替换占位符为真实昵称
-   */
-  replacePlaceholderWithRealName: function() {
-    console.log('🔗 [占位符替换] 开始替换占位符为真实昵称');
-    
-    // 检查当前标题是否包含占位符
-    const currentTitle = this.data.dynamicTitle;
-    if (!currentTitle || !currentTitle.includes('PLACEHOLDER_INVITER')) {
-      console.log('🔗 [占位符替换] 当前标题不包含占位符，跳过替换');
-      return;
-    }
-    
-    // 尝试从参与者列表获取真实昵称
-    const participants = this.data.participants || [];
-    const currentUserOpenId = this.data.currentUser?.openId;
-    let realInviterName = null;
-    
-    console.log('🔗 [占位符替换] 当前参与者列表:', participants);
-    
-    // 查找对方参与者
-    const otherParticipant = participants.find(p => {
-      const pOpenId = p.openId || p.id;
-      return pOpenId !== currentUserOpenId && !p.isSelf;
-    });
-    
-    if (otherParticipant && otherParticipant.nickName) {
-      const nickName = otherParticipant.nickName;
-      if (nickName !== '用户' && nickName !== '朋友' && nickName !== '好友' && nickName !== '邀请者') {
-        realInviterName = nickName;
-        console.log('🔗 [占位符替换] 从参与者列表获取到真实昵称:', realInviterName);
-      }
-    }
-    
-    // 如果参与者列表中没有找到，尝试从URL参数获取
-    if (!realInviterName) {
-      const urlParams = getCurrentPages()[getCurrentPages().length - 1].options;
-      if (urlParams.inviter) {
-        try {
-          const urlInviter = decodeURIComponent(decodeURIComponent(urlParams.inviter));
-          if (urlInviter && 
-              urlInviter !== '朋友' && 
-              urlInviter !== '好友' && 
-              urlInviter !== '邀请者' && 
-              urlInviter !== '用户') {
-            realInviterName = urlInviter;
-            console.log('🔗 [占位符替换] 从URL参数获取到真实昵称:', realInviterName);
-          }
-        } catch (e) {
-          console.log('🔗 [占位符替换] URL解码失败:', e);
-        }
-      }
-    }
-    
-    // 如果还是没有找到，使用默认值
-    if (!realInviterName) {
-      realInviterName = '好友';
-      console.log('🔗 [占位符替换] 未找到真实昵称，使用默认值');
-    }
-    
-    // 替换标题中的占位符
-    const newTitle = `我和${realInviterName}（2）`;
-    console.log('🔗 [占位符替换] 新标题:', newTitle);
-    
-    this.setData({
-      dynamicTitle: newTitle,
-      contactName: newTitle,
-      chatTitle: newTitle
-    });
-    
-    wx.setNavigationBarTitle({
-      title: newTitle,
-      success: () => {
-        console.log('🔗 [占位符替换] ✅ 占位符替换成功:', newTitle);
-      },
-      fail: (err) => {
-        console.error('🔗 [占位符替换] ❌ 标题更新失败:', err);
-      }
-    });
-  },
 
   /**
    * 🔥 【新增】a端创建聊天时添加专属系统消息
@@ -3076,52 +2906,6 @@ Page({
     console.log('🔥 [a端系统消息-v1.3.83] ✅ 已添加本地创建消息，将在8秒后自动淡出');
   },
 
-  /**
-   * 🔥 【HOTFIX-v1.3.46】B端加入聊天时添加专属系统消息
-   */
-  addJoinSystemMessage: function() {
-    console.log('🔥 [B端系统消息] 添加加入聊天系统提示');
-    
-    const messages = this.data.messages || [];
-    const inviterName = this.inviterDisplayName || '邀请者';
-    
-    // 检查是否已有加入消息
-    const hasJoinMessage = messages.some(msg => 
-      msg.isSystem && msg.content && (
-        msg.content.includes('加入') && msg.content.includes('的聊天') ||
-        msg.content.includes('成功加入') ||
-        msg.content.includes('您加入了')
-      )
-    );
-    
-    // 🔥 检查并清除错误的创建者消息（如果B端被误判时添加了）
-    const hasWrongCreatorMessage = messages.some(msg => 
-      msg.isSystem && msg.content && msg.content.includes('您创建了私密聊天')
-    );
-    
-    if (hasWrongCreatorMessage) {
-      console.log('🔥 [B端修复] 检测到错误的创建者消息，将添加正确的加入消息');
-      // 清除错误的创建者消息
-      const cleanedMessages = messages.filter(msg => 
-        !(msg.isSystem && msg.content && msg.content.includes('您创建了私密聊天'))
-      );
-      this._localMessageCache = cleanedMessages;
-      this.setData({ messages: cleanedMessages });
-      console.log('🔥 [B端修复] 已清除错误的创建者消息');
-    }
-    
-    if (!hasJoinMessage) {
-      // 🔥【HOTFIX-v1.3.76】添加B端专属的加入系统消息，和A端一样自动淡出
-      const joinMessage = `加入${inviterName}的聊天`;
-      this.addSystemMessage(joinMessage, {
-        autoFadeStaySeconds: 3,
-        fadeSeconds: 5
-      });
-      console.log('🔥 [B端系统消息-v1.3.76] ✅ 已添加加入聊天提示（会淡出）:', joinMessage);
-    } else {
-      console.log('🔥 [B端系统消息] 加入消息已存在，跳过添加');
-    }
-  },
 
   /**
    * 记录聊天访问历史(详见 modules/share-utils.js#recordChatVisit)
@@ -3426,186 +3210,6 @@ Page({
     }
   },
 
-  /**
-   * 🔥 更新用户信息到数据库
-   */
-  updateUserInfoInDatabase: function() {
-    const app = getApp();
-    const userInfo = app.globalData.userInfo;
-    
-    if (!userInfo || !userInfo.openId) return;
-    
-    console.log('👤 更新用户信息到数据库:', userInfo);
-    
-    wx.cloud.callFunction({
-      name: 'updateUserInfo',
-      data: {
-        openId: userInfo.openId,
-        userInfo: {
-          nickName: userInfo.nickName,
-          avatarUrl: userInfo.avatarUrl
-        }
-      },
-      success: res => {
-        console.log('👤 用户信息更新成功:', res);
-      },
-      fail: err => {
-        console.error('👤 用户信息更新失败:', err);
-      }
-    });
-  },
-
-     /**
-    * 🔧 更新特定用户信息到数据库
-    */
-   updateSpecificUserInfo: function(openId, nickName) {
-     if (!openId || !nickName || nickName === '用户') return;
-     
-     console.log('👤 [修复] 更新特定用户信息到数据库:', { openId, nickName });
-     
-     wx.cloud.callFunction({
-       name: 'updateUserInfo',
-       data: {
-         openId: openId,
-         userInfo: {
-           nickName: nickName,
-           avatarUrl: '/assets/images/default-avatar.png' // 使用默认头像
-         }
-       },
-       success: res => {
-         console.log('👤 [修复] 特定用户信息更新成功:', res);
-       },
-       fail: err => {
-         console.error('👤 [修复] 特定用户信息更新失败:', err);
-       }
-     });
-   },
-
-/**
-   * 🔄 统一的标题更新逻辑（消除发送方/接收方差异）
-   * 所有用户使用相同的逻辑，确保版本一致性
-   */
-  updateTitleUnified: function() {
-    console.log('🔄 [统一标题] ==================== 开始统一标题更新 ====================');
-    
-    const { participants, currentUser } = this.data;
-    const participantCount = participants?.length || 0;
-    
-    console.log('🔄 [统一标题] 参与者数量:', participantCount);
-    console.log('🔄 [统一标题] 当前用户:', currentUser?.nickName);
-    console.log('🔄 [统一标题] 参与者列表:', participants);
-    
-    let title = '';
-    
-    if (participantCount <= 1) {
-      // 只有一个人：显示用户自己的名字
-      title = currentUser?.nickName || '我';
-      console.log('🔄 [统一标题] 单人模式，标题:', title);
-    } else if (participantCount === 2) {
-      var currentUserOpenId = currentUser?.openId
-        || getApp().globalData.userInfo?.openId
-        || getApp().globalData.openId
-        || wx.getStorageSync('openId');
-      const otherParticipant = participants.find(p => {
-        const pOpenId = p.openId || p.id;
-        return pOpenId !== currentUserOpenId;
-      });
-      
-      if (otherParticipant) {
-        let otherName = otherParticipant.nickName || otherParticipant.name;
-        
-        // 🔧 如果对方昵称为"用户"，尝试从URL参数获取真实昵称
-        if (!otherName || otherName === '用户') {
-          const urlParams = getCurrentPages()[getCurrentPages().length - 1].options;
-          if (urlParams.inviter) {
-            try {
-              const decodedInviter = decodeURIComponent(decodeURIComponent(urlParams.inviter));
-              if (decodedInviter && decodedInviter !== '好友') {
-                otherName = decodedInviter;
-                console.log('🔄 [统一标题] 从URL获取到对方真实昵称:', otherName);
-              }
-            } catch (e) {
-              console.log('🔄 [统一标题] URL解码失败:', e);
-            }
-          }
-        }
-        
-        otherName = otherName || '好友';
-        title = `我和${otherName}（2）`;
-        console.log('🔄 [统一标题] 双人模式，对方:', otherName, '标题:', title);
-      } else {
-        title = currentUser?.nickName || '我';
-        console.log('🔄 [统一标题] 双人模式但未找到对方，临时标题:', title);
-      }
-    } else {
-      // 多人：显示群聊
-      title = `群聊（${participantCount}）`;
-      console.log('🔄 [统一标题] 群聊模式，标题:', title);
-    }
-    
-    // 统一设置标题
-    console.log('🔄 [统一标题] 最终确定标题:', title);
-    
-    this.setData({
-      dynamicTitle: title,
-      contactName: title,
-      chatTitle: title
-    });
-    
-    // 更新导航栏
-    wx.setNavigationBarTitle({
-      title: title,
-      success: () => {
-        console.log('🔄 [统一标题] ✅ 导航栏标题更新成功:', title);
-        console.log('🔄 [统一标题] ==================== 统一标题更新完成 ====================');
-      },
-      fail: (err) => {
-        console.error('🔄 [统一标题] ❌ 导航栏标题更新失败:', err);
-      }
-    });
-  },
-
-  /**
-   * 🔄 【HOTFIX-v1.3.43】修复后的加入消息逻辑（仅限b端使用）
-   * 只有b端（接收方）应该调用此方法
-   */
-  addJoinMessageForReceiver: function(inviterParticipant) {
-    if (!inviterParticipant) return;
-    
-    console.log('🔄 [b端专用] 准备添加加入系统消息，邀请者:', inviterParticipant.nickName);
-    
-    // 🔥 只有b端才能调用此方法
-    const { isFromInvite } = this.data;
-    if (!isFromInvite) {
-      console.log('🔄 [b端专用] ❌ 此方法仅限b端使用，a端禁止调用');
-      return;
-    }
-    
-    // 检查是否已经有相同的系统消息
-    const messages = this.data.messages || [];
-    
-    // b端显示："加入[a端昵称]的聊天"
-    const inviterName = inviterParticipant.nickName || 'a端用户';
-    const joinMessage = `加入${inviterName}的聊天`;
-    
-    const existingMessage = messages.find(msg => 
-      msg.isSystem && msg.content === joinMessage
-    );
-    
-    if (!existingMessage) {
-      console.log('🔄 [b端专用] 添加加入消息:', joinMessage);
-      // 🔥 【HOTFIX-v1.3.66】B端系统消息和A端保持一致，显示一段时间后自动淡出
-      this.addSystemMessage(joinMessage, {
-        autoFadeStaySeconds: 3,
-        fadeSeconds: 5
-      });
-      
-      // 移除可能存在的错误创建消息
-      this.removeWrongCreatorMessages();
-    } else {
-      console.log('🔄 [b端专用] 加入消息已存在，跳过添加');
-    }
-  },
 
   /**
    * 🔥 【新增】移除b端错误的创建消息
@@ -3869,44 +3473,6 @@ Page({
     console.log('🏷️ [真实姓名] 页面标题和导航栏标题已更新');
   },
 
-  /**
-   * 🔥 【HOTFIX-v1.3.33】fallback标题更新方法
-   */
-  fallbackTitleUpdate: function(participants) {
-    const otherParticipant = participants.find(p => !p.isSelf);
-    if (otherParticipant) {
-      const otherName = otherParticipant.nickName || otherParticipant.name || '好友';
-      const newTitle = `我和${otherName}（2）`;
-      
-      console.log('🔥 [fallback] 使用默认昵称更新标题:', newTitle);
-      
-      // 🚨 同步更新所有标题相关字段
-      this.setData({
-        dynamicTitle: newTitle,
-        chatTitle: newTitle,
-        contactName: newTitle
-      });
-      
-      // 🚨 立即更新导航栏标题
-      wx.setNavigationBarTitle({
-        title: newTitle,
-        success: () => {
-          console.log('🔥 [fallback] ✅ 导航栏标题更新成功:', newTitle);
-        },
-        fail: (err) => {
-          console.log('🔥 [fallback] ❌ 导航栏标题更新失败:', err);
-        }
-      });
-      
-      // 🔗 [连接提示修复] 不显示"已连接"提示，避免重复
-      // wx.showToast({
-      //   title: `已连接${otherName}`,
-      //   icon: 'success',
-      //   duration: 2000
-      // });
-      console.log('🔗 [连接提示修复] ✅ 跳过"已连接"提示，避免重复');
-    }
-  },
 
   /**
    * 🔥 发送方专用：启动参与者监听，第一时间感知接收方加入
@@ -5225,15 +4791,6 @@ Page({
     });
   },
 
-  /**
-   * 添加邀请系统消息
-   */
-  addInviteSystemMessage: function(participantName) {
-    const content = `${participantName}加入聊天`;
-    // 统一走 addSystemMessage，确保“顶置 + 自动淡出 + 去重”一致
-    this.addSystemMessage(content, { autoFadeStaySeconds: 3, fadeSeconds: 5, position: 'top' });
-    console.log('🎯 已添加邀请系统消息(统一入口):', content);
-  },
 
   /**
    * 页面相关事件处理函数--监听用户下拉动作
@@ -6422,22 +5979,6 @@ Page({
     });
   },
 
-  /**
-   * 模拟对方已读消息，触发阅后即焚倒计时
-   */
-  simulateMessageRead: function () {
-    // 延迟2秒，模拟对方查看消息
-    setTimeout(() => {
-      const messages = this.data.messages.filter(msg => !msg.destroyed);
-      
-      // 找到对方发送的最后一条消息，模拟我们已读了它
-      const otherMessages = messages.filter(msg => msg.senderId === 'other');
-      if (otherMessages.length > 0) {
-        const lastOtherMessage = otherMessages[otherMessages.length - 1];
-        this.startDestroyCountdown(lastOtherMessage.id);
-      }
-    }, 2000);
-  },
 
   /**
    * 消息点击事件
@@ -6680,40 +6221,6 @@ Page({
     this.destroyTimers.set(messageId, stayTimer);
   },
 
-  /**
-   * 🔥 【HOTFIX-v1.3.45】获取真实昵称并更新标题
-   * @param {string} participantId - 参与者ID
-   */
-  fetchRealNicknameAndUpdateTitle: function(participantId) {
-    if (!participantId) return;
-    
-    console.log('🔥 [昵称获取] 开始获取参与者真实昵称:', participantId);
-    
-    // 方法1：从用户数据库获取
-    wx.cloud.callFunction({
-      name: 'debugUserDatabase', 
-      data: { openId: participantId },
-      success: (res) => {
-        if (res.result && res.result.success && res.result.userInfo) {
-          const realNickname = res.result.userInfo.nickName || res.result.userInfo.name;
-          
-          if (realNickname && realNickname !== '用户' && realNickname !== '好友') {
-            console.log('🔥 [昵称获取] 从数据库获取到真实昵称:', realNickname);
-            this.updateTitleWithRealNickname(participantId, realNickname);
-            return;
-          }
-        }
-        
-        // 方法2：从参与者信息获取
-        this.fetchParticipantRealName(participantId);
-      },
-      fail: (err) => {
-        console.error('🔥 [昵称获取] 数据库查询失败:', err);
-        // 降级到参与者信息获取
-        this.fetchParticipantRealName(participantId);
-      }
-    });
-  },
 
   /**
    * 🔥 【HOTFIX-v1.3.45】从参与者信息获取真实昵称
@@ -6816,53 +6323,6 @@ Page({
    */
   smartNicknameMatch: function(name1, name2) {
     return ChatHelpers.smartNicknameMatch(name1, name2);
-  },
-  /**
-   * 启动聊天创建状态检查
-   */
-  startChatCreationCheck: function() {
-    console.log('[邀请流程] 启动聊天创建状态检查');
-    
-    // 清除可能存在的旧定时器
-    if (this.chatCreationTimer) {
-      clearInterval(this.chatCreationTimer);
-    }
-    
-    // 更新UI状态
-    this.setData({
-      isCreatingChat: true,
-      chatCreationStatus: '正在建立连接...',
-      // 重置重试计数器
-      createChatRetryCount: 0
-    });
-    
-    // 先尝试主动创建聊天，不等待检查
-    this.tryCreateChat(true);
-    
-    // 每2秒检查一次
-    this.chatCreationTimer = setInterval(() => {
-      this.checkChatCreationStatus();
-    }, 2000);
-    
-    // 设置20秒超时，防止永久等待
-    setTimeout(() => {
-      if (this.data.isCreatingChat) {
-        // 20秒后仍在创建状态，强制结束
-        clearInterval(this.chatCreationTimer);
-        console.log('[邀请流程] 创建聊天超时，强制进入聊天界面');
-        
-        this.setData({
-          isCreatingChat: false,
-          chatCreationStatus: ''
-        });
-        
-        // 获取聊天记录
-        this.fetchMessages();
-        
-        // 添加系统消息
-        this.addSystemMessage('聊天创建超时，已自动为您进入聊天。如遇问题，请联系对方重新邀请。');
-      }
-    }, 20000);
   },
   
   /**
@@ -7347,46 +6807,6 @@ Page({
     try { this.permanentlyDeleteMessage(msgId); } catch (e) {}
   },
 
-  /**
-   * 页面卸载（声明已移至下方统一的 onUnload）
-   */
-
-  /**
-   * 🔄 更新聊天标题
-   */
-  updateChatTitle: function() {
-    const { participants, currentUser } = this.data;
-    const userOpenId = currentUser?.openId;
-    
-    // 过滤掉当前用户，只显示其他参与者
-    const otherParticipants = participants.filter(p => 
-      (p.openId || p.id) !== userOpenId
-    );
-    
-    let newTitle = '';
-    
-    if (otherParticipants.length === 0) {
-      newTitle = '私密聊天';
-    } else if (otherParticipants.length === 1) {
-      const otherUser = otherParticipants[0];
-      newTitle = `与 ${otherUser.nickName || '好友'} 的私密聊天`;
-    } else {
-      const names = otherParticipants.map(p => p.nickName || '好友').join('、');
-      newTitle = `与 ${names} 的私密聊天`;
-    }
-    
-    console.log('🔄 [标题更新] 新标题:', newTitle);
-    
-    this.setData({
-      dynamicTitle: newTitle,
-      contactName: newTitle,
-      chatTitle: newTitle
-    });
-    
-    wx.setNavigationBarTitle({
-      title: newTitle
-    });
-  },
   /**
    * 生命周期函数--监听页面显示
    */
@@ -10682,77 +10102,6 @@ Page({
     // this.sendTestMessage();
   },
 
-  /**
-   * 🧪 测试连接修复功能
-   */
-  testConnectionFix: function() {
-    console.log('🧪 [测试] ==================== 开始测试连接修复功能 ====================');
-    
-    const messages = this.data.messages || [];
-    const participants = this.data.participants || [];
-    
-    // 显示当前状态
-    console.log('🧪 [测试] 当前参与者数量:', participants.length);
-    console.log('🧪 [测试] 当前消息数量:', messages.length);
-    console.log('🧪 [测试] 当前标题:', this.data.dynamicTitle);
-    
-    // 🔥 【新聊天检测】
-    const hasUserMessages = messages.some(msg => msg.senderId !== 'system');
-    const isNewChat = !hasUserMessages && participants.length === 1;
-    
-    if (isNewChat) {
-      console.log('🧪 [测试] ✅ 检测到这是新聊天，直接测试消息发送功能');
-      this.testNewChatMessageSending();
-      return;
-    }
-    
-    // 强制触发连接检测
-    console.log('🧪 [测试] 强制触发连接检测...');
-    this.checkAndFixConnection(messages);
-    
-    // 延迟验证结果
-    setTimeout(() => {
-      console.log('🧪 [测试] ==================== 测试结果验证 ====================');
-      console.log('🧪 [测试] 修复后参与者数量:', this.data.participants.length);
-      console.log('🧪 [测试] 修复后标题:', this.data.dynamicTitle);
-      
-      if (this.data.participants.length > 1) {
-        console.log('🧪 [测试] ✅ 连接修复成功！');
-        
-        // 🔧 测试消息发送功能
-        console.log('🧪 [测试] 开始测试消息发送功能...');
-        this.fixMessageSending();
-        
-        // wx.showToast({
-        //   title: '✅ 连接修复成功',
-        //   icon: 'success'
-        // });
-        console.log('✅ [连接修复] 连接修复成功，后台静默完成');
-      } else {
-        console.log('🧪 [测试] ❌ 连接修复失败，尝试消息推断...');
-        this.inferParticipantsFromMessages();
-        
-        // 再次验证
-        setTimeout(() => {
-          if (this.data.participants.length > 1) {
-            console.log('🧪 [测试] ✅ 消息推断成功！');
-            // wx.showToast({
-            //   title: '✅ 消息推断成功',
-            //   icon: 'success'
-            // });
-            console.log('✅ [消息推断] 消息推断成功，后台静默完成');
-          } else {
-            console.log('🧪 [测试] ❌ 所有修复方法都失败了');
-                          // wx.showToast({
-              //   title: '❌ 修复失败',
-              //   icon: 'error'
-              // });
-              console.log('❌ [修复失败] 所有修复方法都失败了，后台静默记录');
-          }
-        }, 2000);
-      }
-    }, 3000);
-  },
 
   /**
    * 🔧 修复消息发送问题
