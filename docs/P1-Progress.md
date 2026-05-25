@@ -63,6 +63,7 @@
 | 批量删 18 个无引用方法 | **11865** | **-3635 (-23.5%)** |
 | **P2/system-message** | **10790** | **-4710 (-30.4%)** |
 | **P2/title-controller** | **9926** | **-5574 (-36.0%)** |
+| **P2/burn-after-read** | **9561** | **-5939 (-38.3%)** |
 
 ## 未完成
 
@@ -88,9 +89,11 @@
    - chat.js: 10790 → 9926 (-864 行,-8.0%)
    - 突破万行大关
 
-5. **`modules/burn-after-read.js`**
-   - `startFadingDestroy` / `clearAllDestroyTimers` / `simulateMessageRead` 等
-   - **难点**:计时器与 wx 全局 store 耦合,要先抽 store(已部分完成 `destroyed-store.js`)
+5. ~~**`modules/burn-after-read.js`**~~  ✅ **已完成 (P2 第三刀)**
+   - 详见 `.kiro/specs/chat-burn-after-read-module/{design,tasks}.md`
+   - 抽离 7 个方法(destroyMessage / permanentlyDeleteMessage / startDestroyCountdown / startFadingDestroy / clearAllDestroyTimers / markMessageAsReadAndDestroy / processOfflineMessages)
+   - chat.js: 9926 → 9561 (-365 行,-3.7%)
+   - 阅后即焚定时器子系统首次集中可读
 
 ## 抽离策略备忘
 
