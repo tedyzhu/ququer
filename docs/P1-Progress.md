@@ -61,6 +61,7 @@
 | 抽 share-utils + 删 2 个调试方法 | 12716 | -2784 |
 | 删 5 个死调试 + 修 test-methods 一致性 | 12516 | -2984 |
 | 批量删 18 个无引用方法 | **11865** | **-3635 (-23.5%)** |
+| **P2/system-message** | **10790** | **-4710 (-30.4%)** |
 
 ## 未完成
 
@@ -75,9 +76,10 @@
    - 入口:`startParticipantListener` (584 行) / `startWatchingForNewParticipants` / `fetchChatParticipantsWithRealNames` (646 行)
    - **难点**:大量 setState 与 wx 云监听 API 耦合,先做接口设计再拆
 
-3. **`modules/system-message.js`**
-   - `addSystemMessage` / `startSystemMessageFade` / `addCreatorSystemMessage` / `enforceSystemMessages` / `normalizeSystemMessagesAfterLoad` 等
-   - **难点**:防重复机制涉及多个 this 标志位
+3. ~~**`modules/system-message.js`**~~  ✅ **已完成 (P2 第一刀)**
+   - 详见 `.kiro/specs/chat-system-message-module/{design,tasks}.md`
+   - 抽离 11 个方法 (~1100 行) + 修复 `addCreatorSystemMessage` 双定义死代码
+   - chat.js: 11922 → 10790 (-1132 行,-9.5%)
 
 4. **`modules/title-controller.js`**
    - `updateDynamicTitle` / `updateDynamicTitleWithRealNames` / `protectReceiverTitle` / `replacePlaceholderWithRealName` 等

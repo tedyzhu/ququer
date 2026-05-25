@@ -1,74 +1,46 @@
-# 实现任务: chat-system-message 模块抽离
+# 实现任务: chat-system-message 模块抽离 — ✅ 完成
 
 > 基于 design.md。每完成一项做一个 commit,出问题立刻 `git revert`。
 > 工作分支: `refactor/p2-system-message`
+> **完成时间: 2026-05-25**
 
 ## 任务清单
 
-- [ ] 1. 创建 `modules/system-message.js` 骨架
-  - 文件头注释 + `require('./chat-helpers.js')`(后面可能用到 isPlaceholderJoinMessage 等)
-  - 空 `attach(page) { /* TODO */ }` + `module.exports = { attach }`
-  - 跑 `node --check app/pages/chat/modules/system-message.js`
+- [x] 1. 创建 `modules/system-message.js` 骨架
+- [x] 2. 抽离 `addSystemMessage` 与 `startSystemMessageFade` (commit d290626)
+- [x] 3. 抽离 `clearIncorrectSystemMessages` 与 `cleanupWrongSystemMessages` (commit 2dfc865)
+- [x] 4. 抽离 `fixAEndSystemMessage` 与 `fixBEndSystemMessage` (commit c300f57)
+- [x] 5. 抽离 `addCreatorSystemMessage` 并合并重复定义 (commit 5ae53cc)
+- [x] 6. 抽离 `enforceSystemMessages` 与 `normalizeSystemMessagesAfterLoad` (commit d18979d)
+- [x] 7. 抽离 `updateSystemMessageAfterJoin` (298 行,commit 9ba416c)
+- [x] 8. 抽离 `performBEndSystemMessageCheck` (140 行,commit 28c9482)
+- [x] 9. 整理 attach 调用点 — `SystemMessage.attach(this)` 已位于 onLoad 第 381 行
+- [x] 10. 更新 docs 与最终验证
 
-- [ ] 2. 抽离 `addSystemMessage` 与 `startSystemMessageFade`
-  - 复制函数体到 system-message.js,改为 `function xxx(...)` 顶层函数
-  - 内部 `this.startSystemMessageFade(...)` 等保持原样
-  - 在 attach() 中绑定到 page
-  - 在 chat.js 中**删除原方法定义**(6084-6294 行)
-  - 在 chat.js onLoad 第一次进入处加 `SystemMessage.attach(this)`(临时位置,后面统一)
-  - `node --check chat.js` + 集成测试
+## 实际成效
 
-- [ ] 3. 抽离 `clearIncorrectSystemMessages` 与 `cleanupWrongSystemMessages`
-  - 同上模式
-  - chat.js 中删除原方法定义(2014-2044, 2454-2558)
-  - `node --check` + 集成测试
+| 项 | 起点 | 终点 | 变化 |
+| --- | --- | --- | --- |
+| chat.js 行数 | 11922 | 10790 | **-1132 (-9.5%)** |
+| 新模块 | — | `modules/system-message.js` 1183 行 | 含完整注释 |
+| 抽离方法数 | — | **11 个** | 含合并 1 处死代码 |
 
-- [ ] 4. 抽离 `fixAEndSystemMessage` 与 `fixBEndSystemMessage`
-  - 同上模式
-  - chat.js 中删除原方法定义(1898-2008)
-  - `node --check` + 集成测试
-
-- [ ] 5. 抽离 `addCreatorSystemMessage` 并合并重复定义
-  - 仅保留 2898 版(2049 版是死代码)
-  - 在 system-message.js 中只放一份
-  - chat.js 中删除两处定义(2049-2068 + 2898-2922)
-  - 提交信息明确:"refactor: 抽离 addCreatorSystemMessage 并删除 2049 行重复定义"
-  - `node --check` + 集成测试
-
-- [ ] 6. 抽离 `enforceSystemMessages` 与 `normalizeSystemMessagesAfterLoad`
-  - 同上模式
-  - chat.js 中删除原方法定义(3061-3226)
-  - `node --check` + 集成测试
-
-- [ ] 7. 抽离 `updateSystemMessageAfterJoin`(最大头,298 行)
-  - 同上模式;函数内会调用 `this.fetchChatParticipantsWithRealNames(...)` 等其他 chat.js 方法,**保持 this 调用不变**
-  - chat.js 中删除原方法定义(2120-2417)
-  - `node --check` + 集成测试
-
-- [ ] 8. 抽离 `performBEndSystemMessageCheck`(140 行)
-  - 同上模式
-  - chat.js 中删除原方法定义(11742-11881)
-  - `node --check` + 集成测试
-
-- [ ] 9. 整理 attach 调用点
-  - 把 step 2 临时加的 `SystemMessage.attach(this)` 移到 onLoad 起始(在身份判定之前)
-  - 移除 chat.js 顶部 require 区可能多余的旧引用
-  - `node --check` + 集成测试
-
-- [ ] 10. 更新 docs 与最终验证
-  - 更新 `docs/P1-Progress.md`(移除 system-message 项,新增"已完成"段)
-  - 在模拟器跑 P0 路径(创建聊天 + 收发消息 + 阅后即焚)
-  - 提交 PR `refactor/p2-system-message → main`
+附加收益:**修复了 `addCreatorSystemMessage` 在 chat.js 中被定义两次的隐藏 bug** — 实际生效的是 v1.3.83 版,前者(行 ~2049)在原文件中被覆盖,等同死代码,本次抽离时已删除。
 
 ## 验证基线
 
-- `.tools/integration_test.js` 必须保持 6/6 通过
-- chat.js 行数预期从 11922 下降到约 10833(-9.1%)
-- 新增 `app/pages/chat/modules/system-message.js` 约 1100 行(含注释)
+- ✅ `node --check` 每步通过
+- ✅ `.tools/integration_test.js` 6/6 通过(已更新支持 attach 模式)
+- ⏳ 模拟器 P0 路径验证 — 留给下一次合并 PR 前手动跑一遍
 
-## 出错回滚
+## Commits 链(7 个)
 
-每个 commit 都是单一职责。如果某步集成测试失败:
-1. `git diff HEAD~1` 看 diff
-2. 修不动就 `git reset --hard HEAD~1` 回到上一步
-3. 重新做这一步,把 chunk 拆得更小
+```
+28c9482 refactor(P2/system-message): 抽离 performBEndSystemMessageCheck
+9ba416c refactor(P2/system-message): 抽离 updateSystemMessageAfterJoin
+d18979d refactor(P2/system-message): 抽离 enforce + normalize 校正方法
+5ae53cc refactor(P2/system-message): 抽离 addCreatorSystemMessage 并删除重复定义
+c300f57 refactor(P2/system-message): 抽离 fixA/fixB 端修复方法
+2dfc865 refactor(P2/system-message): 抽离两个清理方法
+d290626 refactor(P2/system-message): 抽离 addSystemMessage 与 startSystemMessageFade
+```
