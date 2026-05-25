@@ -367,6 +367,429 @@ function protectReceiverTitle(correctTitle) {
   }, 30000);
 }
 
+/**
+ * 🔥 使用真实姓名更新动态标题
+ *
+ * 双端通用入口。逻辑:
+ * - 已锁定接收方标题 → 调用 updateReceiverTitleWithRealNames
+ * - 单人态 → A 端用自己昵称, B 端用邀请者兜底
+ * - 双人态 → "我和[对方昵称]（2）",占位符触发 fetchChatParticipantsWithRealNames
+ * - 多人态 → "群聊（N）"
+ */
+function updateDynamicTitleWithRealNames() {
+  // 🔥 【允许A端标题更新】A 端应该能响应真实昵称的变化
+  console.log('🔥 [标题更新] A端允许根据真实昵称更新标题');
+
+  // 🔥 【统一标题策略】双端都使用相同的标题更新逻辑
+  console.log('🔥 [统一标题] 开始使用真实姓名更新动态标题');
+
+  // 🔧 检查接收方标题锁定状态,但允许真实昵称更新
+  if (this.receiverTitleLocked) {
+    console.log('🏷️ [真实姓名] 检测到接收方标题已锁定,但允许真实昵称更新');
+    // 🔥 如果是接收方且获取到了真实参与者信息,允许更新标题
+    this.updateReceiverTitleWithRealNames();
+    return;
+  }
+
+  const { participants, currentUser } = this.data;
+  const isReceiverEnv = (typeof this.isReceiverEnvironment === 'function')
+    ? this.isReceiverEnvironment()
+    : !!this.data.isFromInvite;
+  const getReceiverTitleFallbackName = () => {
+    try {
+      const pages = getCurrentPages();
+      const options = pages && pages.length > 0 ? (pages[pages.length - 1].options || {}) : {};
+      let inviterName = options.inviter || '';
+      if (inviterName) {
+        try { inviterName = decodeURIComponent(inviterName); } catch (e) {}
+        try { inviterName = decodeURIComponent(inviterName); } catch (e) {}
+      }
+      if (inviterName && typeof this.isPlaceholderNickname === 'function' && !this.isPlaceholderNickname(inviterName)) {
+        return inviterName;
+      }
+    } catch (e) {}
+    try {
+      const inviteInfo = wx.getStorageSync('inviteInfo');
+      const storedInviter = inviteInfo && (inviteInfo.inviterNickName || inviteInfo.inviterName || inviteInfo.inviter);
+      if (storedInviter && typeof this.isPlaceholderNickname === 'function' && !this.isPlaceholderNickname(storedInviter)) {
+        return storedInviter;
+      }
+    } catch (e) {}
+    return '朋友';
+  };
+  let participantCount = participants.length;
+  let title = '';
+
+  console.log('🏷️ [真实姓名] 更新动态标题,参与者数量:', participantCount, '参与者:', participants);
+  console.log('🏷️ [真实姓名] 当前用户:', currentUser);
+
+  if (participantCount > 2) {
+    console.log('🏷️ [真实姓名] ⚠️ 参与者数量异常,立即触发去重处理');
+    this.deduplicateParticipants();
+    return;
+  }
+
+  if (participantCount <= 1) {
+    if (isReceiverEnv) {
+      const fallbackInviterName = getReceiverTitleFallbackName();
+      title = `我和${fallbackInviterName}（2）`;
+      console.log('🏷️ [真实姓名] 规则1: B 端临时单人态,使用接收方标题兜底:', title);
+    } else {
+      title = currentUser?.nickName || '我';
+      console.log('🏷️ [真实姓名] 规则1: 单人状态,显示自己昵称:', title);
+    }
+  }
+  else if (participantCount === 2) {
+    var currentUserOpenId = currentUser?.openId
+      || getApp().globalData.userInfo?.openId
+      || getApp().globalData.openId
+      || wx.getStorageSync('openId');
+    console.log('🏷️ [真实姓名] 当前用户openId:', currentUserOpenId);
+
+    const otherParticipant = participants.find(p => {
+      const pOpenId = p.openId || p.id;
+      console.log('🏷️ [真实姓名] 比较参与者openId:', pOpenId, '与当前用户:', currentUserOpenId);
+      return pOpenId !== currentUserOpenId;
+    });
+
+    console.log('🏷️ [真实姓名] 找到的对方参与者:', otherParticipant);
+
+    if (otherParticipant) {
+      const otherNameRaw = otherParticipant?.nickName || otherParticipant?.name || '';
+      const isPlaceholderName = typeof this.isPlaceholderNickname === 'function'
+        ? this.isPlaceholderNickname(otherNameRaw)
+        : (!otherNameRaw || ['用户', '朋友', '好友', '邀请者', '新用户'].includes(otherNameRaw));
+      if (!isPlaceholderName && (otherParticipant.openId || otherParticipant.id) !== 'temp_user') {
+        const otherName = otherNameRaw;
+        title = `我和${otherName}（2）`;
+        console.log('🏷️ [真实姓名] 规则2: 双人聊天,对方名字:', otherName, '最终标题:', title);
+      } else {
+        console.log('🏷️ [真实姓名] 检测到占位符昵称或临时ID,触发强制获取真实昵称');
+        this.fetchChatParticipantsWithRealNames(true);
+        const fallbackInviterName = getReceiverTitleFallbackName();
+        title = `我和${fallbackInviterName}（2）`;
+      }
+    } else {
+      // 🔥 如果没找到对方,使用邀请链接中的昵称作为备选
+      const urlParams = getCurrentPages()[getCurrentPages().length - 1].options;
+      let inviterFromUrl = null;
+      if (urlParams.inviter) {
+        try {
+          // 🔧 处理双重编码问题
+          inviterFromUrl = decodeURIComponent(decodeURIComponent(urlParams.inviter));
+        } catch (e) {
+          // 如果双重解码失败,尝试单次解码
+          inviterFromUrl = decodeURIComponent(urlParams.inviter);
+        }
+      }
+
+      if (inviterFromUrl && inviterFromUrl !== '好友' && inviterFromUrl !== '朋友') {
+        title = `我和${inviterFromUrl}（2）`;
+        console.log('🏷️ [真实姓名] 使用URL中的邀请者昵称:', inviterFromUrl);
+      } else {
+        const fallbackInviterName = getReceiverTitleFallbackName();
+        title = `我和${fallbackInviterName}（2）`;
+        console.log('🏷️ [真实姓名] 未找到对方参与者,使用通用占位标题:', title);
+        this.fetchChatParticipantsWithRealNames(true);
+      }
+    }
+  }
+  // 规则3:3 人及以上时,显示"群聊（x）"
+  else {
+    title = `群聊（${participantCount}）`;
+    console.log('🏷️ [真实姓名] 规则3: 群聊模式,人数:', participantCount);
+  }
+
+  console.log('🏷️ [真实姓名] 动态标题更新为:', title);
+
+  this.setData({
+    dynamicTitle: title,
+    chatTitle: title,
+    contactName: title // 🔥 同时更新 contactName 确保页面标题正确
+  });
+
+  // 🔥 更新微信导航栏标题
+  wx.setNavigationBarTitle({
+    title: title
+  });
+
+  console.log('🏷️ [真实姓名] 页面标题和导航栏标题已更新');
+}
+
+/**
+ * 🔥 【HOTFIX-v1.3.45】用真实昵称更新标题
+ *
+ * 收到某个参与者的真实昵称后局部刷新 — 同时清理 temp_ 等无效参与者。
+ *
+ * @param {string} participantId - 参与者 ID
+ * @param {string} realNickname - 真实昵称
+ */
+function updateTitleWithRealNickname(participantId, realNickname) {
+  // 🔥 【A端动态标题】A 端标题应该根据参与者数量动态变化
+  console.log('🔥 [动态标题] A端标题随参与者变化:', realNickname);
+
+  console.log('🔥 [统一标题更新] 使用真实昵称更新标题:', realNickname);
+
+  // 🔥 【统一策略】双端都使用相同的标题更新逻辑
+
+  // 更新参与者列表中的昵称
+  const participants = this.data.participants || [];
+  const updatedParticipants = participants.map(p => {
+    if ((p.id || p.openId) === participantId) {
+      return { ...p, nickName: realNickname };
+    }
+    return p;
+  });
+
+  // 🔥 【过滤垃圾数据】过滤掉 temp_user 等无效参与者
+  const validParticipants = updatedParticipants.filter(p => {
+    const id = p.id || p.openId;
+    return id && id !== 'temp_user' && !id.startsWith('temp_') && id.length > 5;
+  });
+
+  console.log('🔥 [参与者过滤] 原始参与者数量:', updatedParticipants.length, '过滤后:', validParticipants.length);
+
+  // 🔥 【统一标题策略】根据过滤后的参与者数量决定标题格式
+  let newTitle;
+  const participantCount = validParticipants.length;
+
+  if (participantCount === 1) {
+    // 只有自己:显示自己昵称
+    const currentUser = this.data.currentUser;
+    newTitle = currentUser?.nickName || '我';
+    console.log('🔥 [统一标题] 单人状态,显示自己昵称:', newTitle);
+  } else if (participantCount === 2) {
+    // 双人聊天:显示"我和XX（2）"
+    newTitle = `我和${realNickname}（2）`;
+    console.log('🔥 [统一标题] 双人聊天,显示对方昵称:', newTitle);
+  } else {
+    // 多人聊天:显示"群聊（X）"
+    newTitle = `群聊（${participantCount}）`;
+    console.log('🔥 [统一标题] 多人聊天,显示群聊格式:', newTitle);
+  }
+
+  this.setData({
+    participants: validParticipants, // 🔥 使用过滤后的参与者列表
+    dynamicTitle: newTitle,
+    chatTitle: newTitle,
+    contactName: newTitle
+  }, () => {
+    wx.setNavigationBarTitle({
+      title: newTitle,
+      success: () => {
+        console.log('🔥 [统一标题] ✅ 标题更新成功:', newTitle);
+      }
+    });
+  });
+}
+
+/**
+ * 🔥 核心:动态标题更新
+ *
+ * 双端通用,在初始化、参与者变化、监听到加入等多个时机被调用。
+ * 规则与 updateDynamicTitleWithRealNames 类似,但增加 A 端身份保护机制:
+ * - 如果是 A 端发送方,且没有真实 B 端加入,保持显示自己昵称(避免 temp_user 误进双人态)
+ * - B 端真实昵称标题不被覆盖,但占位符标题允许更新
+ *
+ * @returns {void}
+ */
+function updateDynamicTitle() {
+  // 🔥 【移除过度保护】允许 A 端标题根据参与者变化动态更新
+  // A 端标题应该能响应:单人 → 双人 → 多人的状态变化
+
+  // 🔥 【1008修复】B 端标题保护:只保护真实昵称,允许更新占位符
+  if (this.data.isFromInvite && this.data.hasJoinedAsReceiver) {
+    const currentTitle = this.data.dynamicTitle;
+    // 🔥 检查标题是否包含占位符昵称
+    const hasPlaceholder = currentTitle && (
+      currentTitle.includes('用户') ||
+      currentTitle.includes('朋友') ||
+      currentTitle.includes('好友') ||
+      currentTitle.includes('邀请者') ||
+      currentTitle.includes('新用户')
+    );
+
+    // 🔥 只有标题是真实昵称(不包含占位符)时才保护
+    if (currentTitle && currentTitle.includes('我和') && currentTitle.includes('（2）') && !hasPlaceholder) {
+      console.log('🔥 [B端标题保护-1008] 跳过覆盖B端真实昵称标题:', currentTitle);
+      return;
+    } else if (hasPlaceholder) {
+      console.log('🔥 [B端标题更新-1008] 检测到占位符标题,允许更新:', currentTitle);
+    }
+  }
+
+  // 🔥 【统一标题策略】双端都使用相同的标题更新逻辑
+  console.log('🔥 [统一标题] 开始动态标题更新');
+
+  const { participants, currentUser } = this.data;
+  const isReceiverEnv = (typeof this.isReceiverEnvironment === 'function')
+    ? this.isReceiverEnvironment()
+    : !!this.data.isFromInvite;
+  const getReceiverTitleFallbackName = () => {
+    try {
+      const pages = getCurrentPages();
+      const options = pages && pages.length > 0 ? (pages[pages.length - 1].options || {}) : {};
+      let inviterName = options.inviter || '';
+      if (inviterName) {
+        try { inviterName = decodeURIComponent(inviterName); } catch (e) {}
+        try { inviterName = decodeURIComponent(inviterName); } catch (e) {}
+      }
+      if (inviterName && typeof this.isPlaceholderNickname === 'function' && !this.isPlaceholderNickname(inviterName)) {
+        return inviterName;
+      }
+    } catch (e) {}
+    try {
+      const inviteInfo = wx.getStorageSync('inviteInfo');
+      const storedInviter = inviteInfo && (inviteInfo.inviterNickName || inviteInfo.inviterName || inviteInfo.inviter);
+      if (storedInviter && typeof this.isPlaceholderNickname === 'function' && !this.isPlaceholderNickname(storedInviter)) {
+        return storedInviter;
+      }
+    } catch (e) {}
+    return '朋友';
+  };
+  let participantCount = participants.length;
+  let title = '';
+
+  console.log('🏷️ [优化标题] 更新动态标题,参与者数量:', participantCount, '参与者:', participants);
+  console.log('🏷️ [优化标题] 当前用户:', currentUser);
+
+  // 🚨 【关键修复】如果参与者数量异常,先尝试去重
+  if (participantCount > 3) {
+    console.log('🏷️ [优化标题] ⚠️ 参与者数量异常,触发去重处理');
+    this.deduplicateParticipants();
+    return; // 去重后会重新调用标题更新
+  }
+
+  // 🔥 【HOTFIX-v1.3.22】增强参与者数量检测
+  console.log('🏷️ [优化标题] 详细参与者信息:');
+  participants.forEach((p, index) => {
+    console.log(`🏷️ [优化标题] 参与者${index}:`, {
+      id: p.id,
+      openId: p.openId,
+      nickName: p.nickName,
+      isSelf: p.isSelf
+    });
+  });
+
+  // 规则1:未加入聊天或只有自己时,显示自己昵称
+  if (participantCount <= 1) {
+    // 🔥 [发送方修复] 如果已经是双人聊天,不要重置为单人标题
+    if (this.data.dynamicTitle && this.data.dynamicTitle.includes('（2）')) {
+      console.log('🏷️ [优化标题] 保持双人聊天标题不变:', this.data.dynamicTitle);
+      return;
+    }
+    if (isReceiverEnv) {
+      const fallbackInviterName = getReceiverTitleFallbackName();
+      title = `我和${fallbackInviterName}（2）`;
+      console.log('🏷️ [优化标题] 规则1: B 端临时单人态,使用接收方标题兜底:', title);
+    } else {
+      title = currentUser?.nickName || '我';
+      console.log('🏷️ [优化标题] 规则1: 单人状态,显示自己昵称:', title);
+    }
+  }
+  // 规则2:2 人聊天时,显示"我和xx（2）"
+  else if (participantCount === 2) {
+    var currentUserOpenId = currentUser?.openId
+      || getApp().globalData.userInfo?.openId
+      || getApp().globalData.openId
+      || wx.getStorageSync('openId');
+    console.log('🏷️ [优化标题] 当前用户openId:', currentUserOpenId);
+
+    const otherParticipant = participants.find(p => {
+      const pOpenId = p.openId || p.id;
+      console.log('🏷️ [优化标题] 比较参与者openId:', pOpenId, '与当前用户:', currentUserOpenId);
+      return pOpenId !== currentUserOpenId;
+    });
+
+    console.log('🏷️ [优化标题] 找到的对方参与者:', otherParticipant);
+
+    if (otherParticipant) {
+      // 🔥 【A端保护】增强 A 端身份检测,防止被误判为 B 端
+      const isReceiver = !!this.data.isFromInvite; // 我是 B 端
+
+      // 🔥 【A端身份验证】额外检查确保 A 端不会被误判
+      const urlParams = getCurrentPages()[getCurrentPages().length - 1].options || {};
+      const hasExplicitInviteParams = !!urlParams.inviter;
+      const isDefinitelyASide = !isReceiver && !hasExplicitInviteParams;
+
+      // 🔥 【A端特殊处理】如果是 A 端创建者,只在真正有 B 端加入时才显示双人标题
+      if (isDefinitelyASide) {
+        const otherNameRaw = otherParticipant?.nickName || otherParticipant?.name;
+        const isValidName = otherNameRaw && !['用户','朋友','好友','邀请者'].includes(otherNameRaw);
+
+        if (isValidName && (otherParticipant.openId || otherParticipant.id) !== 'temp_user') {
+          title = `我和${otherNameRaw}（2）`;
+          console.log('🏷️ [A端标题] A 端检测到真实 B 端加入,显示双人标题:', title);
+        } else {
+          title = currentUser?.nickName || '我';
+          console.log('🏷️ [A端标题] A 端暂无真实 B 端加入,保持自己昵称:', title);
+        }
+      } else {
+        const otherNameRaw = otherParticipant?.nickName || otherParticipant?.name;
+        const isPlaceholderName = !otherNameRaw || ['用户','朋友','好友','邀请者'].includes(otherNameRaw);
+
+        if (!isPlaceholderName && (otherParticipant.openId || otherParticipant.id) !== 'temp_user') {
+          const otherName = otherNameRaw;
+          title = `我和${otherName}（2）`;
+          console.log('🏷️ [优化标题] 规则2: 双人聊天,对方名字:', otherName, '最终标题:', title);
+        } else {
+          if (isReceiverEnv) {
+            const fallbackInviterName = getReceiverTitleFallbackName();
+            title = `我和${fallbackInviterName}（2）`;
+            console.log('🏷️ [优化标题] 规则2: B 端对方昵称占位,使用接收方标题兜底:', title, { otherNameRaw, isPlaceholderName });
+          } else {
+            title = currentUser?.nickName || '我';
+            console.log('🏷️ [优化标题] 规则2: 对方仍为占位/未就绪,保持自己昵称:', title, { otherNameRaw, isPlaceholderName });
+          }
+        }
+      }
+    } else {
+      // 🔥 如果没找到对方,可能是数据同步问题,B 端用邀请者兜底,A 端显示自己昵称
+      if (isReceiverEnv) {
+        const fallbackInviterName = getReceiverTitleFallbackName();
+        title = `我和${fallbackInviterName}（2）`;
+        console.log('🏷️ [优化标题] 规则2: B 端未找到对方参与者,使用接收方标题兜底:', title);
+      } else {
+        title = currentUser?.nickName || '我';
+        console.log('🏷️ [优化标题] 规则2: 未找到对方参与者,暂时显示自己昵称');
+      }
+
+      // 延迟重新获取参与者信息
+      setTimeout(() => {
+        console.log('🏷️ [优化标题] 延迟重新获取参与者信息');
+        this.fetchChatParticipants();
+      }, 2000);
+    }
+  }
+  // 规则3:3 人及以上时,显示"群聊（x）"
+  else {
+    title = `群聊（${participantCount}）`;
+    console.log('🏷️ [优化标题] 规则3: 群聊模式,人数:', participantCount);
+  }
+
+  console.log('🏷️ [优化标题] 动态标题更新为:', title);
+
+  this.setData({
+    dynamicTitle: title,
+    chatTitle: title // 同时更新 chatTitle 确保兼容性
+  }, () => {
+    console.log('🏷️ [优化标题] setData回调执行,当前dynamicTitle:', this.data.dynamicTitle);
+  });
+
+  console.log('🏷️ [优化标题] 页面数据设置完成,当前dynamicTitle:', this.data.dynamicTitle);
+
+  // 🔥 立即更新导航栏标题
+  wx.setNavigationBarTitle({
+    title: title,
+    success: () => {
+      console.log('🏷️ [优化标题] 导航栏标题已更新为:', title);
+    },
+    fail: (err) => {
+      console.error('🏷️ [优化标题] 导航栏标题更新失败:', err);
+    }
+  });
+}
+
 // TODO: 后续 task 将逐步搬入各方法实现
 
 /**
@@ -378,6 +801,9 @@ function attach(page) {
   page.updateReceiverTitleWithRealNames = updateReceiverTitleWithRealNames;
   page.updateTitleForReceiver = updateTitleForReceiver;
   page.protectReceiverTitle = protectReceiverTitle;
+  page.updateDynamicTitleWithRealNames = updateDynamicTitleWithRealNames;
+  page.updateTitleWithRealNickname = updateTitleWithRealNickname;
+  page.updateDynamicTitle = updateDynamicTitle;
 }
 
 module.exports = { attach };
