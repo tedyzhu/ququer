@@ -1,0 +1,9 @@
+{
+  "name": "cleanTempUserData",
+  "version": "1.0.0",
+  "description": "一次性清理 conversations 集合中 temp_user / 占位身份残留",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}
