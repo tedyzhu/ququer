@@ -3210,6 +3210,63 @@ Page({
     }
   },
 
+  /**
+   * 🔥 更新用户信息到数据库
+   */
+  updateUserInfoInDatabase: function() {
+    const app = getApp();
+    const userInfo = app.globalData.userInfo;
+
+    if (!userInfo || !userInfo.openId) return;
+
+    console.log('👤 更新用户信息到数据库:', userInfo);
+
+    wx.cloud.callFunction({
+      name: 'updateUserInfo',
+      data: {
+        openId: userInfo.openId,
+        userInfo: {
+          nickName: userInfo.nickName,
+          avatarUrl: userInfo.avatarUrl
+        }
+      },
+      success: res => {
+        console.log('👤 用户信息更新成功:', res);
+      },
+      fail: err => {
+        console.error('👤 用户信息更新失败:', err);
+      }
+    });
+  },
+
+  /**
+   * 🔧 更新特定用户信息到数据库
+   * @param {string} openId - 目标用户 openId
+   * @param {string} nickName - 目标用户昵称
+   */
+  updateSpecificUserInfo: function(openId, nickName) {
+    if (!openId || !nickName || nickName === '用户') return;
+
+    console.log('👤 [修复] 更新特定用户信息到数据库:', { openId, nickName });
+
+    wx.cloud.callFunction({
+      name: 'updateUserInfo',
+      data: {
+        openId: openId,
+        userInfo: {
+          nickName: nickName,
+          avatarUrl: '/assets/images/default-avatar.png'
+        }
+      },
+      success: res => {
+        console.log('👤 [修复] 特定用户信息更新成功:', res);
+      },
+      fail: err => {
+        console.error('👤 [修复] 特定用户信息更新失败:', err);
+      }
+    });
+  },
+
 
   /**
    * 🔥 【新增】移除b端错误的创建消息
