@@ -47,15 +47,9 @@ Page({
       wx.redirectTo({
         url: '../login/login',
         fail: (err) => {
-          console.error('跳转登录页失败，尝试备用路径:', err);
-          wx.redirectTo({
-            url: '/pages/login/login',
-            fail: (err2) => {
-              console.error('备用路径也失败:', err2);
-              wx.reLaunch({
-                url: '/app/pages/login/login'
-              });
-            }
+          console.error('跳转登录页失败,尝试绝对路径:', err);
+          wx.reLaunch({
+            url: '/app/pages/login/login'
           });
         }
       });

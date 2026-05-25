@@ -1,23 +1,46 @@
 /**
  * 用户数据库调试和清理工具
- * 用于排查和修复用户信息混淆问题
+ *
+ * ⚠️ 此函数包含数据库读写、清理、重建能力,**仅供开发期排错使用**。
+ *
+ * 安全控制:
+ * - 仅当云函数环境变量 `DEBUG_TOOLS_ENABLED=true` 时才会真正执行。
+ * - 部署到生产环境时不设置该变量,函数会直接返回 disabled,前端获得失败响应即可优雅降级。
+ * - 开发期需在云开发控制台为本函数手动配置 `DEBUG_TOOLS_ENABLED=true`(或本地调用 wx.cloud.callFunction 测试)。
  */
 const cloud = require('wx-server-sdk');
 
 cloud.init({
-  env: 'ququer-env-6g35f0nv28c446e7'
+  env: 'cloud1-d8g0b5fni24b9cb89'
 });
 
+/**
+ * 判断当前是否允许执行调试工具能力
+ * @returns {boolean}
+ */
+function isDebugEnabled() {
+  return process.env.DEBUG_TOOLS_ENABLED === 'true';
+}
+
 exports.main = async (event, context) => {
-  console.log('🔧 [用户数据调试] 云函数被调用，参数:', event);
-  
+  console.log('🔧 [用户数据调试] 云函数被调用,参数:', event);
+
+  if (!isDebugEnabled()) {
+    console.warn('🔧 [用户数据调试] 已禁用,需在云函数环境变量中设置 DEBUG_TOOLS_ENABLED=true');
+    return {
+      success: false,
+      disabled: true,
+      error: '调试工具已禁用(仅开发环境可用)'
+    };
+  }
+
   const db = cloud.database();
   const usersCollection = db.collection('users');
   const conversationsCollection = db.collection('conversations');
-  
+
   try {
     const action = event.action || 'debug';
-    
+
     switch (action) {
       case 'debug':
         return await debugUserData(db, usersCollection, conversationsCollection, event.specificUserId);
@@ -28,7 +51,7 @@ exports.main = async (event, context) => {
       default:
         return { success: false, error: '不支持的操作类型' };
     }
-    
+
   } catch (error) {
     console.error('🔧 [用户数据调试] 错误:', error);
     return {

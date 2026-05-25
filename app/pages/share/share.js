@@ -208,9 +208,9 @@ Page({
         },
         fail: (err) => {
           console.error('🔗 跳转登录页失败:', err);
-          // 备用路径
+          // 兜底:重试一次相同路径(根 pages 目录已不存在)
           wx.reLaunch({
-            url: '/pages/login/login'
+            url: '/app/pages/login/login'
           });
         }
       });
@@ -229,9 +229,9 @@ Page({
         },
         fail: (err) => {
           console.error('🔗 跳转首页失败:', err);
-          // 备用路径
+          // 兜底:重试一次相同路径(根 pages 目录已不存在)
           wx.reLaunch({
-            url: '/pages/home/home'
+            url: '/app/pages/home/home'
           });
         }
       });
