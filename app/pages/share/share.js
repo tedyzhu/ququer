@@ -92,10 +92,28 @@ Page({
    */
   joinChatDirectly: function(chatId, inviter) {
     console.log('🔗 开始加入聊天:', chatId, inviter);
-    
+
+    const app = getApp();
+
+    // 🔐 【temp_user 修复】调云函数前确保登录就绪。
+    // hasLogin 可能为 true 但 openId 仍未同步到 globalData(冷启动早期场景)。
+    const ensure = (typeof app.ensureLogin === 'function')
+      ? app.ensureLogin()
+      : Promise.resolve(app.globalData.userInfo);
+
+    ensure.finally(() => {
+      this._joinChatAfterLogin(chatId, inviter);
+    });
+  },
+
+  /**
+   * 真正执行加入聊天的云函数调用(私有)
+   * 由 joinChatDirectly 在登录就绪后调用
+   */
+  _joinChatAfterLogin: function(chatId, inviter) {
     const app = getApp();
     const userInfo = app.globalData.userInfo;
-    
+
     this.setData({
       message: '正在加入聊天...'
     });

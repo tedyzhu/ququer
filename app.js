@@ -867,6 +867,64 @@ App({
    * 调用云函数登录，确保获取真实 openId 并缓存
    * @returns {Promise<Object>} 用户信息
    */
+  /**
+   * 等待登录完成的统一入口
+   *
+   * 使用场景:
+   *   B 端通过分享链接(onShareAppMessage 返回的 path)进入小程序时,
+   *   微信会直接打开 chat 页,onLaunch 触发的 performCloudLogin 还没返回。
+   *   此时 globalData.userInfo / openId 都是空的,如果 chat.js onLoad 直接读取,
+   *   会 fallback 到 'temp_user' 占位身份导致后续行为异常。
+   *
+   *   页面在 onLoad 一开始 await app.ensureLogin() 即可保证拿到真实 openId。
+   *
+   * 行为:
+   *   - 已登录(globalData.openId 存在): 立即 resolve
+   *   - 登录中(_cloudLoginPromise 存在): 等待该 Promise
+   *   - 未启动: 主动启动 performCloudLogin
+   *
+   * 不会抛错: 任何异常情况都会 resolve(让上层走 fallback 兜底,不阻塞页面渲染)
+   *
+   * @returns {Promise<{openId: string, nickName: string, avatarUrl: string} | null>}
+   */
+  ensureLogin: function() {
+    // 已登录:直接返回当前 userInfo
+    if (this.globalData.hasLogin && this.globalData.openId) {
+      return Promise.resolve(this.globalData.userInfo);
+    }
+
+    // 登录中:复用现有 Promise
+    if (this._cloudLoginPromise) {
+      return this._cloudLoginPromise.catch(err => {
+        console.warn('[ensureLogin] 既有登录请求失败,后续走兜底:', err);
+        return null;
+      });
+    }
+
+    // 本地存储有 userInfo + openId 但没同步到 globalData(冷启动早期场景)
+    try {
+      const cachedUser = wx.getStorageSync('userInfo');
+      const cachedOpenId = wx.getStorageSync('openId');
+      if (cachedUser && cachedOpenId) {
+        this.globalData.userInfo = cachedUser;
+        this.globalData.openId = cachedOpenId;
+        this.globalData.hasLogin = true;
+        if (!cachedUser.openId) cachedUser.openId = cachedOpenId;
+        console.log('[ensureLogin] 从本地缓存恢复登录态,openId:', cachedOpenId);
+        return Promise.resolve(cachedUser);
+      }
+    } catch (e) {
+      console.warn('[ensureLogin] 读取本地缓存失败:', e);
+    }
+
+    // 未启动:主动 login
+    console.log('[ensureLogin] 未检测到登录态,主动调用 performCloudLogin');
+    return this.performCloudLogin().catch(err => {
+      console.warn('[ensureLogin] 主动登录失败,后续走兜底:', err);
+      return null;
+    });
+  },
+
   performCloudLogin: function() {
     if (this._cloudLoginPromise) {
       console.log('云函数登录进行中，复用现有请求');

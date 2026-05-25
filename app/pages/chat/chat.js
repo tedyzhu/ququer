@@ -439,6 +439,21 @@ Page({
       app.initCloud();
     }
     
+    // 🔥 【temp_user 修复】等待登录就绪后再读取 userInfo。
+    // 场景:B 端从分享链接(onShareAppMessage 的 path)直接进入 chat 页时,
+    // onLaunch 触发的 performCloudLogin 可能还没返回,globalData.userInfo 仍为 null。
+    // 此时若直接读取会走 fallback 到 'temp_user',导致后续身份判定全部错乱。
+    // ensureLogin 兼容:已登录立即返回 / 登录中复用 Promise / 未启动主动登录。
+    if (typeof app.ensureLogin === 'function' && (!app.globalData.hasLogin || !app.globalData.openId)) {
+      console.log('🔐 [登录就绪] 检测到 globalData 未就绪,等待 ensureLogin 完成');
+      try {
+        await app.ensureLogin();
+        console.log('🔐 [登录就绪] ✅ 登录就绪,openId:', app.globalData.openId);
+      } catch (loginErr) {
+        console.warn('🔐 [登录就绪] ensureLogin 失败,走兜底:', loginErr);
+      }
+    }
+    
     // 获取用户信息
     const userInfo = app.globalData.userInfo || {};
     
