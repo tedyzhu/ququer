@@ -62,6 +62,7 @@
 | 删 5 个死调试 + 修 test-methods 一致性 | 12516 | -2984 |
 | 批量删 18 个无引用方法 | **11865** | **-3635 (-23.5%)** |
 | **P2/system-message** | **10790** | **-4710 (-30.4%)** |
+| **P2/title-controller** | **9926** | **-5574 (-36.0%)** |
 
 ## 未完成
 
@@ -81,9 +82,11 @@
    - 抽离 11 个方法 (~1100 行) + 修复 `addCreatorSystemMessage` 双定义死代码
    - chat.js: 11922 → 10790 (-1132 行,-9.5%)
 
-4. **`modules/title-controller.js`**
-   - `updateDynamicTitle` / `updateDynamicTitleWithRealNames` / `protectReceiverTitle` / `replacePlaceholderWithRealName` 等
-   - **难点**:多个标题刷新路径互相覆盖,要先梳理优先级
+4. ~~**`modules/title-controller.js`**~~  ✅ **已完成 (P2 第二刀)**
+   - 详见 `.kiro/specs/chat-title-controller-module/{design,tasks}.md`
+   - 抽离 7 个方法 + 补抽 system-message 漏掉的 `replaceCreatorMessageWithJoinMessage`
+   - chat.js: 10790 → 9926 (-864 行,-8.0%)
+   - 突破万行大关
 
 5. **`modules/burn-after-read.js`**
    - `startFadingDestroy` / `clearAllDestroyTimers` / `simulateMessageRead` 等

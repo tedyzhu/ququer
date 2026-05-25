@@ -1,47 +1,46 @@
-# 实现任务: chat-title-controller 模块抽离
+# 实现任务: chat-title-controller 模块抽离 — ✅ 完成
 
 > 基于 design.md。每完成一项做一个 commit,出问题立刻 `git revert`。
 > 工作分支: `refactor/p2-title-controller`
+> **完成时间: 2026-05-26**
 
 ## 任务清单
 
-- [ ] 0. (前置)补抽 `replaceCreatorMessageWithJoinMessage` 到 `system-message.js`
-  - 这是 P2 第一刀漏抽的纯系统消息方法(行 2327-2442,116 行)
-  - 移到 system-message.js,attach 时绑定到 page
-  - chat.js 中删除原方法
-  - `node --check` + 集成测试
+- [x] 0. 补抽 `replaceCreatorMessageWithJoinMessage` 到 `system-message.js` (commit 7fc6fd8)
+- [x] 1+2. 创建模块骨架 + 抽离 4 个 B 端方法 (commit a1dd911)
+  - fetchRealInviterNameAndUpdateTitle (43 行)
+  - updateReceiverTitleWithRealNames (131 行)
+  - updateTitleForReceiver (105 行)
+  - protectReceiverTitle (38 行)
+- [x] 3. 抽离 3 个 A 端方法 (commit 7e76562)
+  - updateDynamicTitleWithRealNames (139 行)
+  - updateTitleWithRealNickname (58 行)
+  - updateDynamicTitle (196 行)
+- [x] 4. 整理 attach 调用点 — 在 onLoad 紧跟 SystemMessage.attach
+- [x] 5. 更新 docs 与最终验证
 
-- [ ] 1. 创建 `modules/title-controller.js` 骨架
-  - 文件头注释 + `require('./chat-helpers.js')`(可能用 formatTime 等)
-  - 空 attach + module.exports
+## 实际成效
 
-- [ ] 2. 抽离 4 个 B 端方法
-  - `fetchRealInviterNameAndUpdateTitle` (43 行)
-  - `updateReceiverTitleWithRealNames` (131 行)
-  - `updateTitleForReceiver` (105 行)
-  - `protectReceiverTitle` (38 行)
-  - `node --check` + 集成测试
+| 项 | 起点 | 终点 | 变化 |
+| --- | --- | --- | --- |
+| chat.js 行数 | 10790 | 9926 | **-864 (-8.0%)** |
+| 新模块 | — | `modules/title-controller.js` 700+ 行 | 含完整注释 |
+| 抽离方法数 | — | **7 个** | + 1 个补抽到 system-message |
 
-- [ ] 3. 抽离 3 个 A 端方法
-  - `updateDynamicTitleWithRealNames` (139 行)
-  - `updateTitleWithRealNickname` (58 行)
-  - `updateDynamicTitle` (196 行)
-  - `node --check` + 集成测试
-
-- [ ] 4. 整理 attach 调用点
-  - 在 onLoad 中加 `TitleController.attach(this)`,紧跟 `SystemMessage.attach(this)`
-  - 集成测试新增检查 TitleController.attach
-
-- [ ] 5. 更新 docs 与最终验证
-  - 更新 `docs/P1-Progress.md`
-  - 推送 + 创建 PR
+附加收益:
+- 把 P2 第一刀漏掉的 `replaceCreatorMessageWithJoinMessage` 补抽到 system-message,职责干净
+- chat.js 突破万行大关(9926),累计减幅 -36.0%
 
 ## 验证基线
 
-- `.tools/integration_test.js` 保持通过
-- chat.js 行数从 10790 降到 ~10080(-710 行)
-- 新增 `app/pages/chat/modules/title-controller.js` ~750 行(含注释)
+- ✅ `node --check` 每步通过
+- ✅ `.tools/integration_test.js` 6/6 通过(已新增 `TitleController.attach 挂上 8 个方法` 检查项)
+- ⏳ 模拟器 P0 路径验证 — 留给 PR 合并前
 
-## 出错回滚
+## Commits 链(3 个)
 
-每个 commit 都是单一职责,失败立即 `git revert HEAD` 或 `git reset --hard HEAD~1`。
+```
+7e76562 refactor(P2/title-controller): 抽离 3 个 A 端标题方法
+a1dd911 refactor(P2/title-controller): 抽离 4 个 B 端标题方法
+7fc6fd8 refactor(P2/system-message): 补抽 replaceCreatorMessageWithJoinMessage
+```
