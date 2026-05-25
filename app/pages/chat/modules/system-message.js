@@ -704,6 +704,318 @@ function normalizeSystemMessagesAfterLoad() {
 }
 
 /**
+ * 🔥 【CRITICAL-FIX-v5】B 端系统消息修复 — 彻底解决 B 端重复系统消息问题
+ *
+ * 这是 B 端加入聊天后系统消息处理的核心入口。流程概要:
+ * 1. 全局/本地防重复检查
+ * 2. 强制清理任何错误的 A 端创建消息
+ * 3. 解码邀请者昵称(双重 URL 解码)
+ * 4. 检查是否已存在正确的 B 端加入消息
+ * 5. 调用 fetchChatParticipantsWithRealNames 拿真实参与者
+ * 6. 800ms 后用真实昵称添加加入消息;1200ms 安全兜底;1000ms 后更新标题
+ *
+ * @param {string} inviterName - 邀请者昵称(可能是占位符,会通过参与者列表升级为真实昵称)
+ */
+function updateSystemMessageAfterJoin(inviterName) {
+  console.log('🔥 [B端系统消息修复-v7] 开始处理B端系统消息');
+  console.log('🔥 [B端系统消息修复-v7] 邀请者名称:', inviterName);
+
+  // 🔥 【HOTFIX-v1.3.57】全局防重复检查 - 确保整个应用生命周期内只添加一次 B 端系统消息
+  if (this.globalBEndMessageAdded) {
+    console.log('🔥 [B端系统消息修复-v7] ⚠️ 全局检测到B端消息已添加,跳过重复调用');
+    return;
+  }
+
+  console.log('🔥 [B端系统消息修复-v7] 开始全局防重复检查');
+
+  const currentUser = this.data.currentUser;
+  const dataIsFromInvite = this.data.isFromInvite;
+  const isReceiverEnv = this.isReceiverEnvironment();
+  const userNickName = currentUser?.nickName || '我';
+  console.log('🔥 [B端系统消息修复-v5] 当前用户身份 isFromInvite:', dataIsFromInvite, 'isReceiverEnv:', isReceiverEnv);
+
+  // 🔥 【HOTFIX-v1.3.56】强制检查并清理错误的 A 端消息
+  const currentMessages = this.data.messages || [];
+  const hasWrongCreatorMessage = currentMessages.some(msg =>
+    msg.isSystem &&
+    msg.content &&
+    msg.content.includes('您创建了私密聊天')
+  );
+
+  if (hasWrongCreatorMessage) {
+    console.log('🔥 [B端系统消息修复-v6] ⚠️ 检测到错误的A端消息,强制清理并重新添加正确的B端消息');
+    // 重置新增标记允许替换,但保留已处理标志(由 ever 控制补充逻辑)
+    this.bEndSystemMessageAdded = false;
+  }
+
+  // 检查是否已存在正确的 B 端系统消息
+  const hasCorrectJoinMessage = currentMessages.some(msg =>
+    msg.isSystem &&
+    msg.content &&
+    msg.content.includes('加入') &&
+    msg.content.includes('的聊天') &&
+    !msg.content.includes('您创建了')
+  );
+
+  if (hasCorrectJoinMessage && !hasWrongCreatorMessage) {
+    console.log('🔥 [B端系统消息修复-v6] ✅ 已存在正确的B端加入消息,跳过重复添加');
+    this.bEndSystemMessageAdded = true;
+    return;
+  }
+
+  // 🔥 【HOTFIX-v1.3.53】改进邀请者名称处理,支持智能检测场景
+  let processedInviterName = inviterName;
+  // 兼容单重/双重编码,避免出现 %E6%... 乱码
+  try { processedInviterName = decodeURIComponent(processedInviterName); } catch (e) {}
+  try { processedInviterName = decodeURIComponent(processedInviterName); } catch (e) {}
+  if (!processedInviterName || processedInviterName === 'undefined' || processedInviterName === '邀请者') {
+    // 🔥 【HOTFIX-v1.3.53】尝试从参与者信息中获取真实的对方昵称
+    processedInviterName = this.getOtherParticipantRealName() || '朋友';
+    console.log('🔥 [B端系统消息修复-v5] 从参与者获取邀请者名称:', processedInviterName);
+  } else {
+    console.log('🔥 [B端系统消息修复-v5] 使用传入的邀请者名称:', processedInviterName);
+  }
+
+  console.log('🔥 [B端系统消息修复-v5] 处理后的邀请者名称:', processedInviterName);
+  // 【修复】检查是否真的是 B 端身份
+  if (!isReceiverEnv) {
+    console.log('🔥 [B端系统消息修复-v5] 检测到非B端身份,跳过B端系统消息处理');
+    return;
+  }
+
+  // 🔥 【HOTFIX-v1.3.52】额外检查:确保当前用户不是创建者
+  const isSender = this.data.isSender;
+  if (isSender) {
+    console.log('🔥 [B端系统消息修复-v5] 检测到发送方身份,强制跳过B端系统消息处理');
+    return;
+  }
+
+  // 🔥 【HOTFIX-v1.3.56】B 端:强制清理所有错误的 A 端系统消息
+  console.log('🔥 [B端系统消息修复-v6] 开始强制清理错误消息,清理前消息数量:', currentMessages.length);
+
+  const filteredMessages = currentMessages.filter(msg => {
+    if (msg.isSystem && msg.content) {
+      // 🔥 彻底移除所有 A 端相关的系统消息
+      const shouldRemove =
+        msg.content.includes('您创建了私密聊天') ||
+        msg.content.includes('可点击右上角菜单分享链接邀请朋友加入') ||
+        msg.content.includes('私密聊天已创建') ||
+        msg.content.includes('分享链接邀请朋友') ||
+        // 移除任何"创建"相关的消息(B 端不应该看到)
+        (msg.content.includes('创建') && msg.content.includes('聊天')) ||
+        // 移除错误格式的系统消息
+        msg.content === '成功加入朋友的聊天' ||
+        msg.content === '成功加入朋友的聊天！' ||
+        msg.content === '已加入朋友的聊天' ||
+        msg.content === '成功加入聊天' ||
+        msg.content === '已加入聊天' ||
+        msg.content.includes('成功加入') ||
+        // 🔥 【HOTFIX-v1.3.61】B 端不显示 A 端风格的"XX加入聊天",但保留 B 端风格的"加入XX的聊天"
+        (/^.+加入聊天$/.test(msg.content) && !/^加入.+的聊天$/.test(msg.content)) ||
+        isPlaceholderJoinMessage(msg.content) ||
+        // 移除 senderId 无效的消息
+        (!msg.senderId || msg.senderId === 'undefined' || msg.senderId === '');
+
+      if (shouldRemove) {
+        console.log('🔥 [B端系统消息修复-v4] 移除不适合B端的消息:', msg.content);
+        return false;
+      }
+    }
+    return true;
+  });
+
+  console.log('🔥 [B端系统消息修复-v4] 清理后消息数量:', filteredMessages.length);
+
+  this._localMessageCache = filteredMessages;
+  this.setData({
+    messages: filteredMessages
+  });
+
+  // 🔥 【CRITICAL-FIX-v4】B 端添加正确的加入消息
+  // 🔥 【HOTFIX-v1.3.55】确保昵称解码正确,避免显示编码格式
+  let decodedInviterName = processedInviterName;
+  try {
+    if (processedInviterName && processedInviterName.includes('%')) {
+      decodedInviterName = decodeURIComponent(processedInviterName);
+      if (decodedInviterName.includes('%')) {
+        decodedInviterName = decodeURIComponent(decodedInviterName);
+      }
+    }
+  } catch (e) {
+    console.log('🔥 [昵称解码] 解码失败,使用原始昵称:', processedInviterName);
+  }
+
+  // 🔥 【HOTFIX-v1.3.61】确保 B 端系统消息格式严格正确
+  const joinMessage = `加入${decodedInviterName}的聊天`;
+  console.log('🔥 [B端系统消息-v1.3.61] 生成的消息格式:', joinMessage);
+
+  // 🔥 【HOTFIX-v1.3.61】格式校验:确保消息符合 B 端格式"加入xx的聊天"
+  if (!/^加入.+的聊天$/.test(joinMessage)) {
+    console.error('🔥 [B端系统消息-v1.3.61] ❌ 消息格式错误,已阻止:', joinMessage);
+    return; // 阻止错误格式的消息
+  }
+  console.log('🔥 [B端系统消息-v1.3.61] ✅ 消息格式校验通过');
+
+  // 🔥 【HOTFIX-v1.3.61】增强防重复检查:同时检查 B 端格式和 A 端格式
+  const existingJoinMessage = filteredMessages.find(msg => {
+    if (!msg.isSystem || !msg.content) return false;
+
+    // B 端格式:"加入xx的聊天"
+    const isBEndFormat = msg.content.startsWith('加入') && msg.content.endsWith('的聊天');
+
+    // A 端格式:"xx加入聊天"(不应该出现,但双重检查)
+    const isAEndFormat = /^.+加入聊天$/.test(msg.content) && !isBEndFormat;
+
+    if (isAEndFormat) {
+      console.warn('🔥 [B端系统消息-v1.3.61] ⚠️ 发现A端格式消息(异常):', msg.content);
+    }
+
+    return isBEndFormat;
+  });
+
+  console.log('🔥 [B端系统消息-v1.3.61] 是否已存在B端加入消息:', !!existingJoinMessage);
+
+  if (!existingJoinMessage) {
+    // 🔥 【HOTFIX-v1.3.56】强制重置防重复标记,确保能够添加正确的 B 端消息
+    console.log('🔥 [B端系统消息修复-v6] 强制添加正确的B端系统消息');
+    this.bEndSystemMessageAdded = false;
+
+    // 先调用获取参与者方法(不返回 Promise)
+    this.fetchChatParticipantsWithRealNames();
+
+    // 延迟处理,确保获取参与者方法完成
+    setTimeout(() => {
+      const participants = this.data.participants || [];
+      const currentUserOpenId = this.data.currentUser?.openId;
+
+      // 找到非当前用户的参与者(即 A 端用户)
+      const realInviterInfo = participants.find(p => {
+        const pId = p.id || p.openId;
+        return pId && pId !== currentUserOpenId;
+      });
+
+      if (realInviterInfo && realInviterInfo.nickName) {
+        // 使用真实昵称
+        const realNickname = realInviterInfo.nickName;
+        const isPlaceholder = ['朋友', '邀请者', '用户', '好友'].includes(realNickname);
+
+        if (!isPlaceholder) {
+          const realJoinMessage = `加入${realNickname}的聊天`;
+          console.log('🔥 [B端系统消息修复-v7] 添加真实昵称系统消息:', realJoinMessage);
+          // 🔥 【HOTFIX-v1.3.66】B 端系统消息和 A 端保持一致,显示一段时间后自动淡出
+          this.addSystemMessage(realJoinMessage, {
+            autoFadeStaySeconds: 3,
+            fadeSeconds: 5
+          });
+          this.bEndSystemMessageProcessed = true; // 🔥 设置防重复标记
+          this.globalBEndMessageAdded = true; // 🔥 【HOTFIX-v1.3.57】设置全局防重复标记
+        } else {
+          // 如果仍是占位符,使用传入的名称
+          console.log('🔥 [B端系统消息修复-v7] 使用传入名称:', joinMessage);
+          // 🔥 【HOTFIX-v1.3.66】B 端系统消息和 A 端保持一致,显示一段时间后自动淡出
+          this.addSystemMessage(joinMessage, {
+            autoFadeStaySeconds: 3,
+            fadeSeconds: 5
+          });
+          this.bEndSystemMessageProcessed = true; // 🔥 设置防重复标记
+          this.globalBEndMessageAdded = true; // 🔥 【HOTFIX-v1.3.57】设置全局防重复标记
+        }
+      } else {
+        // 找不到真实昵称,使用传入的名称
+        console.log('🔥 [B端系统消息修复-v7] 未找到真实昵称,使用传入名称:', joinMessage);
+        // 🔥 【HOTFIX-v1.3.66】B 端系统消息和 A 端保持一致,显示一段时间后自动淡出
+        this.addSystemMessage(joinMessage, {
+          autoFadeStaySeconds: 3,
+          fadeSeconds: 5
+        });
+        this.bEndSystemMessageProcessed = true; // 🔥 设置防重复标记
+        this.globalBEndMessageAdded = true; // 🔥 【HOTFIX-v1.3.57】设置全局防重复标记
+      }
+    }, 800); // 给足够时间让 fetchChatParticipantsWithRealNames 完成
+
+    // 🔥 【HOTFIX-v1.3.57】安全机制:检查全局标记,避免重复添加
+    setTimeout(() => {
+      if (this.globalBEndMessageAdded) {
+        console.log('🔥 [B端系统消息-安全机制] 全局标记显示消息已添加,跳过安全机制');
+        return;
+      }
+
+      const currentMessages = this.data.messages || [];
+      const hasAnyJoinMessage = currentMessages.some(msg =>
+        msg.isSystem &&
+        msg.content &&
+        msg.content.includes('加入') &&
+        msg.content.includes('的聊天') &&
+        !msg.content.includes('您创建了')
+      );
+
+      if (!hasAnyJoinMessage) {
+        console.log('🔥 [B端系统消息-安全机制] 未发现B端加入消息,强制添加基础消息');
+        const fallbackMessage = `加入${decodedInviterName}的聊天`;
+        // 🔥 【HOTFIX-v1.3.66】B 端系统消息和 A 端保持一致,显示一段时间后自动淡出
+        this.addSystemMessage(fallbackMessage, {
+          autoFadeStaySeconds: 3,
+          fadeSeconds: 5
+        });
+        this.bEndSystemMessageProcessed = true;
+        this.globalBEndMessageAdded = true; // 🔥 【HOTFIX-v1.3.57】设置全局防重复标记
+      } else {
+        console.log('🔥 [B端系统消息-安全机制] ✅ B端消息已正确显示');
+      }
+    }, 1200); // 确保在所有其他逻辑完成后执行
+
+    // 🔥 【HOTFIX-v1.3.54】修复标题更新的 Promise 调用错误
+    // 延迟更新标题,确保参与者数据已获取
+    setTimeout(() => {
+      const participants = this.data.participants || [];
+      const currentUserOpenId = this.data.currentUser?.openId;
+
+      // 找到非当前用户的参与者(即 A 端用户)
+      const realInviterInfo = participants.find(p => {
+        const pId = p.id || p.openId;
+        return pId && pId !== currentUserOpenId;
+      });
+
+      let titleName = processedInviterName;
+      if (realInviterInfo && realInviterInfo.nickName) {
+        const realNickname = realInviterInfo.nickName;
+        const isPlaceholder = ['朋友', '邀请者', '用户', '好友'].includes(realNickname);
+        if (!isPlaceholder) {
+          titleName = realNickname;
+          console.log('🔥 [B端标题修复-v6] 使用真实昵称设置标题:', titleName);
+        }
+      }
+
+      const correctTitle = `我和${titleName}（2）`;
+      this.setData({
+        dynamicTitle: correctTitle,
+        chatTitle: correctTitle,
+        contactName: correctTitle
+      });
+
+      // 🔥 立即更新导航栏标题
+      wx.setNavigationBarTitle({
+        title: correctTitle,
+        success: () => {
+          console.log('🔥 [B端系统消息修复-v6] ✅ B端标题已正确设置:', correctTitle);
+        },
+        fail: (e) => {
+          console.log('🔥 [B端标题修复-v6] 标题设置失败:', e);
+        }
+      });
+    }, 1000); // 给更多时间让参与者数据加载完成
+
+    // 🔥 【HOTFIX-v1.3.52】标记 B 端系统消息已添加,防止重复
+    this.bEndSystemMessageAdded = true;
+    console.log('🔥 [B端系统消息修复-v5] ✅ B端系统消息处理完成,已标记防重复');
+  } else {
+    console.log('🔥 [B端系统消息修复-v5] B端加入消息已存在,跳过添加');
+    // 即使跳过添加,也要标记已处理,避免其他地方重复调用
+    this.bEndSystemMessageAdded = true;
+  }
+}
+
+/**
  * 把所有系统消息相关方法挂到 page 实例上
  * @param {Object} page - Page 实例
  */
@@ -717,6 +1029,7 @@ function attach(page) {
   page.addCreatorSystemMessage = addCreatorSystemMessage;
   page.enforceSystemMessages = enforceSystemMessages;
   page.normalizeSystemMessagesAfterLoad = normalizeSystemMessagesAfterLoad;
+  page.updateSystemMessageAfterJoin = updateSystemMessageAfterJoin;
 }
 
 module.exports = { attach };
