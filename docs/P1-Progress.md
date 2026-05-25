@@ -64,6 +64,7 @@
 | **P2/system-message** | **10790** | **-4710 (-30.4%)** |
 | **P2/title-controller** | **9926** | **-5574 (-36.0%)** |
 | **P2/burn-after-read** | **9561** | **-5939 (-38.3%)** |
+| **P2/participant-listener** | **7719** | **-7781 (-50.2%)** |
 
 ## 未完成
 
@@ -94,6 +95,24 @@
    - 抽离 7 个方法(destroyMessage / permanentlyDeleteMessage / startDestroyCountdown / startFadingDestroy / clearAllDestroyTimers / markMessageAsReadAndDestroy / processOfflineMessages)
    - chat.js: 9926 → 9561 (-365 行,-3.7%)
    - 阅后即焚定时器子系统首次集中可读
+
+## P2 第四刀
+
+6. ~~**`modules/participant-listener.js`**~~  ✅ **已完成 (P2 第四刀)**
+   - 详见 `.kiro/specs/chat-participant-listener-module/{design,tasks}.md`
+   - 抽离 8 个方法(getOtherParticipantRealName / retryGetRealInviterName / startParticipantListener / startWatchingForNewParticipants / fetchChatParticipants / cleanupDuplicateParticipants / deduplicateParticipants / **fetchChatParticipantsWithRealNames** 642 行)
+   - chat.js: 9561 → 7719 (-1842 行,-19.3%) — P2 单刀最大削减
+   - **chat.js 累计已减 50.2%,不到原始一半**
+
+## P2 进度
+
+```
+✅ system-message      (11 方法, 1132 行)
+✅ title-controller    (7 方法, 864 行)
+✅ burn-after-read     (7 方法, 365 行)
+✅ participant-listener (8 方法, 1842 行)
+⏳ identity-resolver  — 1 个剩余,onLoad 内 ~1900 行身份判定
+```
 
 ## 抽离策略备忘
 
