@@ -1163,6 +1163,132 @@ function performBEndSystemMessageCheck() {
 }
 
 /**
+ * 🔥 【新增】把"创建消息"替换为"加入消息"
+ * 🔥 【HOTFIX-v1.3.81】全局防重复 — 整个 page 生命周期内只替换一次
+ *
+ * 当 A 端检测到 B 端加入,需要把"您创建了私密聊天..."这条消息替换为"[B端昵称]加入聊天"。
+ * 同时删除重复的创建消息(云端 + 本地可能各一条)。
+ *
+ * @param {string} participantName - 加入者昵称
+ */
+function replaceCreatorMessageWithJoinMessage(participantName) {
+  console.log('🔥 [系统消息替换-v1.3.81] 开始替换创建消息为加入消息,参与者:', participantName);
+
+  // 🔥 【HOTFIX-v1.3.81】全局防重复检查
+  if (this._hasReplacedCreatorMessage) {
+    console.log('🔥 [系统消息替换-v1.3.81] ⚠️ 已执行过替换,跳过重复操作');
+    return;
+  }
+
+  const messages = this.data.messages || [];
+  let hasReplaced = false;
+  let replacedMessageId = null;
+  let removedDuplicates = [];
+
+  // 🔥 【HOTFIX-v1.3.81】查找所有创建消息(可能有云端和本地的重复)
+  const creatorMessages = messages.filter(msg =>
+    msg.content && (
+      msg.content.includes('您创建了私密聊天') ||
+      /^.+创建了私密聊天$/.test(msg.content)
+    )
+  );
+
+  console.log('🔥 [系统消息替换-v1.3.81] 找到创建消息数量:', creatorMessages.length);
+
+  // 🔥 【HOTFIX-v1.3.81】检查是否已有加入消息,如果有则跳过
+  const hasJoinMessage = messages.some(msg =>
+    msg.isSystem && msg.content && (
+      msg.content.includes('加入聊天') && !msg.content.includes('您创建了') && !msg.content.includes('的聊天')
+    )
+  );
+
+  if (hasJoinMessage) {
+    console.log('🔥 [系统消息替换-v1.3.81] 已存在加入消息,跳过替换');
+    this._hasReplacedCreatorMessage = true;
+    return;
+  }
+
+  // 查找并替换/删除创建消息
+  const updatedMessages = messages.map((msg, index) => {
+    if (msg.content && (msg.content.includes('您创建了私密聊天') || /^.+创建了私密聊天$/.test(msg.content))) {
+      if (!hasReplaced) {
+        // 保留第一个,替换为加入消息
+        console.log('🔥 [系统消息替换-v1.3.81] 找到创建消息,准备替换:', msg.content);
+        hasReplaced = true;
+        replacedMessageId = msg.id;
+        return {
+          ...msg,
+          content: `${participantName}加入聊天`,
+          time: this.formatTime(new Date()),
+          timeDisplay: this.formatTime(new Date()),
+          // 🔥 【HOTFIX-v1.3.81】确保保留系统消息标记
+          isSystem: true,
+          isSystemMessage: true,
+          opacity: 1
+        };
+      } else {
+        // 删除重复的创建消息
+        console.log('🔥 [系统消息替换-v1.3.81] 删除重复的创建消息:', msg.content);
+        removedDuplicates.push(msg.id);
+        return null; // 标记为删除
+      }
+    }
+    return msg;
+  }).filter(msg => msg !== null); // 过滤掉被标记删除的消息
+
+  if (hasReplaced || removedDuplicates.length > 0) {
+    // 🔥 【HOTFIX-v1.3.81】设置全局标记防止重复
+    this._hasReplacedCreatorMessage = true;
+
+    this._localMessageCache = updatedMessages;
+    var kbActive = !!(this.data.inputFocus || this.data.keyboardVisible || this.data.keyboardHeight > 0);
+    var replacePatch = {
+      messages: updatedMessages,
+      hasSystemMessage: true
+    };
+    if (kbActive) {
+      replacePatch.scrollIntoView = '';
+      replacePatch.scrollTop = this.data.scrollTop === 99999 ? 99998 : 99999;
+    } else {
+      replacePatch.scrollIntoView = '';
+    }
+    var self = this;
+    this.setData(replacePatch, function() {
+      if (kbActive) { self.scheduleScrollToBottom(); }
+    });
+
+    console.log('🔥 [系统消息替换-v1.3.83] ✅ 创建消息已替换为加入消息:', `${participantName}加入聊天`);
+    console.log('🔥 [系统消息替换-v1.3.83] 删除的重复消息:', removedDuplicates);
+
+    // 🔥 【HOTFIX-v1.3.83】替换后的"xx加入聊天"统一使用3秒后淡出
+    try {
+      if (replacedMessageId) {
+        this.startSystemMessageFade && this.startSystemMessageFade(replacedMessageId, 3, 5);
+
+        // 🔥 清除 hasSystemMessage 标记
+        setTimeout(() => {
+          this.setData({ hasSystemMessage: false });
+        }, 8000); // 3秒停留 + 5秒淡出
+      }
+    } catch (e) {
+      console.warn('⚠️ [系统消息替换-v1.3.83] 启动加入消息淡出失败:', e);
+    }
+  } else {
+    // 🔥 【HOTFIX-v1.3.83】未找到创建消息时,直接添加加入消息
+    console.log('🔥 [系统消息替换-v1.3.83] 未找到创建消息,直接添加加入消息');
+    this._hasReplacedCreatorMessage = true;
+
+    // 直接添加加入消息
+    const joinMessage = `${participantName}加入聊天`;
+    this.addSystemMessage(joinMessage, {
+      autoFadeStaySeconds: 3,
+      fadeSeconds: 5
+    });
+    console.log('🔥 [系统消息替换-v1.3.83] ✅ 已添加加入消息(创建消息不存在)');
+  }
+}
+
+/**
  * 把所有系统消息相关方法挂到 page 实例上
  * @param {Object} page - Page 实例
  */
@@ -1178,6 +1304,7 @@ function attach(page) {
   page.normalizeSystemMessagesAfterLoad = normalizeSystemMessagesAfterLoad;
   page.updateSystemMessageAfterJoin = updateSystemMessageAfterJoin;
   page.performBEndSystemMessageCheck = performBEndSystemMessageCheck;
+  page.replaceCreatorMessageWithJoinMessage = replaceCreatorMessageWithJoinMessage;
 }
 
 module.exports = { attach };
