@@ -15,7 +15,7 @@
  */
 
 const ChatHelpers = require('./chat-helpers.js');
-const { SYSTEM_MESSAGE_DEFAULTS } = ChatHelpers;
+const { SYSTEM_MESSAGE_DEFAULTS, isPlaceholderJoinMessage } = ChatHelpers;
 
 /**
  * 添加系统消息
@@ -236,12 +236,160 @@ function startSystemMessageFade(messageId, staySeconds, fadeSeconds) {
 }
 
 /**
+ * 🔥 【HOTFIX-v1.3.55】清除错误的A端系统消息
+ * 当确认用户为B端时,立即清理之前可能错误添加的A端系统消息
+ */
+function clearIncorrectSystemMessages() {
+  const messages = this.data.messages || [];
+  const originalCount = messages.length;
+
+  // 过滤掉错误的A端系统消息
+  const filteredMessages = messages.filter(msg => {
+    if (!msg.isSystem || !msg.content) return true;
+
+    // 移除A端创建者消息
+    if (msg.content.includes('您创建了私密聊天')) {
+      console.log('🔥 [清理错误消息] 移除A端创建消息:', msg.content);
+      return false;
+    }
+
+    // 移除错误的B端重复消息
+    if (msg.content.includes('加入') && msg.content.includes('的聊天')) {
+      console.log('🔥 [清理错误消息] 移除重复B端消息,稍后会重新添加正确的:', msg.content);
+      return false;
+    }
+
+    return true;
+  });
+
+  if (filteredMessages.length !== originalCount) {
+    console.log(`🔥 [清理错误消息] 清除了 ${originalCount - filteredMessages.length} 条错误消息`);
+    this._localMessageCache = filteredMessages;
+    this.setData({
+      messages: filteredMessages
+    });
+  }
+}
+
+/**
+ * 🔥 【CRITICAL-FIX-v4】全面清理错误的系统消息和垃圾数据
+ * @returns {number} 清理后剩余的消息数量
+ */
+function cleanupWrongSystemMessages() {
+  console.log('🔥 [垃圾数据清理-v4] 开始全面清理错误消息和垃圾数据');
+
+  const currentMessages = this.data.messages || [];
+  const beforeCount = currentMessages.length;
+  const isReceiverEnv = this.isReceiverEnvironment();
+
+  const cleanedMessages = currentMessages.filter(msg => {
+    // 🔥 【垃圾数据过滤】优先过滤无效数据
+    if (!msg || !msg.content || msg.content.trim() === '') {
+      console.log('🔥 [垃圾数据清理-v4] 移除空消息:', msg);
+      return false;
+    }
+
+    // 🔥 【无效ID过滤】过滤senderId无效的消息
+    if (!msg.senderId ||
+        msg.senderId === 'undefined' ||
+        msg.senderId === 'null' ||
+        msg.senderId === '' ||
+        msg.senderId === ' ') {
+      console.log('🔥 [垃圾数据清理-v4] 移除无效senderId消息:', msg.content, 'senderId:', msg.senderId);
+      return false;
+    }
+
+    if (msg.isSystem && msg.content) {
+      // 🔥 【HOTFIX-v1.3.61】B端永远不应该看到创建者消息或A端风格"XX加入聊天"
+      if (isReceiverEnv) {
+        if (msg.content.includes('您创建了私密聊天') || (/^.+加入聊天$/.test(msg.content) && !/^加入.+的聊天$/.test(msg.content))) {
+          console.log('🔥 [垃圾数据清理-v4] (B端) 移除不应显示的系统消息:', msg.content);
+          return false;
+        }
+      }
+
+      // 🔒 无论端别,统一移除占位符格式的B端加入消息(如"加入用户的聊天")
+      if (isPlaceholderJoinMessage(msg.content)) {
+        console.log('🔥 [垃圾数据清理-v4] 移除占位符加入消息:', msg.content);
+        return false;
+      }
+
+      // 🔥 【系统消息过滤】过滤错误格式的系统消息
+      const shouldRemove =
+        // 精确匹配错误消息格式
+        msg.content === '成功加入朋友的聊天' ||
+        msg.content === '成功加入朋友的聊天！' ||
+        msg.content === '已加入朋友的聊天' ||
+        msg.content === '成功加入聊天' ||
+        msg.content === '已加入聊天' ||
+        // 移除所有包含"成功加入"的消息
+        msg.content.includes('成功加入') ||
+        // 移除特定的"已加入"错误格式
+        (msg.content.includes('已加入') && !msg.content.match(/^已加入.+的聊天$/)) ||
+        // 移除含有感叹号的旧格式消息
+        (msg.content.includes('加入') && msg.content.includes('聊天') && msg.content.includes('！')) ||
+        // 移除重复的"朋友已加入聊天"类型消息
+        msg.content === '朋友已加入聊天' ||
+        msg.content === '朋友已加入聊天！' ||
+        // 移除格式错误的系统消息
+        (msg.content.includes('系统') && msg.content.length < 3);
+
+      if (shouldRemove) {
+        // 🔥 【二次检查】不要移除正确格式的消息
+        const isCorrectFormat =
+          /^.+加入聊天$/.test(msg.content) ||      // "朋友加入聊天", "xx加入聊天"
+          /^加入.+的聊天$/.test(msg.content) ||    // "加入朋友的聊天", "加入xx的聊天"
+          msg.content.includes('您创建了私密聊天'); // 创建消息
+
+        if (!isReceiverEnv && isCorrectFormat && msg.senderId && msg.senderId !== 'undefined') {
+          console.log('🔥 [垃圾数据清理-v4] 保留正确格式消息:', msg.content);
+          return true; // 保留正确格式
+        }
+
+        console.log('🔥 [垃圾数据清理-v4] 移除错误系统消息:', msg.content, 'senderId:', msg.senderId);
+        return false;
+      }
+    }
+
+    // 🔥 【额外垃圾数据检查】移除其他类型的垃圾数据
+    if (msg.content && (
+      msg.content === 'undefined' ||
+      msg.content === 'null' ||
+      msg.content === '[object Object]' ||
+      msg.content.includes('NaN') ||
+      msg.content.length > 1000 // 过长的消息可能是错误数据
+    )) {
+      console.log('🔥 [垃圾数据清理-v4] 移除垃圾内容:', msg.content.substring(0, 50));
+      return false;
+    }
+
+    return true;
+  });
+
+  const afterCount = cleanedMessages.length;
+
+  if (beforeCount !== afterCount) {
+    this._localMessageCache = cleanedMessages;
+    this.setData({
+      messages: cleanedMessages
+    });
+    console.log('🔥 [垃圾数据清理-v4] ✅ 清理完成,移除消息数量:', beforeCount - afterCount);
+  } else {
+    console.log('🔥 [垃圾数据清理-v4] 没有发现需要清理的数据');
+  }
+
+  return afterCount;
+}
+
+/**
  * 把所有系统消息相关方法挂到 page 实例上
  * @param {Object} page - Page 实例
  */
 function attach(page) {
   page.addSystemMessage = addSystemMessage;
   page.startSystemMessageFade = startSystemMessageFade;
+  page.clearIncorrectSystemMessages = clearIncorrectSystemMessages;
+  page.cleanupWrongSystemMessages = cleanupWrongSystemMessages;
 }
 
 module.exports = { attach };
