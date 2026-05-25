@@ -1897,30 +1897,6 @@ Page({
   },
 
   /**
-   * 🔥 【A端系统消息】添加创建者系统消息
-   */
-  addCreatorSystemMessage: function() {
-    const messages = this.data.messages || [];
-    
-    // 检查是否已存在创建者消息
-    const hasCreatorMessage = messages.some(msg => 
-      msg.isSystem && msg.content && 
-      msg.content.includes('您创建了私密聊天')
-    );
-    
-    if (!hasCreatorMessage) {
-      console.log('🔥 [A端系统消息] 添加创建者系统消息');
-      // 🔥 【HOTFIX-v1.3.66】A端创建消息显示一段时间后自动淡出
-      this.addSystemMessage('您创建了私密聊天，可点击右上角菜单分享链接邀请朋友加入', {
-        autoFadeStaySeconds: 3,
-        fadeSeconds: 5
-      });
-    } else {
-      console.log('🔥 [A端系统消息] 创建者消息已存在，跳过添加');
-    }
-  },
-
-  /**
    * 🔥 【HOTFIX-v1.3.55】获取真实邀请者昵称并更新B端标题
    */
   fetchRealInviterNameAndUpdateTitle: function() {
@@ -2635,35 +2611,6 @@ Page({
   },
 
 
-  /**
-   * 🔥 【新增】a端创建聊天时添加专属系统消息
-   * 🔥 【HOTFIX-v1.3.83】恢复本地添加，设置自动淡出
-   */
-  addCreatorSystemMessage: function() {
-    console.log('🔥 [a端系统消息-v1.3.83] A端本地添加创建消息');
-    
-    // 🔥 【HOTFIX-v1.3.83】检查是否已有创建或加入消息
-    const messages = this.data.messages || [];
-    const hasSystemMessage = messages.some(msg => 
-      msg.isSystem && msg.content && (
-        msg.content.includes('您创建了私密聊天') ||
-        msg.content.includes('加入聊天')
-      )
-    );
-    
-    if (hasSystemMessage) {
-      console.log('🔥 [a端系统消息-v1.3.83] 已有系统消息，跳过添加');
-      return;
-    }
-    
-    // 🔥 【HOTFIX-v1.3.83】本地添加创建消息，设置自动淡出
-    const creatorMessage = '您创建了私密聊天，可点击右上角菜单分享链接邀请朋友加入';
-    this.addSystemMessage(creatorMessage, { 
-      autoFadeStaySeconds: 3, 
-      fadeSeconds: 5 
-    });
-    console.log('🔥 [a端系统消息-v1.3.83] ✅ 已添加本地创建消息，将在8秒后自动淡出');
-  },
 
 
   /**

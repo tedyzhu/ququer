@@ -498,6 +498,38 @@ function fixBEndSystemMessage(realInviterName) {
 }
 
 /**
+ * 🔥 【HOTFIX-v1.3.83】A 端本地添加创建消息,设置自动淡出
+ *
+ * 注意:chat.js 原本同名定义两次(行 ~2049 与 ~2898),由于 JavaScript 对象字面量
+ * 后定义覆盖前者,实际生效的是 v1.3.83 版本。抽离时只保留 v1.3.83 版本,删除前者。
+ */
+function addCreatorSystemMessage() {
+  console.log('🔥 [a端系统消息-v1.3.83] A端本地添加创建消息');
+
+  // 🔥 【HOTFIX-v1.3.83】检查是否已有创建或加入消息
+  const messages = this.data.messages || [];
+  const hasSystemMessage = messages.some(msg =>
+    msg.isSystem && msg.content && (
+      msg.content.includes('您创建了私密聊天') ||
+      msg.content.includes('加入聊天')
+    )
+  );
+
+  if (hasSystemMessage) {
+    console.log('🔥 [a端系统消息-v1.3.83] 已有系统消息,跳过添加');
+    return;
+  }
+
+  // 🔥 【HOTFIX-v1.3.83】本地添加创建消息,设置自动淡出
+  const creatorMessage = '您创建了私密聊天,可点击右上角菜单分享链接邀请朋友加入';
+  this.addSystemMessage(creatorMessage, {
+    autoFadeStaySeconds: 3,
+    fadeSeconds: 5
+  });
+  console.log('🔥 [a端系统消息-v1.3.83] ✅ 已添加本地创建消息,将在8秒后自动淡出');
+}
+
+/**
  * 把所有系统消息相关方法挂到 page 实例上
  * @param {Object} page - Page 实例
  */
@@ -508,6 +540,7 @@ function attach(page) {
   page.cleanupWrongSystemMessages = cleanupWrongSystemMessages;
   page.fixAEndSystemMessage = fixAEndSystemMessage;
   page.fixBEndSystemMessage = fixBEndSystemMessage;
+  page.addCreatorSystemMessage = addCreatorSystemMessage;
 }
 
 module.exports = { attach };
