@@ -3416,26 +3416,23 @@ Page({
    */
   showMoreMenu: function() {
     wx.showActionSheet({
-      itemList: ['🔧 清理重复参与者', '调试用户数据库', '🔗 手动加入现有聊天', '强制修复昵称', '清空聊天记录', '返回主菜单'],
+      itemList: ['🔧 清理重复参与者', '🔗 手动加入现有聊天', '强制修复昵称', '清空聊天记录', '返回主菜单'],
       success: (res) => {
         console.log('🔧 [调试] 更多菜单项被选择:', res.tapIndex);
         switch(res.tapIndex) {
           case 0: // 清理重复参与者
             this.cleanupDuplicateParticipants();
             break;
-          case 1: // 调试用户数据库
-            this.debugUserDatabase();
-            break;
-          case 2: // 手动加入现有聊天
+          case 1: // 手动加入现有聊天
             this.manualJoinExistingChat();
             break;
-          case 3: // 强制修复昵称
+          case 2: // 强制修复昵称
             this.forceFixSpecificUserNicknames();
             break;
-          case 4: // 清空聊天记录
+          case 3: // 清空聊天记录
             this.clearChatHistory();
             break;
-          case 5: // 返回主菜单
+          case 4: // 返回主菜单
             this.showChatMenu();
             break;
         }
@@ -4879,37 +4876,6 @@ Page({
        }
      } catch (e) {}
    },
-
-  /**
-   * 🔧 调试用户数据库信息
-   */
-  debugUserDatabase: function() {
-    console.log('🔍 [调试] 开始查看用户数据库信息');
-    
-    wx.cloud.callFunction({
-      name: 'debugUserDatabase',
-      data: {},
-      success: res => {
-        console.log('🔍 [调试] 用户数据库信息:', res.result);
-        
-        // 显示在界面上
-        const userDataText = JSON.stringify(res.result, null, 2);
-        wx.showModal({
-          title: '用户数据库信息',
-          content: userDataText,
-          showCancel: false,
-          confirmText: '知道了'
-        });
-      },
-      fail: err => {
-        console.error('🔍 [调试] 查看用户数据库失败:', err);
-        wx.showToast({
-          title: '查看失败',
-          icon: 'error'
-        });
-      }
-    });
-  },
 
   /**
    * 🔧 强制修复特定用户的昵称问题

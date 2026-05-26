@@ -79,7 +79,7 @@
 ✅ chat-debug-tools     (33 方法,1696 行模块, chat.js -1771)
 ```
 
-合并后,chat.js 还剩 5759 行(死代码清理后,见下),主要由以下大方法构成(待后续迭代取舍):
+合并后,chat.js 还剩 5725 行(死代码清理后,见下),主要由以下大方法构成(待后续迭代取舍):
 
 | 方法 | 行数 | 说明 |
 | --- | --- | --- |
@@ -111,15 +111,44 @@ P0/P1/P2 后,readme.md 与本文件均更新到真实状态。
 
 chat.js: 5948 → 5759 (-189 行)。
 
+### 3. 静态测试基础设施(2026-05-26)
+
+`.tools/` 目录原本整目录 ignore,实际包含两类脚本:
+- 一次性抽离脚本(`chat_*.py` / `extract_*.py`):用完即丢
+- 可复用回归测试(`*_test.js`):应入仓
+
+调整 `.gitignore` 为细粒度,把测试与扫描器入仓,共 5 个测试文件 + 1 个扫描器 + 1 个总入口:
+
+| 测试 | 用例数 | 覆盖 |
+| --- | --- | --- |
+| `integration_test.js` | 结构性 | chat.js require / Page / wxml 绑定 / 模块导出 / attach |
+| `chat_helpers_test.js` | 101 | 8 个纯工具函数全部行为(占位识别 / 系统消息标记 / 布尔解析 / 差异分析 / 时间格式化 / 昵称匹配 / Set 注册) |
+| `identity_utils_test.js` | 33 | `isReceiverEnvironment` 9 条决策路径 + `isMessageFromCurrentUser` + ever 标记读写 |
+| `sanitize_participants_test.js` | 53 | `joinByInvite` 与 `cleanTempUserData` 双 sanitize 实现一致性 |
+| `login_race_test.js` | 10 | `app.ensureLogin()` 4 种登录态时序场景 |
+
+总入口 `bash .tools/run_all_tests.sh` 一键跑全部。
+
+### 4. 移除 `debugUserDatabase` 前端入口(2026-05-26)
+
+云函数 `debugUserDatabase` 已加 `DEBUG_TOOLS_ENABLED` dev guard,但前端仍暴露:
+- `chat.js` 上 `debugUserDatabase` 方法定义(27 行)
+- `showMoreMenu` actionSheet "调试用户数据库" 菜单项
+
+均已删除。chat.js: 5759 → 5725 (-34 行)。
+
+`modules/test-methods.js` 里 4 个直接调云函数的引用保留(它们只在 console 调用,
+且云函数 guard 已经会返回 disabled,行为安全)。
+
 ## P3 候选(尚未启动)
 
 按 risk/benefit 排序:
 
-1. **`identity-resolver`(高风险高收益)**:把 `onLoad` 的 1096 行身份判定主流程拆出。需先抽象 IdentityState 对象,保证业务行为零变化。是 P2 时刻意绕开的最大头。
+1. **`identity-resolver`(高风险高收益)**:把 `onLoad` 的 1096 行身份判定主流程拆出。需先抽象 IdentityState 对象,保证业务行为零变化。是 P2 时刻意绕开的最大头。**已有静态测试基础设施作为回归保障**(见 P3 准备工作 #3)。
 2. **二线大方法继续拆**:`fetchMessages` / `startMessageListener` 等可能加入 modules 中的合适模块(如 `message-fetch.js`、`message-listener.js`)
 3. **云函数模块化**:`joinByInvite` 478 行 / `debugUserDatabase` 335 行可拆 helper
-4. **静态测试覆盖**:由于真机调试通道不稳,应补充 `.tools/` 下更多静态测试用例
-5. **彻底移除 `debugUserDatabase` 前端入口**:云函数已加 dev guard,前端的 `this.debugUserDatabase()` 入口可下线
+4. ~~**静态测试覆盖**~~ ✅ 已完成,见 P3 准备工作 #3
+5. ~~**彻底移除 `debugUserDatabase` 前端入口**~~ ✅ 已完成,见 P3 准备工作 #4
 
 ## 抽离策略备忘
 
