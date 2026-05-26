@@ -28,4 +28,6 @@ temp_*.js
 project.private.config.json
 
 # 临时脚本工具(只用于本机重构辅助)
-.tools/
+# .tools/ 整目录由细粒度规则管理,只忽略一次性抽离脚本,保留可复用的测试与工具
+.tools/chat_*.py
+.tools/extract_*.py
