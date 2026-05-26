@@ -65,6 +65,7 @@
 | **P2/title-controller** | **9926** | **-5574 (-36.0%)** |
 | **P2/burn-after-read** | **9561** | **-5939 (-38.3%)** |
 | **P2/participant-listener** | **7719** | **-7781 (-50.2%)** |
+| **P2/chat-debug-tools** | **5948** | **-9552 (-61.6%)** |
 
 ## 未完成
 
@@ -104,6 +105,16 @@
    - chat.js: 9561 → 7719 (-1842 行,-19.3%) — P2 单刀最大削减
    - **chat.js 累计已减 50.2%,不到原始一半**
 
+## P2 第五刀
+
+7. ~~**`modules/chat-debug-tools.js`**~~  ✅ **已完成 (P2 第五刀)**
+   - 详见 `.kiro/specs/chat-debug-tools-module/{design,tasks}.md`
+   - 抽离 33 个调试/工具方法(showIdentityFixDialog / fixIdentityToSender / quickTitleTest / testReceiverTitle / switchUserForTesting / testAsReceiver / testAsSender / simulateTwoPersonChat / manualJoinExistingChat / showChatIdInput / joinSpecificChat / generateCompileModeConfig / directJumpTest / emergencyFixUserIdentity / emergencyFixConnection / burnAfterReadingCleanup / forceBurnAfterReadingCleanup / permanentDeleteAllMessages / batchDeleteMessages / localClearMessages / cleanupStaleData / testNewChatMessageSending / testCleanupStaleData / startOnlineStatusMonitor / stopOnlineStatusMonitor / updateUserOnlineStatus / startOnlineUsersWatcher / checkMutualOnlineStatus / enableRealTimeDestroy 等)
+   - chat.js: 7719 → 5948 (-1771 行,-22.9%)
+   - **附加修复**: 删除 `manuallyFixConnection` 第 5072 处死代码(双定义)
+   - **关键决策**: 放弃硬抽 onLoad 身份判定逻辑(风险极高),改抽 33 个调试方法(收益相当)
+   - 写了 `.tools/extract_debug_tools.py` 脚本批量提取(精确 brace 配对)
+
 ## P2 进度
 
 ```
@@ -111,8 +122,12 @@
 ✅ title-controller    (7 方法, 864 行)
 ✅ burn-after-read     (7 方法, 365 行)
 ✅ participant-listener (8 方法, 1842 行)
-⏳ identity-resolver  — 1 个剩余,onLoad 内 ~1900 行身份判定
+✅ chat-debug-tools     (33 方法, 1771 行)  ← P2 完结
 ```
+
+P2 累计共抽离 66 个方法,chat.js 从 11865 → 5948,**减幅 49.9%**。
+
+主项目累计:15500 → 5948,**减幅 61.6%**。
 
 ## 抽离策略备忘
 
