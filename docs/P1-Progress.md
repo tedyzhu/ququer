@@ -79,7 +79,7 @@
 ✅ chat-debug-tools     (33 方法,1696 行模块, chat.js -1771)
 ```
 
-合并后,chat.js 还剩 5948 行,主要由以下大方法构成(待后续迭代取舍):
+合并后,chat.js 还剩 5759 行(死代码清理后,见下),主要由以下大方法构成(待后续迭代取舍):
 
 | 方法 | 行数 | 说明 |
 | --- | --- | --- |
@@ -90,6 +90,26 @@
 | `fetchMessagesAndMerge` | 307 | 加入后合并新增消息 |
 | `sendMessage` | 259 | 发送文本/图片消息(语音独立) |
 | `inferParticipantsFromMessages` | 169 | 从消息倒推参与者(兜底逻辑) |
+
+## P3 准备工作
+
+### 1. 文档同步(2026-05-26)
+
+P0/P1/P2 后,readme.md 与本文件均更新到真实状态。
+
+### 2. 死代码清理 + 扫描器升级(2026-05-26)
+
+删除 chat.js 中 5 个真正零引用的死方法(177 行):
+- `goBack` (11 行) — wxml 未绑定,外部无引用
+- `handleInputChange` (5 行) — 与 `onInputChange` 重复
+- `handleMessageTap` (9 行) — 与 `onMessageTap` 重复
+- `fetchParticipantRealName` (24 行) — 调用已删除的 `updateTitleWithRealNickname`
+- `checkChatCreationStatus` (128 行) — 创建流程旧路径
+
+`.tools/scan_dead_methods.py` 升级为自动扫描 chat.js + 所有模块的方法,
+而非固定候选列表。后续可继续运行检测新死代码。
+
+chat.js: 5948 → 5759 (-189 行)。
 
 ## P3 候选(尚未启动)
 
