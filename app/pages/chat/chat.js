@@ -29,6 +29,7 @@ const SystemMessage = require('./modules/system-message.js');
 const TitleController = require('./modules/title-controller.js');
 const BurnAfterRead = require('./modules/burn-after-read.js');
 const ParticipantListener = require('./modules/participant-listener.js');
+const IdentityResolver = require('./modules/identity-resolver.js');
 
 Page({
   disableScroll: true,
@@ -470,58 +471,14 @@ Page({
     // 获取用户信息
     const userInfo = app.globalData.userInfo || {};
     
-    // 🔧 【关键修复】强化邀请信息解析，正确处理isNewChat参数
-    let chatId = options.id || '';
-    let inviter = options.inviter || '';
-    let userName = options.userName || '';
-    // 🔥 【关键修复】正确解析isNewChat布尔值，优先使用传入的参数，支持多种格式
-    let isNewChat = options.isNewChat === 'true' || options.isNewChat === true || 
-                   options.action === 'create' || (!options.id && !chatId);
-    
-    console.log('🔧 [页面参数] 原始参数:', { chatId, inviter, userName, isNewChat: options.isNewChat, action: options.action });
-    console.log('🔥 [关键修复] 正确解析的isNewChat:', isNewChat);
-    console.log('🔥 [关键修复] 解析细节: isNewChat字符串?', options.isNewChat === 'true', '| isNewChat布尔?', options.isNewChat === true, '| action=create?', options.action === 'create');
-    
-    // 🔧 如果没有直接的chatId，尝试从其他参数获取
-    if (!chatId) {
-      chatId = options.contactId || options.chatId || `chat_${new Date().getTime()}_${Math.random().toString(36).substr(2, 9)}`;
-    }
-    
-    // 🔧 【修复发送方误判】特殊处理：如果有分享链接中的邀请信息，优先处理
-    const inviteInfo = app.getStoredInviteInfo();
-    
-        // 🔥 【HOTFIX-v1.3.21】彻底禁用强制接收方模式，避免发送方被误判
-    let forceReceiverMode = false; // 强制设为false，禁用此功能
-
-    // 🔥 【HOTFIX-v1.3.21】增强邀请信息清理，防止历史邀请信息干扰
-    if (inviteInfo && inviteInfo.inviteId) {
-      const currentTime = Date.now();
-      const inviteTime = inviteInfo.timestamp || 0;
-      const timeDiff = currentTime - inviteTime;
-      
-      console.log('🔥 [邀请信息清理] 检测到邀请信息，分析有效性');
-      console.log('🔥 [邀请信息清理] 当前时间:', currentTime);
-      console.log('🔥 [邀请信息清理] 邀请时间:', inviteTime);
-      console.log('🔥 [邀请信息清理] 时间差:', timeDiff);
-      
-      // 🔥 清理过期邀请信息（超过10分钟的邀请信息视为过期）
-      if (timeDiff > 10 * 60 * 1000) {
-        console.log('🔥 [邀请信息清理] 检测到过期邀请信息，立即清理');
-        app.clearInviteInfo();
-        inviter = null;
-      } else {
-        console.log('🔥 [邀请信息清理] 邀请信息在有效期内，但需要验证真实性');
-        
-        // 🔥 验证是否为真实的邀请进入（必须有URL参数）
-        if (!options.inviter && !options.fromInvite) {
-          console.log('🔥 [邀请信息清理] 无真实邀请参数，清理残留邀请信息');
-          app.clearInviteInfo();
-          inviter = null;
-        } else {
-          console.log('🔥 [邀请信息清理] 验证通过，保留邀请信息');
-        }
-      }
-    }
+    // 解析 URL 参数 + 清理过期/残留 stored invite(详见 modules/identity-resolver.js)
+    const loadCtx = IdentityResolver.prepareLoadContext(this, options);
+    let chatId = loadCtx.chatId;
+    let inviter = loadCtx.inviter;
+    let userName = loadCtx.userName;
+    let isNewChat = loadCtx.isNewChat;
+    let forceReceiverMode = loadCtx.forceReceiverMode;
+    let inviteInfo = loadCtx.inviteInfo;
     
     // 🔥 【CRITICAL-FIX】优先检查URL参数，防止误判
     const hasExplicitInviterParam = options.inviter && options.inviter !== 'undefined';
