@@ -1282,63 +1282,10 @@ Page({
       console.log('🧪 [调试] 测试方法已在onLoad中添加完成');
     }
     
-    // 🔥 【HOTFIX-v1.3.57】B端系统消息安全检查：仅在B端执行
-    setTimeout(() => {
-      if (this.data && this.data.isFromInvite) {
-        this.performBEndSystemMessageCheck && this.performBEndSystemMessageCheck();
-        
-        // 🔥 【HOTFIX-v1.3.57】额外保险：清理可能的重复消息（仅B端）
-        setTimeout(() => {
-          this.removeDuplicateBEndMessages && this.removeDuplicateBEndMessages();
-        }, 500);
-      } else {
-        console.log('🛡️ [B端检查] A端环境，跳过B端系统消息安全检查与去重');
-      }
-    }, 1500);
-    
-    // 🔥 【HOTFIX-v1.3.46】检查是否需要添加B端加入系统消息
-    // 取消旧的"预添加B端系统消息"策略，改为在 joinByInvite 成功后统一添加
-    this.needsJoinMessage = false;
-    this.inviterDisplayName = '';
-    
-    // 🔥 【HOTFIX-v1.3.57】重置阅后即焚和系统消息标记，包括全局B端消息标记
-    this.setData({
-      hasCheckedBurnAfterReading: false,
-      hasAddedConnectionMessage: false,
-      isNewChatSession: true
-    });
-    
-    // 🔥 【HOTFIX-v1.3.57】初始化全局B端系统消息防重复标记（不清空已处理标志，防止重复补充）
-    this.globalBEndMessageAdded = false;
-    this.bEndSystemMessageAdded = false;
-    
-    // 🔧 【连接检测修复】确保所有情况下都清除isLoading状态，不显示前端loading
-    setTimeout(() => {
-      console.log('🔧 [页面初始化] 确保清除loading状态，保持界面流畅');
-      this.setData({
-        isLoading: false,
-        isCreatingChat: false,
-        chatCreationStatus: ''
-      });
-      console.log('🔧 [页面初始化] ✅ loading状态已清除');
-    }, 500);
-
-    // 🔥 【阅后即焚检查】延迟检查是否需要清理历史数据，增加智能判断
-    setTimeout(() => {
-      console.log('🔥 [页面初始化] 执行阅后即焚检查');
-      
-      // 🔥 检查是否在冷却期内，避免过度检查
-      const currentTime = Date.now();
-      const lastCleanupTime = this.data.lastCleanupTime;
-      const cooldownPeriod = this.data.cleanupCooldownPeriod;
-      
-      if (lastCleanupTime && (currentTime - lastCleanupTime) < cooldownPeriod) {
-        console.log('🔥 [页面初始化] 仍在清理冷却期内，跳过阅后即焚检查');
-        return;
-      }
-      
-      this.checkBurnAfterReadingCleanup();
-    }, 2000);
+    // 阶段 5:onLoad 后处理 hooks
+    // 详见 modules/identity-resolver.js#runPostLoadHooks
+    // (B 端系统消息安全检查 / 标志位重置 / 清除 loading / 阅后即焚检查)
+    IdentityResolver.runPostLoadHooks(this);
   },
 
   /**
