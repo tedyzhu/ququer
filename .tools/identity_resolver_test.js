@@ -225,5 +225,197 @@ origLog('\n--- prepareLoadContext 集成 ---');
   }
 }
 
+
+// ============ detectInvitePresence(阶段 2a) ============
+origLog('\n--- detectInvitePresence ---');
+
+{
+  const r = withSilence(() => Resolver.detectInvitePresence({}));
+  assertEqual('2a.空 options 全 false', r.preliminaryInviteDetected, false);
+  assertEqual('2a.空 options hasExplicitInviterParam', r.hasExplicitInviterParam, false);
+  assertEqual('2a.空 options hasJoinAction', r.hasJoinAction, false);
+  assertEqual('2a.空 options hasFromInviteFlag', r.hasFromInviteFlag, false);
+}
+{
+  const r = withSilence(() => Resolver.detectInvitePresence({ inviter: '向冬' }));
+  assertEqual('2a.inviter=向冬 hasExplicit', r.hasExplicitInviterParam, true);
+  assertEqual('2a.inviter=向冬 preliminary', r.preliminaryInviteDetected, true);
+}
+{
+  const r = withSilence(() => Resolver.detectInvitePresence({ inviter: 'undefined' }));
+  assertEqual('2a.inviter="undefined" 字符串视为无效', r.hasExplicitInviterParam, false);
+}
+{
+  const r = withSilence(() => Resolver.detectInvitePresence({ action: 'join' }));
+  assertEqual('2a.action=join hasJoinAction', r.hasJoinAction, true);
+  assertEqual('2a.action=join preliminary', r.preliminaryInviteDetected, true);
+}
+{
+  const r = withSilence(() => Resolver.detectInvitePresence({ action: 'create' }));
+  assertEqual('2a.action=create hasJoinAction false', r.hasJoinAction, false);
+}
+{
+  const r = withSilence(() => Resolver.detectInvitePresence({ fromInvite: 'true' }));
+  assertEqual("2a.fromInvite='true' 字符串", r.hasFromInviteFlag, true);
+}
+{
+  const r = withSilence(() => Resolver.detectInvitePresence({ fromInvite: true }));
+  assertEqual('2a.fromInvite=true 布尔', r.hasFromInviteFlag, true);
+}
+{
+  const r = withSilence(() => Resolver.detectInvitePresence({ fromInvite: '1' }));
+  assertEqual("2a.fromInvite='1' 字符串", r.hasFromInviteFlag, true);
+}
+{
+  const r = withSilence(() => Resolver.detectInvitePresence({ fromInvite: 'false' }));
+  assertEqual("2a.fromInvite='false' 不是 truthy", r.hasFromInviteFlag, false);
+}
+
+// ============ collectCreatorEvidence(阶段 2b) ============
+origLog('\n--- collectCreatorEvidence ---');
+
+// 注意:collectCreatorEvidence 仅在 inviteInfo 存在时被 chat.js 调用
+// 测试也保证传入 truthy inviteInfo
+
+// 准备:扩展 wx mock 以支持 storage 读
+const mockStorage2 = {};
+const origGetStorageSync = global.wx.getStorageSync;
+global.wx.getStorageSync = (k) => mockStorage2[k];
+
+// 工具:重置 mock state
+function resetMocks() {
+  Object.keys(mockStorage2).forEach(k => delete mockStorage2[k]);
+  mockApp.globalData = {};
+}
+
+// 用例 1:典型 B 端(无任何创建者证据)
+{
+  resetMocks();
+  const inviteInfo = { inviteId: 'chat_xxx', inviter: '向冬', timestamp: Date.now() - 60 * 1000 };
+  const userInfo = { nickName: '小明', openId: 'user_b_openid' };
+  const r = withSilence(() => Resolver.collectCreatorEvidence({ data: {} }, {}, inviteInfo, userInfo, false));
+  assertEqual('2b.B端 chatIdContainsUserId false', r.chatIdContainsUserId, false);
+  assertEqual('2b.B端 isSameUser false', r.isSameUser, false);
+  // hasCreateAction 在所有 falsy 来源下,与原 chat.js 等价为 undefined(三个 || 都未命中)
+  assert('2b.B端 hasCreateAction falsy', !r.hasCreateAction);
+  assertEqual('2b.B端 isInShareMode false', r.isInShareMode, false);
+  assertEqual('2b.B端 hasHistoricalEvidence false', r.hasHistoricalEvidence, false);
+  assertEqual('2b.B端 hasOwnershipMarkers false', r.hasOwnershipMarkers, false);
+  assertEqual('2b.B端 isFrequentVisitor false', r.isFrequentVisitor, false);
+  assertEqual('2b.B端 chatVisitCount 0', r.chatVisitCount, 0);
+  assertEqual('2b.B端 inviterNickname=向冬', r.inviterNickname, '向冬');
+  assertEqual('2b.B端 userNickname=小明', r.userNickname, '小明');
+  assertEqual('2b.B端 currentUserOpenId 来自 userInfo', r.currentUserOpenId, 'user_b_openid');
+}
+
+// 用例 2:chatIdContainsUserId(聊天 ID 含用户 ID 片段)
+{
+  resetMocks();
+  const inviteInfo = { inviteId: 'chat_user_a_openid_abc_123', inviter: '向冬', timestamp: Date.now() - 60 * 1000 };
+  const userInfo = { nickName: '向冬', openId: 'user_a_openid' };
+  const r = withSilence(() => Resolver.collectCreatorEvidence({ data: {} }, {}, inviteInfo, userInfo, false));
+  assertEqual('2b.A端 chatIdContainsUserId true', r.chatIdContainsUserId, true);
+  assertEqual('2b.A端 isSameUser true', r.isSameUser, true);
+}
+
+// 用例 3:isVeryRecentInvite / isRecentInvite 时间维度
+{
+  resetMocks();
+  const now = Date.now();
+  const inviteInfo = { inviteId: 'chat_x', inviter: 'X', timestamp: now - 60 * 1000 }; // 1 分钟前
+  const r = withSilence(() => Resolver.collectCreatorEvidence({ data: {} }, {}, inviteInfo, { openId: 'u' }, false));
+  assertEqual('2b.1 分钟内 isVeryRecentInvite=true', r.isVeryRecentInvite, true);
+  assertEqual('2b.1 分钟内 isRecentInvite=true', r.isRecentInvite, true);
+}
+{
+  resetMocks();
+  const inviteInfo = { inviteId: 'chat_x', inviter: 'X', timestamp: Date.now() - 5 * 60 * 1000 }; // 5 分钟前
+  const r = withSilence(() => Resolver.collectCreatorEvidence({ data: {} }, {}, inviteInfo, { openId: 'u' }, false));
+  assertEqual('2b.5 分钟前 isVeryRecentInvite=false(>2min)', r.isVeryRecentInvite, false);
+  assertEqual('2b.5 分钟前 isRecentInvite=true(<24h)', r.isRecentInvite, true);
+}
+
+// 用例 4:URL 参数 inviter 优先级
+{
+  resetMocks();
+  const inviteInfo = { inviteId: 'chat_x', inviter: '朋友', timestamp: Date.now() - 60 * 1000 };
+  const userInfo = { nickName: '小明', openId: 'u' };
+  const r = withSilence(() => Resolver.collectCreatorEvidence(
+    { data: {} },
+    { inviter: '%E5%90%91%E5%86%AC' }, // 向冬 URL 编码
+    inviteInfo,
+    userInfo,
+    true,
+  ));
+  assertEqual('2b.URL inviter 优先,解码后用作 inviterNickname', r.inviterNickname, '向冬');
+}
+
+// 用例 5:URL 参数 inviter='朋友' 不覆盖原有 inviterNickname(占位符过滤)
+{
+  resetMocks();
+  const inviteInfo = { inviteId: 'chat_x', inviter: '原始邀请者', timestamp: Date.now() - 60 * 1000 };
+  const userInfo = { nickName: '小明', openId: 'u' };
+  const r = withSilence(() => Resolver.collectCreatorEvidence(
+    { data: {} },
+    { inviter: encodeURIComponent('朋友') },
+    inviteInfo,
+    userInfo,
+    true,
+  ));
+  assertEqual('2b.URL inviter=朋友 占位符不覆盖', r.inviterNickname, '原始邀请者');
+}
+
+// 用例 6:hasCreateAction 三种来源
+{
+  resetMocks();
+  const inviteInfo = { inviteId: 'chat_x', inviter: 'X', timestamp: Date.now() };
+  // 来源 1:options.action='create'
+  const r1 = withSilence(() => Resolver.collectCreatorEvidence({ data: {} }, { action: 'create' }, inviteInfo, { openId: 'u' }, false));
+  assertEqual('2b.action=create → hasCreateAction', r1.hasCreateAction, true);
+  // 来源 2:page.data.isNewChat
+  const r2 = withSilence(() => Resolver.collectCreatorEvidence({ data: { isNewChat: true } }, {}, inviteInfo, { openId: 'u' }, false));
+  assertEqual('2b.page.data.isNewChat → hasCreateAction', r2.hasCreateAction, true);
+  // 来源 3:app.globalData.recentCreateActions
+  mockApp.globalData = { recentCreateActions: ['chat_x'] };
+  const r3 = withSilence(() => Resolver.collectCreatorEvidence({ data: {} }, {}, inviteInfo, { openId: 'u' }, false));
+  assertEqual('2b.recentCreateActions → hasCreateAction', r3.hasCreateAction, true);
+}
+
+// 用例 7:isFrequentVisitor 阈值(>=2)
+{
+  resetMocks();
+  const inviteInfo = { inviteId: 'chat_x', inviter: 'X', timestamp: Date.now() };
+  // 0 次
+  const r0 = withSilence(() => Resolver.collectCreatorEvidence({ data: {} }, {}, inviteInfo, { openId: 'u' }, false));
+  assertEqual('2b.访问 0 次 isFrequentVisitor=false', r0.isFrequentVisitor, false);
+  // 1 次
+  mockStorage2['chat_visit_history'] = { chat_x: 1 };
+  const r1 = withSilence(() => Resolver.collectCreatorEvidence({ data: {} }, {}, inviteInfo, { openId: 'u' }, false));
+  assertEqual('2b.访问 1 次 isFrequentVisitor=false', r1.isFrequentVisitor, false);
+  // 2 次
+  mockStorage2['chat_visit_history'] = { chat_x: 2 };
+  const r2 = withSilence(() => Resolver.collectCreatorEvidence({ data: {} }, {}, inviteInfo, { openId: 'u' }, false));
+  assertEqual('2b.访问 2 次 isFrequentVisitor=true', r2.isFrequentVisitor, true);
+  assertEqual('2b.访问 2 次 chatVisitCount=2', r2.chatVisitCount, 2);
+}
+
+// 用例 8:hasOwnershipMarkers 三种字段
+{
+  resetMocks();
+  const inviteInfo1 = { inviteId: 'chat_x', inviter: 'X', timestamp: Date.now(), createdBy: 'u' };
+  const r1 = withSilence(() => Resolver.collectCreatorEvidence({ data: {} }, {}, inviteInfo1, { openId: 'u' }, false));
+  assertEqual('2b.createdBy 命中', r1.hasOwnershipMarkers, true);
+  const inviteInfo2 = { inviteId: 'chat_x', inviter: 'X', timestamp: Date.now(), creator: 'u' };
+  const r2 = withSilence(() => Resolver.collectCreatorEvidence({ data: {} }, {}, inviteInfo2, { openId: 'u' }, false));
+  assertEqual('2b.creator 命中', r2.hasOwnershipMarkers, true);
+  const inviteInfo3 = { inviteId: 'chat_x', inviter: 'X', timestamp: Date.now(), owner: 'u' };
+  const r3 = withSilence(() => Resolver.collectCreatorEvidence({ data: {} }, {}, inviteInfo3, { openId: 'u' }, false));
+  assertEqual('2b.owner 命中', r3.hasOwnershipMarkers, true);
+}
+
+// 还原 mock
+global.wx.getStorageSync = origGetStorageSync;
+
+
 origLog(`\n--- ${pass} pass / ${fail} fail ---`);
 process.exit(fail > 0 ? 1 : 0);
