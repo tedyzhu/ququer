@@ -483,3 +483,153 @@ function runPostLoadHooks(page) {
 }
 
 module.exports.runPostLoadHooks = runPostLoadHooks;
+
+
+// ========== 阶段 4:身份分支动作 ==========
+
+/**
+ * 阶段 4:基于已确认身份执行对应分支动作
+ *
+ * 三大主路径:
+ *   1. B 端(finalIsFromInvite=true):调 joinChatByInvite,后续都不走 A 端逻辑
+ *   2. A 端 + 新聊天(isNewChat=true):createConversationRecord 后启动监听
+ *   3. A 端 + 已有聊天:根据 participants 数量分两子路径
+ *
+ * 与原 chat.js 行 1147-1281 的完整 if/else 链路行为等价。
+ *
+ * 副作用范围(显著):
+ * - wx.setStorageSync('creator_<chatId>', openId)
+ * - this.joinChatByInvite / addCreatorSystemMessage / updateUserInfoInDatabase /
+ *   createConversationRecord / startParticipantListener
+ * - this.setData(清除 loading)
+ * - this.needsCreatorMessage 标志位读写
+ * - 5 秒后调 app.clearInviteInfo(顶层 setTimeout 留在 onLoad 里调用)
+ *
+ * 注:5 秒清理邀请信息的 setTimeout 不抽,因为它依赖 onLoad 中的 `inviteInfo` 变量
+ * (本函数返回后才会清理),保留在 onLoad 内时序更直观。
+ *
+ * @param {Object} page - Page 实例
+ * @param {Object} ctx  - 分支动作所需上下文
+ * @param {boolean} ctx.finalIsFromInvite - 最终身份判断结果
+ * @param {string}  ctx.chatId
+ * @param {string}  ctx.inviter
+ * @param {string}  ctx.userName
+ * @param {boolean} ctx.isNewChat
+ */
+function runIdentityBranchActions(page, ctx) {
+  const { finalIsFromInvite, chatId, inviter, userName, isNewChat } = ctx;
+
+  if (finalIsFromInvite) {
+    // 🔥 如果是从邀请链接进入，立即加入聊天
+    console.log('🔗 [被邀请者] 从邀请链接进入，开始加入聊天');
+    page.joinChatByInvite(chatId, inviter || userName);
+    return;
+  }
+
+  // 以下为 A 端(非邀请)分支
+  const actualUserOpenId = page.actualCurrentUser && page.actualCurrentUser.openId;
+
+  // 🔥 【HOTFIX-v1.3.89】A 端身份确认后立即存储创建者信息
+  const creatorKey = `creator_${chatId}`;
+  const existingCreator = wx.getStorageSync(creatorKey);
+  if (!existingCreator) {
+    wx.setStorageSync(creatorKey, actualUserOpenId);
+    console.log('🔥 [创建者存储-v1.3.89] A端首次访问，存储创建者信息:', actualUserOpenId);
+  } else {
+    console.log('🔥 [创建者存储-v1.3.89] 创建者信息已存在:', existingCreator);
+  }
+
+  // 🔥 【HOTFIX-v1.3.21】发送方强化阅后即焚保护
+  console.log('🔥 [发送方保护] 发送方身份确认，启动阅后即焚保护');
+
+  // 🔥 【HOTFIX-v1.3.44d】如果身份判断修复检测到需要添加创建者消息，立即添加
+  if (page.needsCreatorMessage) {
+    console.log('🔥 [身份修复] 检测到需要添加创建者系统消息');
+    page.addCreatorSystemMessage();
+    page.needsCreatorMessage = false; // 清除标志
+  }
+
+  // 🔥 发送方：更新用户信息到数据库
+  page.updateUserInfoInDatabase();
+
+  // 🔥 【HOTFIX-v1.3.21】发送方严格禁止获取历史消息
+  console.log('🔥 [发送方保护] 发送方严格禁止获取任何历史消息');
+
+  if (isNewChat) {
+    // 🔥 【HOTFIX-v1.3.89】存储创建者信息(冗余写一次,保持原代码行为)
+    wx.setStorageSync(creatorKey, actualUserOpenId);
+    console.log('🔥 [创建者存储-v1.3.89] 已存储创建者信息:', actualUserOpenId);
+
+    page.createConversationRecord(chatId).then(function() {
+      // 🔥 【HOTFIX-v1.3.3】发送方创建聊天时不获取历史消息，确保阅后即焚
+      console.log('🔥 [发送方创建] 跳过获取历史消息，保持阅后即焚环境纯净');
+
+      // 🔥 【HOTFIX-v1.3.4】发送方创建成功后立即清除加载状态
+      page.setData({ isLoading: false, isCreatingChat: false, chatCreationStatus: '' });
+      console.log('🔥 [发送方创建] ✅ 已清除加载状态，界面就绪');
+
+      // 🔥 发送方创建时:不要立即调用 fetchChatParticipantsWithRealNames
+      // 因为这会触发标题更新逻辑,导致单人变双人
+      console.log('🔥 [发送方创建] 跳过立即获取参与者，等待对方加入');
+
+      // 🔥 【HOTFIX-v1.3.42】发送方创建聊天时的系统消息修复
+      // a 端应该立即显示创建聊天的系统提示
+      console.log('🔥 [发送方创建] 立即添加a端创建聊天系统消息');
+      page.addCreatorSystemMessage();
+
+      // 🔥 发送方:立即启动参与者监听，等待接收方加入
+      page.startParticipantListener(chatId);
+    }).catch(function(err) {
+      console.error('🔥 创建会话记录失败:', err);
+
+      // 🔥 【修复】即使创建失败也要清除加载状态
+      page.setData({ isLoading: false, isCreatingChat: false, chatCreationStatus: '' });
+      console.log('🔥 [发送方创建] ⚠️ 创建失败但已清除加载状态');
+
+      // 🔥 【修复】即使创建失败也不获取历史消息，保持阅后即焚原则
+      console.log('🔥 [发送方创建] 创建失败，但仍跳过获取历史消息');
+
+      // 🔥 失败时也要启动监听，但不要立即获取参与者
+      page.startParticipantListener(chatId);
+    });
+    return;
+  }
+
+  // A 端 + 已有聊天:根据当前参与者数分两子路径
+  const participants = page.data.participants || [];
+  if (participants.length === 1) {
+    console.log('🔥 [发送方检测] 单人参与者，疑似发送方，跳过获取历史消息');
+
+    // 🔥 【HOTFIX-v1.3.4】发送方检测时也要清除加载状态
+    page.setData({ isLoading: false, isCreatingChat: false, chatCreationStatus: '' });
+    console.log('🔥 [发送方检测] ✅ 已清除加载状态，界面就绪');
+
+    // 🔥 【关键修复】A 端正常进入时也要添加系统消息
+    if (!finalIsFromInvite) {
+      console.log('🔥 [A端系统消息] A端正常进入，添加创建者系统消息');
+      page.addCreatorSystemMessage();
+    }
+
+    // 🔥 发送方不获取历史消息，只启动监听等待对方加入
+    page.startParticipantListener(chatId);
+  } else {
+    // 🔥 【HOTFIX-v1.3.20】发送方严格阅后即焚保护 — 即使是已存在的聊天也不获取历史消息
+    console.log('🔥 [发送方保护] 检测到非新聊天，但仍保持阅后即焚原则');
+
+    // 🔥 发送方永远不获取历史消息，只启动监听等待对方加入
+    page.setData({ isLoading: false, isCreatingChat: false, chatCreationStatus: '' });
+    console.log('🔥 [发送方保护] ✅ 已清除加载状态，跳过获取历史消息');
+
+    // 🔥 【关键修复】A 端正常进入时也要添加系统消息
+    if (!finalIsFromInvite) {
+      console.log('🔥 [A端系统消息] A端正常进入（多参与者），添加创建者系统消息');
+      page.addCreatorSystemMessage();
+    }
+
+    // 🔥 只启动参与者监听，不获取历史消息和参与者信息
+    page.startParticipantListener(chatId);
+    console.log('🔥 [发送方保护] 仅启动参与者监听，保持环境纯净');
+  }
+}
+
+module.exports.runIdentityBranchActions = runIdentityBranchActions;
