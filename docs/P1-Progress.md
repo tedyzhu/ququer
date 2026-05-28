@@ -67,67 +67,88 @@
 | **P2/participant-listener** | **7719** | **-7781 (-50.2%)** |
 | **P2/chat-debug-tools** | **5948** | **-9552 (-61.6%)** |
 
-## 未完成
+## P2 已全部完成
 
-按职责优先级,接下来可继续推进的核心业务模块:
-
-1. **`modules/identity-resolver.js`** ⚠️ 最大头
-   - 入口:`onLoad` 中 1900 行身份判定逻辑
-   - 涉及方法:已抽部分到 identity-utils.js;主流程仍在 onLoad 中
-   - **难点**:状态分散在 `this.data` 与多个实例属性,需先抽象出 IdentityState 对象再做迁移
-
-2. **`modules/participant-listener.js`**
-   - 入口:`startParticipantListener` (584 行) / `startWatchingForNewParticipants` / `fetchChatParticipantsWithRealNames` (646 行)
-   - **难点**:大量 setState 与 wx 云监听 API 耦合,先做接口设计再拆
-
-3. ~~**`modules/system-message.js`**~~  ✅ **已完成 (P2 第一刀)**
-   - 详见 `.kiro/specs/chat-system-message-module/{design,tasks}.md`
-   - 抽离 11 个方法 (~1100 行) + 修复 `addCreatorSystemMessage` 双定义死代码
-   - chat.js: 11922 → 10790 (-1132 行,-9.5%)
-
-4. ~~**`modules/title-controller.js`**~~  ✅ **已完成 (P2 第二刀)**
-   - 详见 `.kiro/specs/chat-title-controller-module/{design,tasks}.md`
-   - 抽离 7 个方法 + 补抽 system-message 漏掉的 `replaceCreatorMessageWithJoinMessage`
-   - chat.js: 10790 → 9926 (-864 行,-8.0%)
-   - 突破万行大关
-
-5. ~~**`modules/burn-after-read.js`**~~  ✅ **已完成 (P2 第三刀)**
-   - 详见 `.kiro/specs/chat-burn-after-read-module/{design,tasks}.md`
-   - 抽离 7 个方法(destroyMessage / permanentlyDeleteMessage / startDestroyCountdown / startFadingDestroy / clearAllDestroyTimers / markMessageAsReadAndDestroy / processOfflineMessages)
-   - chat.js: 9926 → 9561 (-365 行,-3.7%)
-   - 阅后即焚定时器子系统首次集中可读
-
-## P2 第四刀
-
-6. ~~**`modules/participant-listener.js`**~~  ✅ **已完成 (P2 第四刀)**
-   - 详见 `.kiro/specs/chat-participant-listener-module/{design,tasks}.md`
-   - 抽离 8 个方法(getOtherParticipantRealName / retryGetRealInviterName / startParticipantListener / startWatchingForNewParticipants / fetchChatParticipants / cleanupDuplicateParticipants / deduplicateParticipants / **fetchChatParticipantsWithRealNames** 642 行)
-   - chat.js: 9561 → 7719 (-1842 行,-19.3%) — P2 单刀最大削减
-   - **chat.js 累计已减 50.2%,不到原始一半**
-
-## P2 第五刀
-
-7. ~~**`modules/chat-debug-tools.js`**~~  ✅ **已完成 (P2 第五刀)**
-   - 详见 `.kiro/specs/chat-debug-tools-module/{design,tasks}.md`
-   - 抽离 33 个调试/工具方法(showIdentityFixDialog / fixIdentityToSender / quickTitleTest / testReceiverTitle / switchUserForTesting / testAsReceiver / testAsSender / simulateTwoPersonChat / manualJoinExistingChat / showChatIdInput / joinSpecificChat / generateCompileModeConfig / directJumpTest / emergencyFixUserIdentity / emergencyFixConnection / burnAfterReadingCleanup / forceBurnAfterReadingCleanup / permanentDeleteAllMessages / batchDeleteMessages / localClearMessages / cleanupStaleData / testNewChatMessageSending / testCleanupStaleData / startOnlineStatusMonitor / stopOnlineStatusMonitor / updateUserOnlineStatus / startOnlineUsersWatcher / checkMutualOnlineStatus / enableRealTimeDestroy 等)
-   - chat.js: 7719 → 5948 (-1771 行,-22.9%)
-   - **附加修复**: 删除 `manuallyFixConnection` 第 5072 处死代码(双定义)
-   - **关键决策**: 放弃硬抽 onLoad 身份判定逻辑(风险极高),改抽 33 个调试方法(收益相当)
-   - 写了 `.tools/extract_debug_tools.py` 脚本批量提取(精确 brace 配对)
-
-## P2 进度
+5 个核心业务模块全部抽离合并,chat.js 累计减幅 61.6%。
 
 ```
-✅ system-message      (11 方法, 1132 行)
-✅ title-controller    (7 方法, 864 行)
-✅ burn-after-read     (7 方法, 365 行)
-✅ participant-listener (8 方法, 1842 行)
-✅ chat-debug-tools     (33 方法, 1771 行)  ← P2 完结
+✅ system-message      (13 方法,1310 行模块, chat.js -1132)
+✅ title-controller    (8 方法,809 行模块,  chat.js -864)
+✅ burn-after-read     (8 方法,433 行模块,  chat.js -365)
+✅ participant-listener (9 方法,1904 行模块, chat.js -1842)
+✅ chat-debug-tools     (33 方法,1696 行模块, chat.js -1771)
 ```
 
-P2 累计共抽离 66 个方法,chat.js 从 11865 → 5948,**减幅 49.9%**。
+合并后,chat.js 还剩 5725 行(死代码清理后,见下),主要由以下大方法构成(待后续迭代取舍):
 
-主项目累计:15500 → 5948,**减幅 61.6%**。
+| 方法 | 行数 | 说明 |
+| --- | --- | --- |
+| `onLoad` | 1096 | 身份判定主流程(`identity-resolver` 模块的目标),P2 时因风险高有意跳过 |
+| `fetchMessages` | 462 | 历史消息拉取 + B 端过滤逻辑 |
+| `startMessageListener` | 390 | wx.cloud.database watch 监听器 |
+| `joinChatByInvite` | 335 | 被邀请者加入流程 |
+| `fetchMessagesAndMerge` | 307 | 加入后合并新增消息 |
+| `sendMessage` | 259 | 发送文本/图片消息(语音独立) |
+| `inferParticipantsFromMessages` | 169 | 从消息倒推参与者(兜底逻辑) |
+
+## P3 准备工作
+
+### 1. 文档同步(2026-05-26)
+
+P0/P1/P2 后,readme.md 与本文件均更新到真实状态。
+
+### 2. 死代码清理 + 扫描器升级(2026-05-26)
+
+删除 chat.js 中 5 个真正零引用的死方法(177 行):
+- `goBack` (11 行) — wxml 未绑定,外部无引用
+- `handleInputChange` (5 行) — 与 `onInputChange` 重复
+- `handleMessageTap` (9 行) — 与 `onMessageTap` 重复
+- `fetchParticipantRealName` (24 行) — 调用已删除的 `updateTitleWithRealNickname`
+- `checkChatCreationStatus` (128 行) — 创建流程旧路径
+
+`.tools/scan_dead_methods.py` 升级为自动扫描 chat.js + 所有模块的方法,
+而非固定候选列表。后续可继续运行检测新死代码。
+
+chat.js: 5948 → 5759 (-189 行)。
+
+### 3. 静态测试基础设施(2026-05-26)
+
+`.tools/` 目录原本整目录 ignore,实际包含两类脚本:
+- 一次性抽离脚本(`chat_*.py` / `extract_*.py`):用完即丢
+- 可复用回归测试(`*_test.js`):应入仓
+
+调整 `.gitignore` 为细粒度,把测试与扫描器入仓,共 5 个测试文件 + 1 个扫描器 + 1 个总入口:
+
+| 测试 | 用例数 | 覆盖 |
+| --- | --- | --- |
+| `integration_test.js` | 结构性 | chat.js require / Page / wxml 绑定 / 模块导出 / attach |
+| `chat_helpers_test.js` | 101 | 8 个纯工具函数全部行为(占位识别 / 系统消息标记 / 布尔解析 / 差异分析 / 时间格式化 / 昵称匹配 / Set 注册) |
+| `identity_utils_test.js` | 33 | `isReceiverEnvironment` 9 条决策路径 + `isMessageFromCurrentUser` + ever 标记读写 |
+| `sanitize_participants_test.js` | 53 | `joinByInvite` 与 `cleanTempUserData` 双 sanitize 实现一致性 |
+| `login_race_test.js` | 10 | `app.ensureLogin()` 4 种登录态时序场景 |
+
+总入口 `bash .tools/run_all_tests.sh` 一键跑全部。
+
+### 4. 移除 `debugUserDatabase` 前端入口(2026-05-26)
+
+云函数 `debugUserDatabase` 已加 `DEBUG_TOOLS_ENABLED` dev guard,但前端仍暴露:
+- `chat.js` 上 `debugUserDatabase` 方法定义(27 行)
+- `showMoreMenu` actionSheet "调试用户数据库" 菜单项
+
+均已删除。chat.js: 5759 → 5725 (-34 行)。
+
+`modules/test-methods.js` 里 4 个直接调云函数的引用保留(它们只在 console 调用,
+且云函数 guard 已经会返回 disabled,行为安全)。
+
+## P3 候选(尚未启动)
+
+按 risk/benefit 排序:
+
+1. **`identity-resolver`(高风险高收益)**:把 `onLoad` 的 1096 行身份判定主流程拆出。需先抽象 IdentityState 对象,保证业务行为零变化。是 P2 时刻意绕开的最大头。**已有静态测试基础设施作为回归保障**(见 P3 准备工作 #3)。
+2. **二线大方法继续拆**:`fetchMessages` / `startMessageListener` 等可能加入 modules 中的合适模块(如 `message-fetch.js`、`message-listener.js`)
+3. **云函数模块化**:`joinByInvite` 478 行 / `debugUserDatabase` 335 行可拆 helper
+4. ~~**静态测试覆盖**~~ ✅ 已完成,见 P3 准备工作 #3
+5. ~~**彻底移除 `debugUserDatabase` 前端入口**~~ ✅ 已完成,见 P3 准备工作 #4
 
 ## 抽离策略备忘
 

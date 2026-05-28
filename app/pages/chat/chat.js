@@ -2954,15 +2954,6 @@ Page({
   },
 
   /**
-   * 处理输入框内容变化
-   * @param {Object} e - 事件对象
-   */
-  handleInputChange: function (e) {
-    this.setData({
-      inputValue: e.detail.value
-    });
-  },
-  /**
    * 发送消息
    * @param {string} [contentOverride] - 可选的消息内容（用于重试发送）
    */
@@ -3279,19 +3270,7 @@ Page({
   },
 
 
-  /**
-   * 消息点击事件
-   * @param {Object} e - 事件对象
-   */
-  handleMessageTap: function (e) {
-    const { messageid } = e.currentTarget.dataset;
-    
-    // 对于接收到的消息，点击查看后开始倒计时销毁
-    const message = this.data.messages.find(msg => msg.id === messageid);
-    if (message && message.senderId === 'other' && !message.destroying && !message.destroyed) {
-      this.startDestroyCountdown(messageid);
-    }
-  },
+
 
   /**
    * 格式化时间
@@ -3303,34 +3282,7 @@ Page({
   },
 
 
-  /**
-   * 🔥 【HOTFIX-v1.3.45】从参与者信息获取真实昵称
-   * @param {string} participantId - 参与者ID
-   */
-  fetchParticipantRealName: function(participantId) {
-    wx.cloud.callFunction({
-      name: 'getChatParticipants',
-      data: { chatId: this.data.contactId },
-      success: (res) => {
-        if (res.result && res.result.success && res.result.participants) {
-          const participant = res.result.participants.find(p => 
-            (p.id || p.openId) === participantId
-          );
-          
-          if (participant) {
-            const realNickname = participant.nickName || participant.name;
-            if (realNickname && realNickname !== '用户' && realNickname !== '好友') {
-              console.log('🔥 [昵称获取] 从参与者列表获取到真实昵称:', realNickname);
-              this.updateTitleWithRealNickname(participantId, realNickname);
-            }
-          }
-        }
-      },
-      fail: (err) => {
-        console.error('🔥 [昵称获取] 参与者查询失败:', err);
-      }
-    });
-  },
+
 
   /**
    * 🔥 【HOTFIX-v1.3.44e】智能昵称匹配方法
@@ -3342,138 +3294,7 @@ Page({
     return ChatHelpers.smartNicknameMatch(name1, name2);
   },
   
-  /**
-   * 检查聊天创建状态
-   */
-  checkChatCreationStatus: function() {
-    const { contactId, createChatRetryCount, maxRetryCount } = this.data;
-    
-    console.log(`[邀请流程] 检查聊天创建状态: 第${createChatRetryCount+1}/${maxRetryCount}次`);
-    
-    // 更新状态文本
-    this.setData({
-      chatCreationStatus: `正在建立连接(${createChatRetryCount+1}/${maxRetryCount})...`
-    });
-    
-    // 检查重试次数
-    if (createChatRetryCount >= 2) {
-      // 超过2次就直接退出创建状态，避免长时间等待
-      clearInterval(this.chatCreationTimer);
-      console.log('[邀请流程] 已尝试检查多次，直接进入聊天界面');
-      
-      this.setData({
-        isCreatingChat: false,
-        chatCreationStatus: ''
-      });
-      
-      // 获取聊天记录
-      this.fetchMessages();
-      
-      // 添加系统消息
-      this.addSystemMessage('聊天已准备就绪，可以开始聊天了');
-      return;
-    }
-    
-    // 调用云函数检查聊天是否真的创建成功
-    wx.cloud.callFunction({
-      name: 'checkChatStatus',
-      data: {
-        chatId: contactId
-      },
-      success: res => {
-        console.log('[邀请流程] 检查聊天状态结果:', res);
-        
-        // 如果云函数返回聊天已创建
-        if (res.result && res.result.exists) {
-          clearInterval(this.chatCreationTimer);
-          console.log('[邀请流程] 检测到聊天创建成功，结束创建状态');
-          
-          this.setData({
-            isCreatingChat: false,
-            chatCreationStatus: ''
-          });
-          
-          // 获取聊天记录
-          this.fetchMessages();
-          
-          // 获取聊天参与者信息
-          this.fetchChatParticipants();
-          
-          // 添加系统消息
-          this.addSystemMessage('聊天已创建成功，你们可以开始聊天了');
-        } else {
-          // 增加重试计数
-          this.setData({
-            createChatRetryCount: createChatRetryCount + 1
-          });
-          
-          // 如果第一次检查失败，直接尝试创建
-          if (createChatRetryCount === 0) {
-            this.tryCreateChat(false);
-          }
-          
-          // 如果已经是第二次检查，也直接退出创建状态
-          if (createChatRetryCount === 1) {
-            setTimeout(() => {
-              if (this.data.isCreatingChat) {
-                clearInterval(this.chatCreationTimer);
-                console.log('[邀请流程] 两次检查后直接进入聊天界面');
-                
-                this.setData({
-                  isCreatingChat: false,
-                  chatCreationStatus: ''
-                });
-                
-                // 获取聊天记录
-                this.fetchMessages();
-                
-                // 获取聊天参与者信息
-                this.fetchChatParticipants();
-                
-                // 添加系统消息
-                this.addSystemMessage('聊天已创建，现在可以开始聊天了');
-              }
-            }, 2000);
-          }
-        }
-      },
-      fail: err => {
-        console.error('[邀请流程] 检查聊天状态失败:', err);
-        
-        // 增加重试计数
-        this.setData({
-          createChatRetryCount: createChatRetryCount + 1
-        });
-        
-        // 如果第一次检查就失败，直接尝试创建
-        if (createChatRetryCount === 0) {
-          this.tryCreateChat(false);
-        }
-        
-        // 如果已经是第二次检查失败，直接进入聊天
-        if (createChatRetryCount === 1) {
-          setTimeout(() => {
-            if (this.data.isCreatingChat) {
-              clearInterval(this.chatCreationTimer);
-              console.log('[邀请流程] 检查失败，直接进入聊天界面');
-              
-              this.setData({
-                isCreatingChat: false,
-                chatCreationStatus: ''
-              });
-              
-              // 获取聊天记录
-              this.fetchMessages();
-              
-              // 添加系统消息
-              this.addSystemMessage('无法创建聊天，但您仍可以使用聊天功能');
-            }
-          }, 1000);
-        }
-      }
-    });
-  },
-  
+
   /**
    * 尝试创建聊天（备选方案）
    * @param {Boolean} [isInitial=false] - 是否是初始创建尝试
@@ -3551,17 +3372,7 @@ Page({
   /**
    * 返回上一页
    */
-  goBack: function() {
-    wx.navigateBack({
-      delta: 1,
-      fail: () => {
-        // 如果返回失败,则跳转到首页
-        wx.reLaunch({
-          url: '/app/pages/home/home'
-        });
-      }
-    });
-  },
+
 
   /**
    * 显示聊天菜单
@@ -3605,26 +3416,23 @@ Page({
    */
   showMoreMenu: function() {
     wx.showActionSheet({
-      itemList: ['🔧 清理重复参与者', '调试用户数据库', '🔗 手动加入现有聊天', '强制修复昵称', '清空聊天记录', '返回主菜单'],
+      itemList: ['🔧 清理重复参与者', '🔗 手动加入现有聊天', '强制修复昵称', '清空聊天记录', '返回主菜单'],
       success: (res) => {
         console.log('🔧 [调试] 更多菜单项被选择:', res.tapIndex);
         switch(res.tapIndex) {
           case 0: // 清理重复参与者
             this.cleanupDuplicateParticipants();
             break;
-          case 1: // 调试用户数据库
-            this.debugUserDatabase();
-            break;
-          case 2: // 手动加入现有聊天
+          case 1: // 手动加入现有聊天
             this.manualJoinExistingChat();
             break;
-          case 3: // 强制修复昵称
+          case 2: // 强制修复昵称
             this.forceFixSpecificUserNicknames();
             break;
-          case 4: // 清空聊天记录
+          case 3: // 清空聊天记录
             this.clearChatHistory();
             break;
-          case 5: // 返回主菜单
+          case 4: // 返回主菜单
             this.showChatMenu();
             break;
         }
@@ -5068,37 +4876,6 @@ Page({
        }
      } catch (e) {}
    },
-
-  /**
-   * 🔧 调试用户数据库信息
-   */
-  debugUserDatabase: function() {
-    console.log('🔍 [调试] 开始查看用户数据库信息');
-    
-    wx.cloud.callFunction({
-      name: 'debugUserDatabase',
-      data: {},
-      success: res => {
-        console.log('🔍 [调试] 用户数据库信息:', res.result);
-        
-        // 显示在界面上
-        const userDataText = JSON.stringify(res.result, null, 2);
-        wx.showModal({
-          title: '用户数据库信息',
-          content: userDataText,
-          showCancel: false,
-          confirmText: '知道了'
-        });
-      },
-      fail: err => {
-        console.error('🔍 [调试] 查看用户数据库失败:', err);
-        wx.showToast({
-          title: '查看失败',
-          icon: 'error'
-        });
-      }
-    });
-  },
 
   /**
    * 🔧 强制修复特定用户的昵称问题
