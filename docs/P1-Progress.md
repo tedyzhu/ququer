@@ -198,12 +198,31 @@ chat.js: 5948 → 5759 (-189 行)。
 - chat.js: 5537 → 5421 (-116 行,P3 单次最大削减)
 - 新增 30 个测试用例(覆盖 B 端 / A 端三子路径 / Promise then & catch / 边界),共 158 个,全过
 
-### 阶段 2d / 3 待实施
+### 阶段 3 已完成(2026-05-28)
+
+抽离 onLoad 中身份决议 + 标题策略 ~161 行(原行 876-1075)为两个模块函数:
+
+**3a `resolveFinalIdentity(page, ctx)`** — 决议 finalIsFromInvite + isActualCreator
+- 决策树 4 个早返回 + 完整邀请证据/创建者证据综合判断
+- 副作用:读 wx.storage(creator_<chatId> / chat_visit_<chatId>_<openId> / inviteInfo);
+  仅在"强接收方证据击败弱创建者证据 + URL 强证据"时清 creator 缓存
+- 还原一个有趣的事实:`if (isActualCreator && finalIsFromInvite)` 是死分支(`hasValidInviteEvidence` 已 `&& !isActualCreator`)
+  本次保留行为不修
+
+**3b `setupInitialTitle(page, ctx)`** — 设置初始标题
+- B 端策略:`我和<昵称>(2)` / 占位符走 `我和新用户(2)` + 500ms 后异步 fetchRealInviterNameAndUpdateTitle
+- A 端策略:`userInfo.nickName` fallback 链
+- 副作用:wx.setNavigationBarTitle / setData / page.isAEndUser 等标记位
+
+抽离后:
+- chat.js: 5421 → 5260 (-161 行,**P3 单次最大削减再创新高**)
+- 新增 29 个测试用例(3a 8 个 / 3b 7 个,含强接收方击败弱创建者 / 占位符邀请者 / fallback 链),共 187 个,全过
+
+### 阶段 2d 待实施
 
 | 阶段 | 内容 | 风险 |
 | --- | --- | --- |
-| 2d | 云端验证(`await wx.cloud`)+ 副作用调用 | 高 |
-| 3 | 身份决议 + 标题/系统消息 ~270 行 | 中 |
+| 2d | 云端验证(`await wx.cloud`)+ 强制 B 端副作用 | 高 |
 
 ### 阶段 3-5 待实施
 

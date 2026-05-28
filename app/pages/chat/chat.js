@@ -873,119 +873,17 @@ Page({
       options 
     });
     
-    // 🔥 【URGENT-FIX】严格的最终身份判断逻辑 - 防止a端误判
-    let finalIsFromInvite = false;
-    
-    // 🔥 【关键修复】多重检查确保判断准确性
-    if (isNewChat) {
-      // 新聊天：绝对是发送方
-      finalIsFromInvite = false;
-      console.log('🔥 [最终判断] 新聊天模式，确认为发送方');
-    } else {
-      // 🔥 【URGENT-FIX】优先检查是否已确认为a端创建者
-      if (skipCreatorCheck && (this.needsCreatorMessage === false)) {
-        // 已经确认为创建者，绝对是发送方
-        finalIsFromInvite = false;
-        console.log('🔥 [最终判断] 已确认为a端创建者，绝对是发送方');
-      } else {
-        // 🔥 【严格验证】检查是否有强制身份翻转的情况
-        const hasBeenCorrectedToCreator = this.needsCreatorMessage || (inviteInfo && !inviter);
-        
-        if (hasBeenCorrectedToCreator) {
-          // 已经被纠正为创建者，强制设为发送方
-          finalIsFromInvite = false;
-          console.log('🔥 [最终判断] 检测到身份已被纠正为创建者，强制设为发送方');
-        } else {
-          // 🔥 【邀请证据检查】检查多种邀请证据
-          const hasUrlInviter = !!options.inviter;                    // URL中有邀请者参数
-          const hasStoredInviter = !!inviter;                         // 有存储的邀请者信息
-          const hasFromInviteFlag = options.fromInvite === 'true' || options.fromInvite === true || options.fromInvite === '1';    // URL明确标记
-          const hasJoinAction = options.action === 'join';            // URL标记为加入操作
-          const wasPreviouslyIdentifiedAsReceiver = isFromInvite;     // 之前已识别为接收方
-          const hasStrongReceiverEvidence = hasUrlInviter || hasFromInviteFlag || hasJoinAction || wasPreviouslyIdentifiedAsReceiver;
-          
-        // 🔥 【A端身份最终防护】防止A端创建者被误判
-        // 检查是否是聊天创建者的其他证据
-        const chatId = options.id || this.data.contactId;
-        const currentUserOpenId = userInfo?.openId;
-        let isActualCreator = false;
-        
-        if (currentUserOpenId && chatId) {
-          // 🔥 【HOTFIX-v1.3.89】修复创建者ID检测逻辑
-          // 证据1: 检查聊天记录中的创建者标记（最可靠）
-          const creatorKey = `creator_${chatId}`;
-          const storedCreator = wx.getStorageSync(creatorKey);
-          const isStoredCreator = storedCreator === currentUserOpenId;
-          
-          // 证据2: 检查访问历史(频繁访问可能是创建者)
-          const visitKey = `chat_visit_${chatId}_${currentUserOpenId}`;
-          const visitHistory = wx.getStorageSync(visitKey) || 0;
-          const isFrequentVisitor = visitHistory >= 2;
-          
-          // 证据3: action参数为create
-          const hasCreateAction = options.action === 'create';
-          
-          // 证据4: 检查本地存储的邀请信息(如果存储说是"回访创建者",则确认)
-          const storedInviteInfo = wx.getStorageSync('inviteInfo');
-          const isReturningCreator = storedInviteInfo && 
-                                     storedInviteInfo.chatId === chatId && 
-                                     !storedInviteInfo.fromInvite;
-          
-          const hasWeakCreatorEvidence = isStoredCreator || isFrequentVisitor || isReturningCreator;
-          isActualCreator = hasWeakCreatorEvidence || hasCreateAction;
-
-          /** 当前会话存在明确接收方证据时，不允许本地弱证据反向覆盖成创建者。 */
-          if (hasStrongReceiverEvidence && !hasCreateAction && hasWeakCreatorEvidence) {
-            console.warn('🔥 [A端最终防护-v1.3.96] 检测到接收方强证据，忽略本地创建者弱证据');
-            isActualCreator = false;
-
-            /** 清理历史误写的创建者缓存，避免后续持续误判。 */
-            if (isStoredCreator && (hasFromInviteFlag || hasJoinAction || hasUrlInviter)) {
-              wx.removeStorageSync(creatorKey);
-              console.log('🔥 [A端最终防护-v1.3.96] 已清理旧创建者缓存:', creatorKey);
-            }
-          }
-          
-          console.log('🔥 [A端最终防护-v1.3.89] 创建者证据检查:');
-          console.log('🔥 [A端最终防护-v1.3.89] - 存储的创建者:', isStoredCreator, storedCreator);
-          console.log('🔥 [A端最终防护-v1.3.89] - 频繁访问:', isFrequentVisitor, '次数:', visitHistory);
-          console.log('🔥 [A端最终防护-v1.3.89] - create action:', hasCreateAction);
-          console.log('🔥 [A端最终防护-v1.3.89] - 回访创建者:', isReturningCreator);
-          console.log('🔥 [A端最终防护-v1.3.89] - 最终是否创建者:', isActualCreator);
-        }
-        
-        // 🔥 【关键修复】即使是"朋友"也是有效的邀请证据，但要排除真正的创建者
-        const hasValidInviteEvidence = (
-          hasUrlInviter ||                                          // URL中有邀请者参数
-          hasStoredInviter ||                                       // 有存储的邀请者
-          hasFromInviteFlag ||                                      // URL明确标记
-          hasJoinAction ||                                          // 标记为加入操作
-          wasPreviouslyIdentifiedAsReceiver                         // 之前已确认为接收方
-        ) && !isActualCreator;                                      // 🔥 排除真正的创建者
-        
-        finalIsFromInvite = hasValidInviteEvidence && !hasBeenCorrectedToCreator;
-        
-        // 🔥 【A端身份强制纠正】如果检测到是创建者，强制设为A端
-        if (isActualCreator && finalIsFromInvite) {
-          console.log('🔥 [A端最终防护] 检测到用户是真正创建者，强制纠正身份');
-          finalIsFromInvite = false;
-          
-          // 清除错误的邀请信息
-          wx.removeStorageSync('inviteInfo');
-          if (typeof app !== 'undefined' && app.clearInviteInfo) {
-            app.clearInviteInfo();
-          }
-        }
-          
-          console.log('🔥 [最终判断] 邀请证据详情:');
-          console.log('🔥 [最终判断] - URL邀请者:', hasUrlInviter, options.inviter);
-          console.log('🔥 [最终判断] - 存储邀请者:', hasStoredInviter, inviter);
-          console.log('🔥 [最终判断] - 之前身份:', wasPreviouslyIdentifiedAsReceiver);
-          console.log('🔥 [最终判断] - 综合证据:', hasValidInviteEvidence);
-          console.log('🔥 [最终判断] - 最终结果:', finalIsFromInvite);
-        }
-      }
-    }
+    // 阶段 3a:决议最终身份(详见 modules/identity-resolver.js#resolveFinalIdentity)
+    const identity = IdentityResolver.resolveFinalIdentity(this, {
+      isNewChat,
+      skipCreatorCheck,
+      inviteInfo,
+      inviter,
+      isFromInvite,
+      options,
+      userInfo,
+    });
+    let finalIsFromInvite = identity.finalIsFromInvite;
     
     // 设置聊天标题
     let chatTitle = '秘信聊天';
@@ -995,74 +893,15 @@ Page({
       chatTitle = `与${decodeURIComponent(decodeURIComponent(inviter))}的聊天`; // 🔧 双重解码修复
     }
     
-    // 🔥 【ULTIMATE-FIX-v1.3.48】修复A端B端标题显示逻辑
-    let initialTitle = userInfo?.nickName || '我';
-    
-    console.log('🔥 [标题修复] 开始设置初始标题');
-    console.log('🔥 [标题修复] finalIsFromInvite:', finalIsFromInvite);
-    console.log('🔥 [标题修复] isNewChat:', isNewChat);
-    console.log('🔥 [标题修复] 用户昵称:', userInfo?.nickName);
-    console.log('🔥 [标题修复] 邀请者:', inviter);
-    
-    if (finalIsFromInvite && inviter) {
-      // 🔥 【B端标题策略】B端接收方显示"我和[A端昵称]（2）"格式
-      try {
-        const decodedInviterName = decodeURIComponent(decodeURIComponent(inviter));
-        if (decodedInviterName && decodedInviterName !== '朋友' && decodedInviterName !== '邀请者') {
-          initialTitle = `我和${decodedInviterName}（2）`;
-          console.log('🔥 [B端标题] B端初始标题设置:', initialTitle);
-          
-          // 立即设置标题，不等待后续逻辑
-          wx.setNavigationBarTitle({
-            title: initialTitle
-          });
-        } else {
-          // 🔥 【HOTFIX-v1.3.55】如果是占位符邀请者，立即获取真实昵称
-          console.log('🔥 [B端标题] 检测到占位符邀请者，将获取真实昵称');
-          initialTitle = '我和新用户（2）'; // 临时标题
-          wx.setNavigationBarTitle({
-            title: initialTitle
-          });
-          
-          // 异步获取真实昵称并更新标题
-          setTimeout(() => {
-            this.fetchRealInviterNameAndUpdateTitle();
-          }, 500);
-        }
-        console.log('🔥 [B端标题] ✅ B端导航栏标题立即设置成功:', initialTitle);
-        
-        this.setData({
-          dynamicTitle: initialTitle
-        });
-      } catch (e) {
-        console.log('🔥 [B端标题] 邀请者昵称解码失败:', e);
-        initialTitle = userInfo?.nickName || '我';
-      }
-    } else {
-      // 🔥 【A端标题策略】A端创建者显示自己的昵称
-      const userNickname = userInfo?.nickName || actualCurrentUser?.nickName || '我';
-      initialTitle = userNickname;
-      console.log('🔥 [A端标题] A端标题设置为用户昵称:', initialTitle);
-      
-      // 立即设置A端标题
-      wx.setNavigationBarTitle({
-        title: initialTitle
-      });
-      console.log('🔥 [A端标题] ✅ A端导航栏标题设置成功:', initialTitle);
-      
-      this.setData({
-        dynamicTitle: initialTitle
-      });
-      
-      // 🔥 【A端标记】标记A端身份，但允许动态标题更新
-      this.isAEndUser = true;
-      
-      // 🔥 【重要】A端不使用锁定机制，允许动态更新
-      this.isAEndTitleProtected = false;
-      this.receiverTitleLocked = false;  // 允许正常的标题更新
-      
-      console.log('🔥 [统一标题] 采用统一的标题显示策略');
-    }
+    // 阶段 3b:基于最终身份设置初始标题(详见 modules/identity-resolver.js#setupInitialTitle)
+    // 注:actualCurrentUser 此时仍未声明,与原 chat.js 行为一致(那段对 actualCurrentUser
+    // 的引用本就是 undefined fallback,保留作为已死兼容)
+    const initialTitle = IdentityResolver.setupInitialTitle(this, {
+      finalIsFromInvite,
+      inviter,
+      userInfo,
+      actualCurrentUser: undefined, // 与原 chat.js 等价(setupInitialTitle 时 actualCurrentUser 还没声明)
+    });
     
     wx.setNavigationBarTitle({
       title: initialTitle
