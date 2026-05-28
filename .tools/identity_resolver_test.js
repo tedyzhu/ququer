@@ -886,6 +886,283 @@ function makePageForBranchActions(overrides) {
   }));
   assertEqual('4.isNewChat=true 写 storage 2 次(顶部 + 分支内,与原 chat.js 行为等价)', setStorageCount, 2);
 }
+
+
+// ============ resolveFinalIdentity(阶段 3a) ============
+origLog('\n--- resolveFinalIdentity ---');
+
+function setupStageThreeMocks(storageOverrides) {
+  const data = Object.assign({}, storageOverrides || {});
+  global.wx.getStorageSync = (k) => data[k];
+  let removed = [];
+  global.wx.removeStorageSync = (k) => { removed.push(k); delete data[k]; };
+  global.wx.setStorageSync = (k, v) => { data[k] = v; };
+  return { data, getRemoved: () => removed };
+}
+
+// 用例 1:isNewChat=true 直接返回 false
+{
+  setupStageThreeMocks();
+  const r = withSilence(() => Resolver.resolveFinalIdentity({ data: {} }, {
+    isNewChat: true, skipCreatorCheck: false, inviteInfo: null, inviter: '',
+    isFromInvite: false, options: {}, userInfo: { openId: 'u' },
+  }));
+  assertEqual('3a.isNewChat=true → false', r.finalIsFromInvite, false);
+  assertEqual('3a.isNewChat=true isActualCreator=false', r.isActualCreator, false);
+}
+
+// 用例 2:skipCreatorCheck=true + needsCreatorMessage=false → false
+{
+  setupStageThreeMocks();
+  const page = { data: {}, needsCreatorMessage: false };
+  const r = withSilence(() => Resolver.resolveFinalIdentity(page, {
+    isNewChat: false, skipCreatorCheck: true, inviteInfo: null, inviter: '',
+    isFromInvite: false, options: {}, userInfo: { openId: 'u' },
+  }));
+  assertEqual('3a.skipCreatorCheck → false', r.finalIsFromInvite, false);
+}
+
+// 用例 3:hasBeenCorrectedToCreator(needsCreatorMessage=true) → false
+{
+  setupStageThreeMocks();
+  const page = { data: {}, needsCreatorMessage: true };
+  const r = withSilence(() => Resolver.resolveFinalIdentity(page, {
+    isNewChat: false, skipCreatorCheck: false, inviteInfo: null, inviter: '',
+    isFromInvite: false, options: {}, userInfo: { openId: 'u' },
+  }));
+  assertEqual('3a.needsCreatorMessage=true → false', r.finalIsFromInvite, false);
+}
+
+// 用例 4:有 inviteInfo 但无 inviter → false(纠正)
+{
+  setupStageThreeMocks();
+  const page = { data: {}, needsCreatorMessage: false };
+  const r = withSilence(() => Resolver.resolveFinalIdentity(page, {
+    isNewChat: false, skipCreatorCheck: false,
+    inviteInfo: { inviteId: 'x' }, inviter: '',
+    isFromInvite: false, options: {}, userInfo: { openId: 'u' },
+  }));
+  assertEqual('3a.有 inviteInfo 无 inviter → false', r.finalIsFromInvite, false);
+}
+
+// 用例 5:URL 邀请参数 + 用户开启邀请进入 → true
+{
+  setupStageThreeMocks();
+  const page = { data: { contactId: 'chat_x' }, needsCreatorMessage: false };
+  const r = withSilence(() => Resolver.resolveFinalIdentity(page, {
+    isNewChat: false, skipCreatorCheck: false, inviteInfo: null,
+    inviter: '向冬',
+    isFromInvite: true,
+    options: { id: 'chat_x', inviter: '向冬' },
+    userInfo: { openId: 'u' },
+  }));
+  assertEqual('3a.URL+inviter+isFromInvite → true', r.finalIsFromInvite, true);
+  assertEqual('3a.无创建者证据 isActualCreator=false', r.isActualCreator, false);
+}
+
+// 用例 6:storage 显示用户是创建者 但 isFromInvite=true(强接收方证据击败弱创建者)
+{
+  const { getRemoved } = setupStageThreeMocks({ 'creator_chat_x': 'user_a' });
+  const page = { data: { contactId: 'chat_x' }, needsCreatorMessage: false };
+  const r = withSilence(() => Resolver.resolveFinalIdentity(page, {
+    isNewChat: false, skipCreatorCheck: false, inviteInfo: null,
+    inviter: '',
+    isFromInvite: true, // 之前判断为接收方 → 强证据
+    options: { id: 'chat_x' }, // 无 fromInvite/action/inviter,所以不会清 storage
+    userInfo: { openId: 'user_a' },
+  }));
+  // hasStrongReceiverEvidence=true(由 wasPreviouslyIdentifiedAsReceiver 撑起)
+  // → 击败 isStoredCreator,isActualCreator 重置为 false
+  // → 接收方证据有效,finalIsFromInvite=true
+  assertEqual('3a.强接收方(isFromInvite=true)击败 storage 创建者 → final=true', r.finalIsFromInvite, true);
+  assertEqual('3a.强接收方击败弱创建者 → isActualCreator=false', r.isActualCreator, false);
+  // 没有 fromInvite/action/inviter URL 证据,不会清 creator_chat_x
+  assert('3a.无 URL 强证据时不清 creator 缓存', !getRemoved().includes('creator_chat_x'));
+}
+
+// 用例 7:强接收方证据击败弱创建者证据(URL inviter + storage isStoredCreator)
+{
+  const mocks = setupStageThreeMocks({ 'creator_chat_x': 'user_a' });
+  const page = { data: { contactId: 'chat_x' }, needsCreatorMessage: false };
+  const app2 = global.getApp();
+  let cleared = 0;
+  app2.clearInviteInfo = () => { cleared++; };
+  const r = withSilence(() => Resolver.resolveFinalIdentity(page, {
+    isNewChat: false, skipCreatorCheck: false, inviteInfo: null,
+    inviter: '向冬',
+    isFromInvite: true,
+    options: { id: 'chat_x', inviter: '向冬', fromInvite: 'true' },
+    userInfo: { openId: 'user_a' },
+  }));
+  // hasStrongReceiverEvidence=true,且 hasFromInviteFlag/hasUrlInviter true
+  // → 清 creator 缓存,isActualCreator=false → finalIsFromInvite=true
+  assertEqual('3a.强接收方击败弱创建者 → finalIsFromInvite=true', r.finalIsFromInvite, true);
+  assert('3a.清 creator 缓存', mocks.getRemoved().includes('creator_chat_x'));
+}
+
+// 用例 8:hasCreateAction → 即使有强接收方证据也保持 isActualCreator=true
+{
+  setupStageThreeMocks({ 'creator_chat_x': 'user_a' });
+  const page = { data: { contactId: 'chat_x' }, needsCreatorMessage: false };
+  const app2 = global.getApp();
+  let cleared = 0;
+  app2.clearInviteInfo = () => { cleared++; };
+  const r = withSilence(() => Resolver.resolveFinalIdentity(page, {
+    isNewChat: false, skipCreatorCheck: false, inviteInfo: null,
+    inviter: '向冬',
+    isFromInvite: true,
+    options: { id: 'chat_x', action: 'create', inviter: '向冬' },
+    userInfo: { openId: 'user_a' },
+  }));
+  // hasCreateAction=true → 强接收方击败弱创建者条件 (`!hasCreateAction`) 不满足
+  // → isActualCreator 保持 true
+  // → hasValidInviteEvidence = (...) && !isActualCreator → false
+  // → finalIsFromInvite = false
+  // → 进入 isActualCreator(true) && finalIsFromInvite(false) ? 不进 → clearInviteInfo 不调
+  assertEqual('3a.hasCreateAction 保持 isActualCreator=true', r.isActualCreator, true);
+  assertEqual('3a.hasCreateAction final=false', r.finalIsFromInvite, false);
+  // 因 finalIsFromInvite 已经是 false,不进入强制纠正分支,clearInviteInfo 不被调
+  assertEqual('3a.hasCreateAction final=false 时不调 clearInviteInfo', cleared, 0);
+}
+
+// 用例 8b:isActualCreator=true 且 finalIsFromInvite 经其他路径为 true → 触发清 inviteInfo
+//   构造:hasCreateAction=true 但 inviter 与昵称匹配等使得 isActualCreator=true,
+//   同时强接收方证据非常强(URL inviter + fromInvite)
+//   实际很难构造让 finalIsFromInvite 先为 true 再被强制清 — 因为 hasValidInviteEvidence
+//   计算时已经 && !isActualCreator,所以 isActualCreator=true 时 hasValidInviteEvidence 必为 false
+//   除非 hasBeenCorrectedToCreator=false(成立)且 isActualCreator 在最终一步被覆盖
+//   实际 chat.js 这段代码的 if (isActualCreator && finalIsFromInvite) 是死分支
+//   测试不构造,记录此事实即可
+
+
+// ============ setupInitialTitle(阶段 3b) ============
+origLog('\n--- setupInitialTitle ---');
+
+function makeTitlePage() {
+  const navTitleSet = [];
+  const setDataCalls = [];
+  const origSetNavTitle = global.wx.setNavigationBarTitle;
+  global.wx.setNavigationBarTitle = (opts) => { navTitleSet.push(opts.title); };
+  return {
+    page: {
+      data: {},
+      setData: (patch) => { setDataCalls.push(patch); },
+    },
+    getNavTitles: () => navTitleSet,
+    getSetDataCalls: () => setDataCalls,
+    restore: () => { global.wx.setNavigationBarTitle = origSetNavTitle; },
+  };
+}
+
+// 用例 1:B 端真实昵称 → 我和XX(2)
+{
+  const ctx = makeTitlePage();
+  const t = withSilence(() => Resolver.setupInitialTitle(ctx.page, {
+    finalIsFromInvite: true,
+    inviter: '向冬',
+    userInfo: { nickName: '小明' },
+    actualCurrentUser: undefined,
+  }));
+  ctx.restore();
+  assertEqual('3b.B端真实昵称', t, '我和向冬（2）');
+  assert('3b.B端 setNavigationBarTitle 被调用', ctx.getNavTitles().includes('我和向冬（2）'));
+  assert('3b.B端 setData dynamicTitle',
+    ctx.getSetDataCalls().some(p => p.dynamicTitle === '我和向冬（2）'));
+}
+
+// 用例 2:B 端 URL 编码邀请者 → 解码后正确格式
+{
+  const ctx = makeTitlePage();
+  const t = withSilence(() => Resolver.setupInitialTitle(ctx.page, {
+    finalIsFromInvite: true,
+    inviter: encodeURIComponent(encodeURIComponent('向冬')),
+    userInfo: { nickName: '小明' },
+    actualCurrentUser: undefined,
+  }));
+  ctx.restore();
+  assertEqual('3b.B端 URL 双重编码 → 正确解码', t, '我和向冬（2）');
+}
+
+// 用例 3:B 端占位符 '朋友' → 临时标题 + 异步取真实昵称
+{
+  let fetchCalled = 0;
+  const origSetTimeout = global.setTimeout;
+  let timeoutFn = null;
+  global.setTimeout = (fn, delay) => {
+    if (delay === 500) timeoutFn = fn;
+    return 0;
+  };
+  const ctx = makeTitlePage();
+  ctx.page.fetchRealInviterNameAndUpdateTitle = () => { fetchCalled++; };
+  const t = withSilence(() => Resolver.setupInitialTitle(ctx.page, {
+    finalIsFromInvite: true,
+    inviter: '朋友',
+    userInfo: { nickName: '小明' },
+    actualCurrentUser: undefined,
+  }));
+  ctx.restore();
+  assertEqual('3b.B端占位符朋友 → 临时标题', t, '我和新用户（2）');
+  // 触发延迟回调
+  if (timeoutFn) timeoutFn();
+  assertEqual('3b.B端占位符 → 调 fetchRealInviterNameAndUpdateTitle', fetchCalled, 1);
+  global.setTimeout = origSetTimeout;
+}
+
+// 用例 4:A 端 → userInfo.nickName
+{
+  const ctx = makeTitlePage();
+  const t = withSilence(() => Resolver.setupInitialTitle(ctx.page, {
+    finalIsFromInvite: false,
+    inviter: '',
+    userInfo: { nickName: '向冬' },
+    actualCurrentUser: undefined,
+  }));
+  ctx.restore();
+  assertEqual('3b.A端 标题=用户昵称', t, '向冬');
+  assert('3b.A端 setNavigationBarTitle 被调用', ctx.getNavTitles().includes('向冬'));
+  assertEqual('3b.A端 isAEndUser=true', ctx.page.isAEndUser, true);
+  assertEqual('3b.A端 isAEndTitleProtected=false', ctx.page.isAEndTitleProtected, false);
+  assertEqual('3b.A端 receiverTitleLocked=false', ctx.page.receiverTitleLocked, false);
+}
+
+// 用例 5:A 端 fallback 链:userInfo 无 nickName → actualCurrentUser → '我'
+{
+  const ctx = makeTitlePage();
+  const t = withSilence(() => Resolver.setupInitialTitle(ctx.page, {
+    finalIsFromInvite: false,
+    inviter: '',
+    userInfo: {}, // 无 nickName
+    actualCurrentUser: { nickName: 'fallback_user' },
+  }));
+  ctx.restore();
+  assertEqual('3b.A端 fallback 到 actualCurrentUser', t, 'fallback_user');
+}
+
+// 用例 6:A 端两者都无 → '我'
+{
+  const ctx = makeTitlePage();
+  const t = withSilence(() => Resolver.setupInitialTitle(ctx.page, {
+    finalIsFromInvite: false,
+    inviter: '',
+    userInfo: {},
+    actualCurrentUser: undefined,
+  }));
+  ctx.restore();
+  assertEqual('3b.A端 终极 fallback=我', t, '我');
+}
+
+// 用例 7:finalIsFromInvite=true 但 inviter 缺失 → 走 A 端分支
+{
+  const ctx = makeTitlePage();
+  const t = withSilence(() => Resolver.setupInitialTitle(ctx.page, {
+    finalIsFromInvite: true,
+    inviter: '', // 缺失
+    userInfo: { nickName: '小明' },
+    actualCurrentUser: undefined,
+  }));
+  ctx.restore();
+  assertEqual('3b.B端但 inviter 缺失 → 走 A 端,标题=昵称', t, '小明');
+}
 let asyncTestPromise = Promise.resolve()
   .then(() => {
     global.wx.getStorageSync = () => null;

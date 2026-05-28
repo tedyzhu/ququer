@@ -633,3 +633,224 @@ function runIdentityBranchActions(page, ctx) {
 }
 
 module.exports.runIdentityBranchActions = runIdentityBranchActions;
+
+
+// ========== 阶段 3:身份决议(finalIsFromInvite)+ 标题 ==========
+
+/**
+ * 阶段 3a:基于已收集的证据决议最终身份
+ *
+ * 与原 chat.js 行 876-998 完整 if/else if 链路等价。
+ *
+ * 决策树:
+ *   1. isNewChat=true → 发送方
+ *   2. skipCreatorCheck=true 且 needsCreatorMessage=false → 发送方(已确认创建者)
+ *   3. needsCreatorMessage=true 或 (有 inviteInfo 但无 inviter) → 发送方(已纠正)
+ *   4. 否则:执行完整邀请证据 + 创建者证据综合判断
+ *
+ * 副作用范围:
+ * - 读:wx.getStorageSync(creator_<chatId> / chat_visit_<chatId>_<openId> / inviteInfo)
+ * - 写:wx.removeStorageSync(creator_<chatId> / inviteInfo) — 当强接收方证据击败弱创建者证据时清缓存
+ * - 写:app.clearInviteInfo() — 创建者强制纠正路径
+ *
+ * @param {Object} page - Page 实例(读 needsCreatorMessage / data.contactId)
+ * @param {Object} ctx
+ * @param {boolean} ctx.isNewChat
+ * @param {boolean} ctx.skipCreatorCheck
+ * @param {?Object} ctx.inviteInfo
+ * @param {string}  ctx.inviter
+ * @param {boolean} ctx.isFromInvite       - 之前阶段已识别的初步结果
+ * @param {Object}  ctx.options            - onLoad URL 参数
+ * @param {Object}  ctx.userInfo           - app.globalData.userInfo
+ * @returns {{ finalIsFromInvite: boolean, isActualCreator: boolean }}
+ */
+function resolveFinalIdentity(page, ctx) {
+  const { isNewChat, skipCreatorCheck, inviteInfo, inviter, isFromInvite, options, userInfo } = ctx;
+  const app = getApp();
+
+  let finalIsFromInvite = false;
+  let isActualCreator = false;
+
+  if (isNewChat) {
+    finalIsFromInvite = false;
+    console.log('🔥 [最终判断] 新聊天模式，确认为发送方');
+    return { finalIsFromInvite, isActualCreator };
+  }
+
+  if (skipCreatorCheck && page.needsCreatorMessage === false) {
+    finalIsFromInvite = false;
+    console.log('🔥 [最终判断] 已确认为a端创建者，绝对是发送方');
+    return { finalIsFromInvite, isActualCreator };
+  }
+
+  // 严格验证:身份纠正路径
+  const hasBeenCorrectedToCreator = page.needsCreatorMessage || (inviteInfo && !inviter);
+  if (hasBeenCorrectedToCreator) {
+    finalIsFromInvite = false;
+    console.log('🔥 [最终判断] 检测到身份已被纠正为创建者，强制设为发送方');
+    return { finalIsFromInvite, isActualCreator };
+  }
+
+  // 邀请证据收集
+  const hasUrlInviter = !!options.inviter;
+  const hasStoredInviter = !!inviter;
+  const hasFromInviteFlag = options.fromInvite === 'true' || options.fromInvite === true || options.fromInvite === '1';
+  const hasJoinAction = options.action === 'join';
+  const wasPreviouslyIdentifiedAsReceiver = isFromInvite;
+  const hasStrongReceiverEvidence = hasUrlInviter || hasFromInviteFlag || hasJoinAction || wasPreviouslyIdentifiedAsReceiver;
+
+  // A 端创建者证据(本地 storage 检测)
+  const chatId = options.id || (page.data && page.data.contactId);
+  const currentUserOpenId = userInfo && userInfo.openId;
+
+  if (currentUserOpenId && chatId) {
+    const creatorKey = `creator_${chatId}`;
+    const storedCreator = wx.getStorageSync(creatorKey);
+    const isStoredCreator = storedCreator === currentUserOpenId;
+
+    const visitKey = `chat_visit_${chatId}_${currentUserOpenId}`;
+    const visitHistory = wx.getStorageSync(visitKey) || 0;
+    const isFrequentVisitor = visitHistory >= 2;
+
+    const hasCreateAction = options.action === 'create';
+
+    const storedInviteInfo = wx.getStorageSync('inviteInfo');
+    const isReturningCreator = !!(storedInviteInfo &&
+      storedInviteInfo.chatId === chatId &&
+      !storedInviteInfo.fromInvite);
+
+    const hasWeakCreatorEvidence = isStoredCreator || isFrequentVisitor || isReturningCreator;
+    isActualCreator = hasWeakCreatorEvidence || hasCreateAction;
+
+    // 强接收方证据击败弱创建者证据
+    if (hasStrongReceiverEvidence && !hasCreateAction && hasWeakCreatorEvidence) {
+      console.warn('🔥 [A端最终防护-v1.3.96] 检测到接收方强证据，忽略本地创建者弱证据');
+      isActualCreator = false;
+
+      // 清理历史误写的创建者缓存
+      if (isStoredCreator && (hasFromInviteFlag || hasJoinAction || hasUrlInviter)) {
+        wx.removeStorageSync(creatorKey);
+        console.log('🔥 [A端最终防护-v1.3.96] 已清理旧创建者缓存:', creatorKey);
+      }
+    }
+
+    console.log('🔥 [A端最终防护-v1.3.89] 创建者证据检查:');
+    console.log('🔥 [A端最终防护-v1.3.89] - 存储的创建者:', isStoredCreator, storedCreator);
+    console.log('🔥 [A端最终防护-v1.3.89] - 频繁访问:', isFrequentVisitor, '次数:', visitHistory);
+    console.log('🔥 [A端最终防护-v1.3.89] - create action:', hasCreateAction);
+    console.log('🔥 [A端最终防护-v1.3.89] - 回访创建者:', isReturningCreator);
+    console.log('🔥 [A端最终防护-v1.3.89] - 最终是否创建者:', isActualCreator);
+  }
+
+  // 综合邀请证据,排除真正的创建者
+  const hasValidInviteEvidence = (
+    hasUrlInviter || hasStoredInviter || hasFromInviteFlag ||
+    hasJoinAction || wasPreviouslyIdentifiedAsReceiver
+  ) && !isActualCreator;
+
+  finalIsFromInvite = hasValidInviteEvidence && !hasBeenCorrectedToCreator;
+
+  // 如果检测到是创建者,强制纠正为发送方并清邀请缓存
+  if (isActualCreator && finalIsFromInvite) {
+    console.log('🔥 [A端最终防护] 检测到用户是真正创建者，强制纠正身份');
+    finalIsFromInvite = false;
+    wx.removeStorageSync('inviteInfo');
+    if (app && app.clearInviteInfo) {
+      app.clearInviteInfo();
+    }
+  }
+
+  console.log('🔥 [最终判断] 邀请证据详情:');
+  console.log('🔥 [最终判断] - URL邀请者:', hasUrlInviter, options.inviter);
+  console.log('🔥 [最终判断] - 存储邀请者:', hasStoredInviter, inviter);
+  console.log('🔥 [最终判断] - 之前身份:', wasPreviouslyIdentifiedAsReceiver);
+  console.log('🔥 [最终判断] - 综合证据:', hasValidInviteEvidence);
+  console.log('🔥 [最终判断] - 最终结果:', finalIsFromInvite);
+
+  return { finalIsFromInvite, isActualCreator };
+}
+
+/**
+ * 阶段 3b:基于最终身份设置初始标题
+ *
+ * 与原 chat.js 行 1011-1075 等价(包含 wx.setNavigationBarTitle 副作用)。
+ *
+ * A/B 端策略:
+ *   - B 端(finalIsFromInvite=true 且有 inviter):
+ *     - 真实昵称 → 我和<昵称>(2)
+ *     - 占位符 → 我和新用户(2),并 500ms 后 fetchRealInviterNameAndUpdateTitle
+ *     - 解码异常 → fallback 到 userInfo.nickName
+ *   - A 端:userInfo.nickName 或 'actualCurrentUser?.nickName' 或 '我'
+ *
+ * 副作用:
+ * - wx.setNavigationBarTitle(立即生效)
+ * - page.setData({ dynamicTitle })
+ * - page.isAEndUser / isAEndTitleProtected / receiverTitleLocked(A 端标记)
+ * - setTimeout(fetchRealInviterNameAndUpdateTitle, 500) — 仅占位符邀请者场景
+ *
+ * @param {Object} page
+ * @param {Object} ctx
+ * @param {boolean} ctx.finalIsFromInvite
+ * @param {string}  ctx.inviter
+ * @param {Object}  ctx.userInfo
+ * @param {?Object} ctx.actualCurrentUser
+ * @returns {string} 设置好的初始标题
+ */
+function setupInitialTitle(page, ctx) {
+  const { finalIsFromInvite, inviter, userInfo, actualCurrentUser } = ctx;
+
+  let initialTitle = (userInfo && userInfo.nickName) || '我';
+
+  console.log('🔥 [标题修复] 开始设置初始标题');
+  console.log('🔥 [标题修复] finalIsFromInvite:', finalIsFromInvite);
+  console.log('🔥 [标题修复] 用户昵称:', userInfo && userInfo.nickName);
+  console.log('🔥 [标题修复] 邀请者:', inviter);
+
+  if (finalIsFromInvite && inviter) {
+    // B 端策略
+    try {
+      const decodedInviterName = decodeURIComponent(decodeURIComponent(inviter));
+      if (decodedInviterName && decodedInviterName !== '朋友' && decodedInviterName !== '邀请者') {
+        initialTitle = `我和${decodedInviterName}（2）`;
+        console.log('🔥 [B端标题] B端初始标题设置:', initialTitle);
+        wx.setNavigationBarTitle({ title: initialTitle });
+      } else {
+        // 占位符邀请者:临时标题 + 500ms 后异步获取真实昵称
+        console.log('🔥 [B端标题] 检测到占位符邀请者，将获取真实昵称');
+        initialTitle = '我和新用户（2）';
+        wx.setNavigationBarTitle({ title: initialTitle });
+        setTimeout(function() {
+          if (typeof page.fetchRealInviterNameAndUpdateTitle === 'function') {
+            page.fetchRealInviterNameAndUpdateTitle();
+          }
+        }, 500);
+      }
+      console.log('🔥 [B端标题] ✅ B端导航栏标题立即设置成功:', initialTitle);
+      page.setData({ dynamicTitle: initialTitle });
+    } catch (e) {
+      console.log('🔥 [B端标题] 邀请者昵称解码失败:', e);
+      initialTitle = (userInfo && userInfo.nickName) || '我';
+    }
+  } else {
+    // A 端策略
+    const userNickname = (userInfo && userInfo.nickName) ||
+                          (actualCurrentUser && actualCurrentUser.nickName) || '我';
+    initialTitle = userNickname;
+    console.log('🔥 [A端标题] A端标题设置为用户昵称:', initialTitle);
+    wx.setNavigationBarTitle({ title: initialTitle });
+    console.log('🔥 [A端标题] ✅ A端导航栏标题设置成功:', initialTitle);
+    page.setData({ dynamicTitle: initialTitle });
+
+    // A 端标记
+    page.isAEndUser = true;
+    page.isAEndTitleProtected = false;
+    page.receiverTitleLocked = false;
+
+    console.log('🔥 [统一标题] 采用统一的标题显示策略');
+  }
+
+  return initialTitle;
+}
+
+module.exports.resolveFinalIdentity = resolveFinalIdentity;
+module.exports.setupInitialTitle = setupInitialTitle;
