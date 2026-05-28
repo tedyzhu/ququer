@@ -166,7 +166,6 @@ const REQUIRED_PAGE_METHODS = [
   'hasBEndJoinEver', 'markBEndJoinEver', 'initializeDestroyedMessageStore',
   // 业务核心
   'fetchMessages', 'sendMessage',
-  'startMessageListener', 'stopMessageListener',
   // wxml 事件入口
   ...[...eventBindings]
 ];
@@ -255,6 +254,19 @@ if (cdtMissing.length === 0) {
   console.log(`   ✅ ChatDebugTools.attach 挂上 ${cdtCount} 个方法`);
 } else {
   console.error('   ❌ ChatDebugTools 缺失:', cdtMissing);
+  process.exit(1);
+}
+
+const MessageListener = require(path.join(__dirname, '../app/pages/chat/modules/message-listener.js'));
+const fakePage8 = { data: {}, setData: () => {} };
+MessageListener.attach(fakePage8);
+const mlRequired = ['startMessageListener', 'stopMessageListener'];
+const mlMissing = mlRequired.filter(k => typeof fakePage8[k] !== 'function');
+if (mlMissing.length === 0) {
+  const mlCount = Object.keys(fakePage8).filter(k => typeof fakePage8[k] === 'function').length;
+  console.log(`   ✅ MessageListener.attach 挂上 ${mlCount} 个方法`);
+} else {
+  console.error('   ❌ MessageListener 缺失:', mlMissing);
   process.exit(1);
 }
 
