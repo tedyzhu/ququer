@@ -156,18 +156,18 @@ chat.js: 5948 → 5759 (-189 行)。
 ### 阶段 2(部分)已完成(2026-05-28)
 
 阶段 2 原计划 485 行身份判定核心一刀抽离,经评估**风险极高**(异步副作用、多 let 变量重写、矛盾 hotfix 历史),
-拆为 4 个子阶段渐进抽离。本次完成前 2 个子阶段:
+拆为 4 个子阶段渐进抽离。本次完成前 3 个子阶段:
 
 - **2a**: `detectInvitePresence(options)` — URL 参数预检测,纯函数,18 行
 - **2b**: `collectCreatorEvidence(page, options, inviteInfo, userInfo, preliminaryInviteDetected)` — stored invite 内的 14 个证据收集,弱状态(只读),70 行
+- **2c**: `computeCreatorByEvidence(evidence)` — 基于 evidence 合成 isChatCreator 决策,**纯计算**,17 行
 
 抽离后:
-- chat.js: 5682 → 5602 (-80 行)
-- 新增 43 个测试用例(2a 9 个 + 2b 34 个),共 93 个,全过
+- chat.js: 5682 → 5590 (-92 行)
+- 新增 60 个测试用例(2a 9 + 2b 34 + 2c 17),共 109 个,全过
 
-后续 2c/2d 子阶段:
-- **2c**: 决策合成(`isChatCreator` 判定逻辑)— 中风险,需保留副作用
-- **2d**: 云端验证 + 副作用调用 — 暂留 onLoad,等阶段 4 重新设计后再考虑
+后续 2d 子阶段:
+- **2d**: 云端验证(`await wx.cloud` + 占位符邀请检测) + 副作用调用(`clearIncorrectSystemMessages` / `addCreatorSystemMessage` 等)— 暂留 onLoad,等阶段 4 重新设计后再考虑
 
 ### 阶段 3-5 待实施
 
