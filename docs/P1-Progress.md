@@ -178,13 +178,32 @@ chat.js: 5948 → 5759 (-189 行)。
 - chat.js: 5590 → 5537 (-53 行)
 - 新增 19 个测试用例,共 128 个,全过
 
-### 阶段 2d / 3 / 4 待实施
+### 阶段 4 已完成(2026-05-28)
+
+抽离 onLoad 中身份分支动作 132 行(行 1147-1278)为模块函数 `runIdentityBranchActions(page, ctx)`:
+
+三大主路径:
+1. B 端(finalIsFromInvite=true):调 joinChatByInvite,不走 A 端
+2. A 端 + 新聊天:存创建者 → createConversationRecord → 启动监听
+3. A 端 + 已有聊天:根据参与者数量分单人 / 多人两子路径
+
+副作用范围:
+- wx.setStorageSync('creator_<chatId>') 创建者信息
+- joinChatByInvite / addCreatorSystemMessage / updateUserInfoInDatabase /
+  createConversationRecord(Promise)/ startParticipantListener
+- setData 清 loading
+- needsCreatorMessage 标志位读写
+
+抽离后:
+- chat.js: 5537 → 5421 (-116 行,P3 单次最大削减)
+- 新增 30 个测试用例(覆盖 B 端 / A 端三子路径 / Promise then & catch / 边界),共 158 个,全过
+
+### 阶段 2d / 3 待实施
 
 | 阶段 | 内容 | 风险 |
 | --- | --- | --- |
 | 2d | 云端验证(`await wx.cloud`)+ 副作用调用 | 高 |
 | 3 | 身份决议 + 标题/系统消息 ~270 行 | 中 |
-| 4 | 分支动作 ~130 行 | 中 |
 
 ### 阶段 3-5 待实施
 

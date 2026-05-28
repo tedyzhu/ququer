@@ -682,8 +682,260 @@ function makeFakeTimers() {
 }
 
 
+// ============ runIdentityBranchActions(阶段 4) ============
+origLog('\n--- runIdentityBranchActions ---');
+
+function makePageForBranchActions(overrides) {
+  const calls = {};
+  const record = (k, ...args) => { (calls[k] = calls[k] || []).push(args); };
+  const page = Object.assign({
+    data: {},
+    actualCurrentUser: { openId: 'sender_openid' },
+    needsCreatorMessage: false,
+    setData: (patch) => { record('setData', patch); Object.assign(page.data, patch); },
+    joinChatByInvite: (...a) => record('joinChatByInvite', ...a),
+    addCreatorSystemMessage: () => record('addCreatorSystemMessage'),
+    updateUserInfoInDatabase: () => record('updateUserInfoInDatabase'),
+    createConversationRecord: () => {
+      record('createConversationRecord');
+      // 默认成功
+      return Promise.resolve();
+    },
+    startParticipantListener: (...a) => record('startParticipantListener', ...a),
+  }, overrides || {});
+  return { page, calls };
+}
+
+// 用例 1:B 端走 joinChatByInvite,不动 A 端逻辑
+{
+  // 重置 wx mock 的 storage
+  Object.keys(mockStorage2 || {}).forEach(k => delete mockStorage2[k]);
+  global.wx.getStorageSync = (k) => undefined;
+  global.wx.setStorageSync = () => {};
+
+  const { page, calls } = makePageForBranchActions();
+  withSilence(() => Resolver.runIdentityBranchActions(page, {
+    finalIsFromInvite: true,
+    chatId: 'chat_b',
+    inviter: '向冬',
+    userName: '',
+    isNewChat: false,
+  }));
+  assert('4.B端 joinChatByInvite 调用', !!calls.joinChatByInvite);
+  assertEqual('4.B端 joinChatByInvite chatId', calls.joinChatByInvite[0][0], 'chat_b');
+  assertEqual('4.B端 joinChatByInvite inviter', calls.joinChatByInvite[0][1], '向冬');
+  assert('4.B端 不调 A 端流程', !calls.updateUserInfoInDatabase);
+  assert('4.B端 不调 createConversationRecord', !calls.createConversationRecord);
+  assert('4.B端 不调 addCreatorSystemMessage', !calls.addCreatorSystemMessage);
+}
+
+// 用例 2:B 端 — inviter 缺失时用 userName fallback
+{
+  global.wx.getStorageSync = () => undefined;
+  global.wx.setStorageSync = () => {};
+  const { page, calls } = makePageForBranchActions();
+  withSilence(() => Resolver.runIdentityBranchActions(page, {
+    finalIsFromInvite: true,
+    chatId: 'chat_b',
+    inviter: '',
+    userName: 'fallback_name',
+    isNewChat: false,
+  }));
+  assertEqual('4.B端 inviter 空时 fallback userName', calls.joinChatByInvite[0][1], 'fallback_name');
+}
+
+// 用例 3:A 端 + 新聊天,createConversationRecord 成功
+{
+  let storedKey = null;
+  let storedValue = null;
+  global.wx.getStorageSync = () => null;
+  global.wx.setStorageSync = (k, v) => { storedKey = k; storedValue = v; };
+
+  const { page, calls } = makePageForBranchActions();
+  page.actualCurrentUser = { openId: 'sender_a' };
+
+  withSilence(() => Resolver.runIdentityBranchActions(page, {
+    finalIsFromInvite: false,
+    chatId: 'chat_new',
+    inviter: '',
+    userName: '',
+    isNewChat: true,
+  }));
+
+  assertEqual('4.A端 storage key', storedKey, 'creator_chat_new');
+  assertEqual('4.A端 storage value=openId', storedValue, 'sender_a');
+  assert('4.A端 调 updateUserInfoInDatabase', !!calls.updateUserInfoInDatabase);
+  assert('4.A端+新 调 createConversationRecord', !!calls.createConversationRecord);
+}
+
+// 用例 4:A 端 + 已有聊天 + 单参与者
+{
+  global.wx.getStorageSync = () => null;
+  global.wx.setStorageSync = () => {};
+  const { page, calls } = makePageForBranchActions({
+    data: { participants: [{ openId: 'self' }] },
+  });
+  withSilence(() => Resolver.runIdentityBranchActions(page, {
+    finalIsFromInvite: false,
+    chatId: 'chat_existing',
+    inviter: '',
+    userName: '',
+    isNewChat: false,
+  }));
+  assert('4.A端+单人 调 startParticipantListener', !!calls.startParticipantListener);
+  assertEqual('4.A端+单人 startParticipantListener chatId', calls.startParticipantListener[0][0], 'chat_existing');
+  assert('4.A端+单人 调 addCreatorSystemMessage', !!calls.addCreatorSystemMessage);
+  assert('4.A端+单人 setData 清 isLoading',
+    calls.setData.some(p => p[0].isLoading === false));
+  assert('4.A端+单人 不调 createConversationRecord', !calls.createConversationRecord);
+}
+
+// 用例 5:A 端 + 已有聊天 + 多参与者
+{
+  global.wx.getStorageSync = () => null;
+  global.wx.setStorageSync = () => {};
+  const { page, calls } = makePageForBranchActions({
+    data: { participants: [{ openId: 'self' }, { openId: 'other' }] },
+  });
+  withSilence(() => Resolver.runIdentityBranchActions(page, {
+    finalIsFromInvite: false,
+    chatId: 'chat_existing',
+    inviter: '',
+    userName: '',
+    isNewChat: false,
+  }));
+  assert('4.A端+多人 调 startParticipantListener', !!calls.startParticipantListener);
+  assert('4.A端+多人 调 addCreatorSystemMessage', !!calls.addCreatorSystemMessage);
+  assert('4.A端+多人 setData 清 isLoading',
+    calls.setData.some(p => p[0].isLoading === false));
+  assert('4.A端+多人 不调 createConversationRecord', !calls.createConversationRecord);
+}
+
+// 用例 6:A 端 + needsCreatorMessage=true 时立即添加并清标志
+{
+  global.wx.getStorageSync = () => null;
+  global.wx.setStorageSync = () => {};
+  const { page, calls } = makePageForBranchActions({
+    data: { participants: [{ openId: 'self' }] },
+    needsCreatorMessage: true,
+  });
+  withSilence(() => Resolver.runIdentityBranchActions(page, {
+    finalIsFromInvite: false,
+    chatId: 'chat_x',
+    inviter: '',
+    userName: '',
+    isNewChat: false,
+  }));
+  // addCreatorSystemMessage 至少被调用 2 次(needsCreatorMessage 路径 + A端单人路径)
+  assert('4.needsCreatorMessage 触发额外 addCreatorSystemMessage',
+    (calls.addCreatorSystemMessage || []).length >= 2);
+  assertEqual('4.needsCreatorMessage 处理后清 false', page.needsCreatorMessage, false);
+}
+
+// 用例 7:A 端 — existingCreator 已存在时不覆盖
+{
+  let setStorageCalled = 0;
+  global.wx.getStorageSync = () => 'existing_openid';
+  global.wx.setStorageSync = () => { setStorageCalled++; };
+
+  const { page, calls } = makePageForBranchActions({
+    data: { participants: [{ openId: 'self' }] },
+  });
+  withSilence(() => Resolver.runIdentityBranchActions(page, {
+    finalIsFromInvite: false,
+    chatId: 'chat_existing',
+    inviter: '',
+    userName: '',
+    isNewChat: false, // 关键:非新聊天,不会重复写入
+  }));
+  assertEqual('4.A端+已有创建者 不重复写 storage', setStorageCalled, 0);
+}
+
+// 用例 8:createConversationRecord 失败时仍 startParticipantListener
+//   仅验证调用结构,异步 reject 后续行为通过用例 9 单独验证
+{
+  global.wx.getStorageSync = () => null;
+  global.wx.setStorageSync = () => {};
+  let createCalled = 0;
+  const { page, calls } = makePageForBranchActions({
+    createConversationRecord: () => { createCalled++; return Promise.reject(new Error('failed')); },
+  });
+  withSilence(() => Resolver.runIdentityBranchActions(page, {
+    finalIsFromInvite: false,
+    chatId: 'chat_fail',
+    inviter: '',
+    userName: '',
+    isNewChat: true,
+  }));
+  // 同步部分:setData / updateUserInfoInDatabase / createConversationRecord 都被调
+  assertEqual('4.失败前 调 createConversationRecord', createCalled, 1);
+}
+
+// 用例 10:isNewChat=true 时 wx.setStorageSync 被调用 2 次(原 chat.js 行为冗余写入)
+{
+  let setStorageCount = 0;
+  global.wx.getStorageSync = () => null;
+  global.wx.setStorageSync = () => { setStorageCount++; };
+  const { page } = makePageForBranchActions();
+  withSilence(() => Resolver.runIdentityBranchActions(page, {
+    finalIsFromInvite: false,
+    chatId: 'chat_dup',
+    inviter: '',
+    userName: '',
+    isNewChat: true,
+  }));
+  assertEqual('4.isNewChat=true 写 storage 2 次(顶部 + 分支内,与原 chat.js 行为等价)', setStorageCount, 2);
+}
+let asyncTestPromise = Promise.resolve()
+  .then(() => {
+    global.wx.getStorageSync = () => null;
+    global.wx.setStorageSync = () => {};
+    const { page, calls } = makePageForBranchActions();
+    page.actualCurrentUser = { openId: 'sender_a' };
+    withSilence(() => Resolver.runIdentityBranchActions(page, {
+      finalIsFromInvite: false,
+      chatId: 'chat_async',
+      inviter: '',
+      userName: '',
+      isNewChat: true,
+    }));
+    return new Promise(resolve => setTimeout(() => {
+      assert('4.A端+新.then 调 startParticipantListener',
+        !!calls.startParticipantListener);
+      assert('4.A端+新.then setData 清 isLoading',
+        (calls.setData || []).some(p => p[0].isLoading === false));
+      assert('4.A端+新.then 调 addCreatorSystemMessage',
+        !!calls.addCreatorSystemMessage);
+      resolve();
+    }, 30));
+  })
+  .then(() => {
+    global.wx.getStorageSync = () => null;
+    global.wx.setStorageSync = () => {};
+    const { page, calls } = makePageForBranchActions({
+      createConversationRecord: () => Promise.reject(new Error('fail')),
+    });
+    withSilence(() => Resolver.runIdentityBranchActions(page, {
+      finalIsFromInvite: false,
+      chatId: 'chat_fail',
+      inviter: '',
+      userName: '',
+      isNewChat: true,
+    }));
+    return new Promise(resolve => setTimeout(() => {
+      assert('4.A端+新.catch setData 清 isLoading',
+        (calls.setData || []).some(p => p[0].isLoading === false));
+      assert('4.A端+新.catch 仍 startParticipantListener',
+        !!calls.startParticipantListener);
+      resolve();
+    }, 30));
+  });
 
 
 
-origLog(`\n--- ${pass} pass / ${fail} fail ---`);
-process.exit(fail > 0 ? 1 : 0);
+
+
+asyncTestPromise.then(() => {
+  origLog(`\n--- ${pass} pass / ${fail} fail ---`);
+  process.exit(fail > 0 ? 1 : 0);
+});
