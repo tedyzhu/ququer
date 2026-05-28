@@ -145,3 +145,211 @@ module.exports = {
   parseLoadOptions,
   cleanupStaleInviteInfo,
 };
+
+
+// ========== 阶段 2:身份判定核心(渐进抽离) ==========
+//
+// 阶段 2 目标是分解 onLoad 行 483-967 的 485 行身份判定逻辑。
+// 直接整段抽离风险极高(异步副作用 / 多个 let 变量重写 / 矛盾 hotfix 历史),
+// 因此进一步细分为多个子阶段,每次只抽纯/弱状态计算部分:
+//
+//   - 阶段 2a(本文件):detectInvitePresence — URL 参数预检测(纯函数)
+//   - 阶段 2b(后续):collectCreatorEvidence — inviteInfo 内的证据收集(弱状态,只读 wx.storage / app)
+//   - 阶段 2c(后续):computeIdentityDecision — 决策合成
+//   - 阶段 2d(后续):云端验证 + 副作用调用(留在 onLoad 不动,等阶段 4 重新设计)
+
+/**
+ * 纯函数:从 onLoad options 检测是否有任何邀请进入的迹象
+ *
+ * 原 chat.js 行 484-501 的逻辑等价封装。
+ *
+ * @param {Object} options - onLoad 收到的 URL 参数
+ * @returns {{
+ *   hasExplicitInviterParam: boolean,  // 有明确的非 'undefined' 字符串的 inviter
+ *   hasJoinAction: boolean,             // action=join
+ *   hasFromInviteFlag: boolean,         // fromInvite=true / 'true' / '1'
+ *   preliminaryInviteDetected: boolean  // 三者任一
+ * }}
+ */
+function detectInvitePresence(options) {
+  const hasExplicitInviterParam = !!(options.inviter && options.inviter !== 'undefined');
+  const hasJoinAction = options.action === 'join';
+  const hasFromInviteFlag = options.fromInvite === 'true' ||
+                             options.fromInvite === true ||
+                             options.fromInvite === '1';
+  const preliminaryInviteDetected = hasExplicitInviterParam || hasJoinAction || hasFromInviteFlag;
+
+  console.log('🔥 [优先检查] URL参数分析:');
+  console.log('🔥 [优先检查] options.inviter:', options.inviter);
+  console.log('🔥 [优先检查] options.action:', options.action);
+  console.log('🔥 [优先检查] options.fromInvite:', options.fromInvite);
+  console.log('🔥 [优先检查] 明确的邀请参数:', hasExplicitInviterParam);
+
+  if (preliminaryInviteDetected) {
+    console.log('🔥 [优先检查] 检测到URL邀请参数，但需要先验证是否为创建者');
+    console.log('🔥 [优先检查] 将进行创建者验证以确定真实身份');
+  }
+
+  return {
+    hasExplicitInviterParam,
+    hasJoinAction,
+    hasFromInviteFlag,
+    preliminaryInviteDetected,
+  };
+}
+
+module.exports.detectInvitePresence = detectInvitePresence;
+
+
+/**
+ * 阶段 2b:在 stored inviteInfo 存在时,收集所有创建者证据(只读 wx.storage / app)
+ *
+ * 原 chat.js 行 491-560(约 70 行)的逻辑等价封装。
+ * 仅在 `inviteInfo && inviteInfo.inviteId && !forceReceiverMode` 时才被 onLoad 调用。
+ *
+ * 副作用范围:
+ * - 读 wx.getStorageSync('visited_chats')  / wx.getStorageSync('chat_visit_history')
+ * - 读 app.globalData.recentCreateActions / chatCreators / isInShareMode
+ * - 读 page.data.isNewChat
+ * - 调 ChatHelpers.smartNicknameMatch(纯函数)
+ * - 不写入任何状态
+ *
+ * @param {Object} page - Page 实例(读 data.isNewChat)
+ * @param {Object} options - onLoad URL 参数
+ * @param {Object} inviteInfo - 已确认 truthy 的 stored invite
+ * @param {Object} userInfo - app.globalData.userInfo
+ * @param {boolean} preliminaryInviteDetected - 由 detectInvitePresence 给出
+ * @returns {{
+ *   currentUserNickName: string,
+ *   currentUserOpenId: string,
+ *   chatIdContainsUserId: boolean,
+ *   inviteTime: number,
+ *   currentTime: number,
+ *   timeSinceInvite: number,
+ *   isVeryRecentInvite: boolean,
+ *   inviterNickname: string,
+ *   userNickname: string,
+ *   isSameUser: boolean,
+ *   hasCreateAction: boolean,
+ *   isInShareMode: boolean,
+ *   isRecentInvite: boolean,
+ *   isModeratelyRecent: boolean,
+ *   smartNicknameMatch: boolean,
+ *   hasHistoricalEvidence: boolean,
+ *   isRepeatVisit: boolean,
+ *   hasOwnershipMarkers: boolean,
+ *   chatVisitCount: number,
+ *   isFrequentVisitor: boolean
+ * }}
+ */
+function collectCreatorEvidence(page, options, inviteInfo, userInfo, preliminaryInviteDetected) {
+  const app = getApp();
+
+  // 🔥 【修复发送方误判】改进检测逻辑：检查用户是否可能是聊天创建者
+  const currentUserNickName = userInfo && userInfo.nickName;
+  const currentUserOpenId = (userInfo && userInfo.openId) || (app.globalData && app.globalData.openId);
+
+  console.log('🔥 [身份判断修复] 邀请信息分析:');
+  console.log('🔥 [身份判断修复] 用户昵称:', currentUserNickName);
+  console.log('🔥 [身份判断修复] 邀请者昵称:', inviteInfo.inviter);
+  console.log('🔥 [身份判断修复] 聊天ID:', inviteInfo.inviteId);
+  console.log('🔥 [身份判断修复] 用户OpenId:', currentUserOpenId);
+
+  // 🔥 【HOTFIX-v1.3.44d】智能判断用户是否为聊天创建者
+  // 方法1：检查聊天ID是否包含用户ID片段
+  const chatIdContainsUserId = !!(currentUserOpenId && inviteInfo.inviteId &&
+    (inviteInfo.inviteId.includes(currentUserOpenId.substring(0, 8)) ||
+     inviteInfo.inviteId.includes(currentUserOpenId.slice(-8)) ||
+     inviteInfo.inviteId.includes(currentUserOpenId.substring(0, 12)) ||
+     inviteInfo.inviteId.includes(currentUserOpenId.slice(-12))));
+
+  // 方法2：检查邀请时间是否太新（创建者不会立即通过邀请链接进入）
+  const inviteTime = inviteInfo.timestamp || 0;
+  const currentTime = Date.now();
+  const timeSinceInvite = currentTime - inviteTime;
+  const isVeryRecentInvite = timeSinceInvite < 2 * 60 * 1000; // 2分钟内
+
+  // 方法3：检查是否是同一用户（邀请者昵称和当前用户昵称相似）
+  // 🔥 【CRITICAL-FIX-v3】优先使用URL参数中的邀请者昵称
+  let inviterNickname = inviteInfo.inviter || '';
+
+  // 如果URL包含邀请参数，优先使用URL中的邀请者昵称
+  if (preliminaryInviteDetected && options.inviter) {
+    try {
+      const urlInviterName = decodeURIComponent(options.inviter);
+      if (urlInviterName && urlInviterName !== '朋友' && urlInviterName !== '邀请者') {
+        inviterNickname = urlInviterName;
+        console.log('🔥 [邀请者昵称] 使用URL参数中的邀请者昵称:', inviterNickname);
+      }
+    } catch (e) {
+      console.log('🔥 [邀请者昵称] URL参数解码失败，使用默认值');
+    }
+  }
+
+  const userNickname = currentUserNickName || '';
+  const isSameUser = inviterNickname === userNickname;
+
+  // 🔥 【HOTFIX-v1.3.44e】增强检测方法
+  const hasCreateAction = options.action === 'create' ||
+                          (page.data && page.data.isNewChat === true) ||
+                          (app.globalData && app.globalData.recentCreateActions &&
+                           app.globalData.recentCreateActions.includes(inviteInfo.inviteId));
+
+  const isInShareMode = !!(app.globalData && app.globalData.isInShareMode === true);
+
+  const isRecentInvite = timeSinceInvite < 24 * 60 * 60 * 1000; // 24小时内
+  const isModeratelyRecent = timeSinceInvite < 7 * 24 * 60 * 60 * 1000; // 7天内
+
+  // 智能昵称匹配
+  const smartNicknameMatch = ChatHelpers.smartNicknameMatch(inviterNickname, userNickname);
+
+  // 🔥 【增强检测】添加更多创建者证据
+  const hasHistoricalEvidence = !!(app.globalData && app.globalData.chatCreators &&
+                                   app.globalData.chatCreators.includes(currentUserOpenId + '_' + inviteInfo.inviteId));
+  const visitedChats = wx.getStorageSync('visited_chats');
+  const isRepeatVisit = !!(visitedChats && visitedChats.includes && visitedChats.includes(inviteInfo.inviteId));
+  const hasOwnershipMarkers = inviteInfo.createdBy === currentUserOpenId ||
+                              inviteInfo.creator === currentUserOpenId ||
+                              inviteInfo.owner === currentUserOpenId;
+
+  // 🔥 【关键增强】如果用户反复进入同一个聊天，很可能是创建者
+  const visitHistory = wx.getStorageSync('chat_visit_history') || {};
+  const chatVisitCount = visitHistory[inviteInfo.inviteId] || 0;
+  const isFrequentVisitor = chatVisitCount >= 2;
+
+  // 🔥 【CRITICAL-FIX-v5】修复A端身份误判 - 删除错误的强制B端判断逻辑
+  // 所有情况都进行统一的身份检测，不能仅基于时间强制判断身份
+
+  console.log('🔥 [身份检测-v5] 开始全面身份验证');
+  console.log('🔥 [身份检测-v5] 邀请时间差:', timeSinceInvite, 'ms');
+  console.log('🔥 [身份检测-v5] 是否很新邀请:', isVeryRecentInvite);
+  console.log('🔥 [身份检测-v5] 邀请者昵称:', inviterNickname);
+  console.log('🔥 [身份检测-v5] 用户昵称:', userNickname);
+  console.log('🔥 [身份检测-v5] 是否同一用户:', isSameUser);
+  console.log('🔥 [身份检测-v5] 聊天ID包含用户ID:', chatIdContainsUserId);
+
+  return {
+    currentUserNickName,
+    currentUserOpenId,
+    chatIdContainsUserId,
+    inviteTime,
+    currentTime,
+    timeSinceInvite,
+    isVeryRecentInvite,
+    inviterNickname,
+    userNickname,
+    isSameUser,
+    hasCreateAction,
+    isInShareMode,
+    isRecentInvite,
+    isModeratelyRecent,
+    smartNicknameMatch,
+    hasHistoricalEvidence,
+    isRepeatVisit,
+    hasOwnershipMarkers,
+    chatVisitCount,
+    isFrequentVisitor,
+  };
+}
+
+module.exports.collectCreatorEvidence = collectCreatorEvidence;

@@ -153,11 +153,26 @@ chat.js: 5948 → 5759 (-189 行)。
 - 新增 `.tools/identity_resolver_test.js` 50 用例(parseLoadOptions / cleanupStaleInviteInfo / prepareLoadContext 集成 3 类)
 - `bash run_all_tests.sh` 6 个测试全过(共 252 用例)
 
-### 阶段 2-5 待实施
+### 阶段 2(部分)已完成(2026-05-28)
+
+阶段 2 原计划 485 行身份判定核心一刀抽离,经评估**风险极高**(异步副作用、多 let 变量重写、矛盾 hotfix 历史),
+拆为 4 个子阶段渐进抽离。本次完成前 2 个子阶段:
+
+- **2a**: `detectInvitePresence(options)` — URL 参数预检测,纯函数,18 行
+- **2b**: `collectCreatorEvidence(page, options, inviteInfo, userInfo, preliminaryInviteDetected)` — stored invite 内的 14 个证据收集,弱状态(只读),70 行
+
+抽离后:
+- chat.js: 5682 → 5602 (-80 行)
+- 新增 43 个测试用例(2a 9 个 + 2b 34 个),共 93 个,全过
+
+后续 2c/2d 子阶段:
+- **2c**: 决策合成(`isChatCreator` 判定逻辑)— 中风险,需保留副作用
+- **2d**: 云端验证 + 副作用调用 — 暂留 onLoad,等阶段 4 重新设计后再考虑
+
+### 阶段 3-5 待实施
 
 | 阶段 | 行数 | 内容 | 风险 |
 | --- | --- | --- | --- |
-| 2 | 526-1010 | 身份判定核心 485 行 | 高 |
 | 3 | 1011-1280 | 身份决议 + 标题/系统消息 270 行 | 中 |
 | 4 | 1281-1410 | 分支动作(邀请进入 / 新聊天 / 已存在)130 行 | 中 |
 | 5 | 1411-1477 | 后处理(B 端补充消息 / 阅后即焚检查)67 行 | 低 |

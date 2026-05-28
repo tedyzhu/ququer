@@ -480,108 +480,28 @@ Page({
     let forceReceiverMode = loadCtx.forceReceiverMode;
     let inviteInfo = loadCtx.inviteInfo;
     
-    // 🔥 【CRITICAL-FIX】优先检查URL参数，防止误判
-    const hasExplicitInviterParam = options.inviter && options.inviter !== 'undefined';
-    const hasJoinAction = options.action === 'join';
-    const hasFromInviteFlag = options.fromInvite === 'true' || options.fromInvite === true || options.fromInvite === '1';
-    
-    console.log('🔥 [优先检查] URL参数分析:');
-    console.log('🔥 [优先检查] options.inviter:', options.inviter);
-    console.log('🔥 [优先检查] options.action:', options.action);
-    console.log('🔥 [优先检查] options.fromInvite:', options.fromInvite);
-    console.log('🔥 [优先检查] 明确的邀请参数:', hasExplicitInviterParam);
+    // 阶段 2a:URL 参数预检测(详见 modules/identity-resolver.js#detectInvitePresence)
+    const { hasExplicitInviterParam, hasJoinAction, hasFromInviteFlag, preliminaryInviteDetected } =
+      IdentityResolver.detectInvitePresence(options);
     
     // 🔥 【关键修复】有URL邀请参数时，先检查是否为创建者，再决定身份
     let skipCreatorCheck = false;
     let isFromInvite; // 🔥 声明变量
-    let preliminaryInviteDetected = hasExplicitInviterParam || hasJoinAction || hasFromInviteFlag;
-    
-    if (preliminaryInviteDetected) {
-      console.log('🔥 [优先检查] 检测到URL邀请参数，但需要先验证是否为创建者');
-      // 🔥 不直接设置 isFromInvite，而是标记需要进一步验证
-      console.log('🔥 [优先检查] 将进行创建者验证以确定真实身份');
-    }
     
     if (inviteInfo && inviteInfo.inviteId && !forceReceiverMode) {
-      // 🔥 【修复发送方误判】改进检测逻辑：检查用户是否可能是聊天创建者
-      const currentUserNickName = userInfo?.nickName;
-      const currentUserOpenId = userInfo?.openId || app.globalData?.openId;
-      
-      console.log('🔥 [身份判断修复] 邀请信息分析:');
-      console.log('🔥 [身份判断修复] 用户昵称:', currentUserNickName);
-      console.log('🔥 [身份判断修复] 邀请者昵称:', inviteInfo.inviter);
-      console.log('🔥 [身份判断修复] 聊天ID:', inviteInfo.inviteId);
-      console.log('🔥 [身份判断修复] 用户OpenId:', currentUserOpenId);
-      
-      // 🔥 【HOTFIX-v1.3.44d】智能判断用户是否为聊天创建者
-      // 方法1：检查聊天ID是否包含用户ID片段
-      const chatIdContainsUserId = currentUserOpenId && inviteInfo.inviteId && 
-                                  (inviteInfo.inviteId.includes(currentUserOpenId.substring(0, 8)) || 
-                                   inviteInfo.inviteId.includes(currentUserOpenId.slice(-8)) ||
-                                   inviteInfo.inviteId.includes(currentUserOpenId.substring(0, 12)) ||
-                                   inviteInfo.inviteId.includes(currentUserOpenId.slice(-12)));
-      
-      // 方法2：检查邀请时间是否太新（创建者不会立即通过邀请链接进入）
-      const inviteTime = inviteInfo.timestamp || 0;
-      const currentTime = Date.now();
-      const timeSinceInvite = currentTime - inviteTime;
-      const isVeryRecentInvite = timeSinceInvite < 2 * 60 * 1000; // 2分钟内
-      
-      // 方法3：检查是否是同一用户（邀请者昵称和当前用户昵称相似）
-      // 🔥 【CRITICAL-FIX-v3】优先使用URL参数中的邀请者昵称
-      let inviterNickname = inviteInfo.inviter || '';
-      
-      // 如果URL包含邀请参数，优先使用URL中的邀请者昵称
-      if (preliminaryInviteDetected && options.inviter) {
-        try {
-          const urlInviterName = decodeURIComponent(options.inviter);
-          if (urlInviterName && urlInviterName !== '朋友' && urlInviterName !== '邀请者') {
-            inviterNickname = urlInviterName;
-            console.log('🔥 [邀请者昵称] 使用URL参数中的邀请者昵称:', inviterNickname);
-          }
-        } catch (e) {
-          console.log('🔥 [邀请者昵称] URL参数解码失败，使用默认值');
-        }
-      }
-      
-      const userNickname = currentUserNickName || '';
-      const isSameUser = inviterNickname === userNickname;
-      
-      // 🔥 【HOTFIX-v1.3.44e】增强检测方法
-      const hasCreateAction = options.action === 'create' || 
-                             this.data?.isNewChat === true ||
-                             app.globalData?.recentCreateActions?.includes(inviteInfo.inviteId);
-      
-      const isInShareMode = app.globalData?.isInShareMode === true;
-      
-      const isRecentInvite = timeSinceInvite < 24 * 60 * 60 * 1000; // 24小时内
-      const isModeratelyRecent = timeSinceInvite < 7 * 24 * 60 * 60 * 1000; // 7天内
-      
-      // 智能昵称匹配
-      const smartNicknameMatch = this.smartNicknameMatch(inviterNickname, userNickname);
-      
-      // 🔥 【增强检测】添加更多创建者证据
-      const hasHistoricalEvidence = app.globalData?.chatCreators?.includes(currentUserOpenId + '_' + inviteInfo.inviteId);
-      const isRepeatVisit = wx.getStorageSync('visited_chats')?.includes(inviteInfo.inviteId);
-      const hasOwnershipMarkers = inviteInfo.createdBy === currentUserOpenId || 
-                                 inviteInfo.creator === currentUserOpenId ||
-                                 inviteInfo.owner === currentUserOpenId;
-      
-      // 🔥 【关键增强】如果用户反复进入同一个聊天，很可能是创建者
-      const visitHistory = wx.getStorageSync('chat_visit_history') || {};
-      const chatVisitCount = visitHistory[inviteInfo.inviteId] || 0;
-      const isFrequentVisitor = chatVisitCount >= 2;
-      
-      // 🔥 【CRITICAL-FIX-v5】修复A端身份误判 - 删除错误的强制B端判断逻辑
-      // 所有情况都进行统一的身份检测，不能仅基于时间强制判断身份
-      
-      console.log('🔥 [身份检测-v5] 开始全面身份验证');
-      console.log('🔥 [身份检测-v5] 邀请时间差:', timeSinceInvite, 'ms');
-      console.log('🔥 [身份检测-v5] 是否很新邀请:', isVeryRecentInvite);
-      console.log('🔥 [身份检测-v5] 邀请者昵称:', inviterNickname);
-      console.log('🔥 [身份检测-v5] 用户昵称:', userNickname);
-      console.log('🔥 [身份检测-v5] 是否同一用户:', isSameUser);
-      console.log('🔥 [身份检测-v5] 聊天ID包含用户ID:', chatIdContainsUserId);
+      // 阶段 2b:收集创建者证据(详见 modules/identity-resolver.js#collectCreatorEvidence)
+      const evidence = IdentityResolver.collectCreatorEvidence(this, options, inviteInfo, userInfo, preliminaryInviteDetected);
+      const {
+        currentUserNickName, currentUserOpenId,
+        chatIdContainsUserId,
+        inviteTime, currentTime, timeSinceInvite, isVeryRecentInvite,
+        inviterNickname, userNickname, isSameUser,
+        hasCreateAction, isInShareMode,
+        isRecentInvite, isModeratelyRecent,
+        smartNicknameMatch,
+        hasHistoricalEvidence, isRepeatVisit, hasOwnershipMarkers,
+        chatVisitCount, isFrequentVisitor,
+      } = evidence;
       
       // 🔥 【CRITICAL-FIX-v3】优先检查URL邀请参数，防止频繁访问误判
       
