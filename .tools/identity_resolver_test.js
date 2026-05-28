@@ -417,5 +417,88 @@ function resetMocks() {
 global.wx.getStorageSync = origGetStorageSync;
 
 
+// ============ computeCreatorByEvidence(阶段 2c) ============
+origLog('\n--- computeCreatorByEvidence ---');
+
+function buildEvidence(overrides) {
+  // 默认全 false / 空
+  return Object.assign({
+    chatIdContainsUserId: false,
+    isSameUser: false,
+    hasCreateAction: false,
+    isInShareMode: false,
+    hasHistoricalEvidence: false,
+    hasOwnershipMarkers: false,
+    isFrequentVisitor: false,
+    isRecentInvite: false,
+    smartNicknameMatch: false,
+    userNickname: '',
+  }, overrides || {});
+}
+
+// 全 false → 非创建者
+{
+  const r = Resolver.computeCreatorByEvidence(buildEvidence());
+  assertEqual('2c.全 false 非创建者', r, false);
+}
+
+// 7 个独立证据,任一为 true 都判为创建者
+const independentEvidenceKeys = [
+  'chatIdContainsUserId', 'isSameUser', 'hasCreateAction',
+  'isInShareMode', 'hasHistoricalEvidence', 'hasOwnershipMarkers',
+  'isFrequentVisitor',
+];
+for (const key of independentEvidenceKeys) {
+  const r = Resolver.computeCreatorByEvidence(buildEvidence({ [key]: true }));
+  assertEqual(`2c.${key} 单独命中 → 创建者`, r, true);
+}
+
+// (isRecentInvite && smartNicknameMatch) 组合
+{
+  const r1 = Resolver.computeCreatorByEvidence(buildEvidence({ isRecentInvite: true }));
+  assertEqual('2c.仅 isRecentInvite 不足', r1, false);
+  const r2 = Resolver.computeCreatorByEvidence(buildEvidence({ smartNicknameMatch: true }));
+  assertEqual('2c.仅 smartNicknameMatch 不足', r2, false);
+  const r3 = Resolver.computeCreatorByEvidence(buildEvidence({ isRecentInvite: true, smartNicknameMatch: true }));
+  assertEqual('2c.两者组合 → 创建者', r3, true);
+}
+
+// 频繁访问者备用提升:isFrequentVisitor=true 已经命中主决策,不进备用分支
+// 备用分支:主决策全 false,但 isFrequentVisitor=true(已经被主决策覆盖,所以备用永远不进)
+// 真正测试备用分支:主决策全 false 且 userNickname 非空非占位
+{
+  // isFrequentVisitor 已经包含在主决策中,主决策若 true 这里也 true
+  const r = Resolver.computeCreatorByEvidence(buildEvidence({
+    isFrequentVisitor: true,
+    userNickname: '向冬',
+  }));
+  assertEqual('2c.frequent + 真实昵称 → 创建者', r, true);
+}
+{
+  const r = Resolver.computeCreatorByEvidence(buildEvidence({
+    isFrequentVisitor: true,
+    userNickname: '朋友',
+  }));
+  // isFrequentVisitor 已经触发主决策,无论昵称如何都是 true
+  assertEqual('2c.frequent + 朋友昵称 仍然主决策命中 → 创建者', r, true);
+}
+{
+  // 备用分支被触发的唯一路径:主决策全 false 但 isFrequentVisitor=true,然而 isFrequentVisitor 已在主决策
+  // 所以备用分支理论上永远不会真正生效。这是原 chat.js 代码的现状。
+  // 我们仅测:无任何主决策证据,即使 userNickname 真实,也不应误判
+  const r = Resolver.computeCreatorByEvidence(buildEvidence({
+    userNickname: '向冬',
+  }));
+  assertEqual('2c.无任何主证据,即使 userNickname 真实,也是 false', r, false);
+}
+
+// 边界:返回值始终是 boolean
+{
+  const r = Resolver.computeCreatorByEvidence(buildEvidence({ chatIdContainsUserId: 'truthy_string' }));
+  assertEqual('2c.返回值是布尔(被 !!转换)', typeof r, 'boolean');
+  assertEqual('2c.truthy 输入 → true', r, true);
+}
+
+
 origLog(`\n--- ${pass} pass / ${fail} fail ---`);
 process.exit(fail > 0 ? 1 : 0);

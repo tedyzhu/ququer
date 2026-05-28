@@ -353,3 +353,51 @@ function collectCreatorEvidence(page, options, inviteInfo, userInfo, preliminary
 }
 
 module.exports.collectCreatorEvidence = collectCreatorEvidence;
+
+
+/**
+ * 阶段 2c(纯计算部分):基于 collectCreatorEvidence 输出,合成 isChatCreator 决策
+ *
+ * 这只覆盖"常规决策"部分,不含:
+ *  - 云端验证(占位符邀请 + 频繁访问者场景,留 onLoad 内,有 await)
+ *  - 强制 B 端(isDefinitelyReceiver,触发 this.clearIncorrectSystemMessages 副作用)
+ *  - 统一处理后的副作用(clearInviteInfo / addCreatorSystemMessage)
+ *  - 第二次"无 URL 邀请参数时的频繁访问者备用检测"(在 onLoad 决策表达式之后,需要 hasExplicitInviteParams)
+ *
+ * 等价于原 chat.js 第一段 isChatCreator 决策表达式(行 641-657),
+ * 即 evidence 7 个 OR 项 + (isRecentInvite && smartNicknameMatch) + 内嵌的频繁访问者备用检测。
+ *
+ * 注:此函数不输出 console.log(原 chat.js 在该段后还有大量 log,留在 onLoad 处保持原顺序),
+ * 仅作纯计算并返回结果。
+ *
+ * @param {Object} evidence - 由 collectCreatorEvidence 返回的对象
+ * @returns {boolean}
+ */
+function computeCreatorByEvidence(evidence) {
+  const {
+    chatIdContainsUserId, isSameUser, hasCreateAction,
+    isInShareMode, hasHistoricalEvidence, hasOwnershipMarkers,
+    isFrequentVisitor,
+    isRecentInvite, smartNicknameMatch,
+    userNickname,
+  } = evidence;
+
+  // 主决策表达式:7 个独立证据 OR + 时间+昵称组合
+  let isChatCreator = !!(chatIdContainsUserId ||
+    isSameUser ||
+    hasCreateAction ||
+    isInShareMode ||
+    hasHistoricalEvidence ||
+    hasOwnershipMarkers ||
+    isFrequentVisitor ||
+    (isRecentInvite && smartNicknameMatch));
+
+  // 内嵌备用检测:主决策未命中,但用户频繁访问且有真实昵称
+  if (!isChatCreator && isFrequentVisitor && userNickname && userNickname !== '朋友') {
+    isChatCreator = true;
+  }
+
+  return isChatCreator;
+}
+
+module.exports.computeCreatorByEvidence = computeCreatorByEvidence;

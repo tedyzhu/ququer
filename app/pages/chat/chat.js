@@ -637,23 +637,11 @@ Page({
         console.log('🔥 [强制B端] 设置B端身份: isFromInvite=true, inviter=', inviter);
       } else {
         // 🔥 【创建者检测】仅在没有明确邀请参数时才考虑频繁访问等因素
-        // 先进行完整的创建者身份检测（不受URL参数干扰）
-        isChatCreator = chatIdContainsUserId || 
-                       isSameUser ||
-                       hasCreateAction ||
-                       isInShareMode ||
-                       hasHistoricalEvidence ||
-                       hasOwnershipMarkers ||
-                       isFrequentVisitor || // 🔥 恢复：频繁访问者检测不受URL参数干扰
-                       (isRecentInvite && smartNicknameMatch);
+        // 详见 modules/identity-resolver.js#computeCreatorByEvidence(纯计算,
+        // 已合并主决策 + 频繁访问者备用提升)
+        isChatCreator = IdentityResolver.computeCreatorByEvidence(evidence);
         
         console.log('🔥 [创建者检测] 无明确邀请参数，进行完整创建者检测:', isChatCreator);
-        
-        // 🔥 【备用检测】对于频繁访问且有真实昵称的用户，倾向于识别为创建者
-        if (!isChatCreator && isFrequentVisitor && userNickname && userNickname !== '朋友') {
-          console.log('🔥 [备用检测] 频繁访问者且有真实昵称，可能是创建者重新登录');
-          isChatCreator = true;
-        }
       }
       } // 🔥 结束云端验证条件判断
       
