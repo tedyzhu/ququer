@@ -140,6 +140,30 @@ chat.js: 5948 → 5759 (-189 行)。
 `modules/test-methods.js` 里 4 个直接调云函数的引用保留(它们只在 console 调用,
 且云函数 guard 已经会返回 disabled,行为安全)。
 
+## P3#1 阶段 1 — identity-resolver 渐进式抽离
+
+**目标**:把 onLoad 1096 行身份判定主流程拆出到 `modules/identity-resolver.js`。
+**策略**:分 5 个阶段(详见 `.kiro/specs/chat-identity-resolver-module/`),每阶段独立 PR 控风险。
+
+### 阶段 1 已完成(2026-05-27)
+
+- 抽离 onLoad 头部 URL 参数解析 + 邀请信息清理(原行 471-525,55 行)
+- 接口设计:`prepareLoadContext(page, options) → LoadContext`(纯函数 + 副作用函数分离)
+- chat.js: 5725 → 5682 (-43 行)
+- 新增 `.tools/identity_resolver_test.js` 50 用例(parseLoadOptions / cleanupStaleInviteInfo / prepareLoadContext 集成 3 类)
+- `bash run_all_tests.sh` 6 个测试全过(共 252 用例)
+
+### 阶段 2-5 待实施
+
+| 阶段 | 行数 | 内容 | 风险 |
+| --- | --- | --- | --- |
+| 2 | 526-1010 | 身份判定核心 485 行 | 高 |
+| 3 | 1011-1280 | 身份决议 + 标题/系统消息 270 行 | 中 |
+| 4 | 1281-1410 | 分支动作(邀请进入 / 新聊天 / 已存在)130 行 | 中 |
+| 5 | 1411-1477 | 后处理(B 端补充消息 / 阅后即焚检查)67 行 | 低 |
+
+后续阶段由独立 spec 与 PR 推进,每阶段必须先有静态测试基线再抽离。
+
 ## P3 候选(尚未启动)
 
 按 risk/benefit 排序:
