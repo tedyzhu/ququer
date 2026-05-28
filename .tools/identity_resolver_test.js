@@ -498,6 +498,191 @@ for (const key of independentEvidenceKeys) {
   assertEqual('2c.返回值是布尔(被 !!转换)', typeof r, 'boolean');
   assertEqual('2c.truthy 输入 → true', r, true);
 }
+// ============ runPostLoadHooks(阶段 5) ============
+origLog('\n--- runPostLoadHooks ---');
+
+// runPostLoadHooks 内部用 setTimeout,我们用 sinon 风格的同步替代
+function makeFakeTimers() {
+  const tasks = [];
+  const origSetTimeout = global.setTimeout;
+  global.setTimeout = function(fn, delay) {
+    tasks.push({ fn, delay });
+    return tasks.length;
+  };
+  return {
+    runAll: () => {
+      // 嵌套 setTimeout(fn 执行时再注册新任务)需要循环处理:
+      // 每轮取出当前所有未跑的 task,按 delay 升序执行;新 task 进 next 轮
+      let processed = 0;
+      while (processed < tasks.length) {
+        const batch = tasks.slice(processed).sort((a, b) => a.delay - b.delay);
+        processed = tasks.length;
+        for (const t of batch) {
+          try { t.fn(); } catch (e) { /* swallow */ }
+        }
+      }
+    },
+    restore: () => { global.setTimeout = origSetTimeout; },
+    tasks,
+  };
+}
+
+// 用例 1:同步部分立即生效
+{
+  const setDataCalls = [];
+  const page = {
+    data: {},
+    setData: (patch) => { Object.assign(page.data, patch); setDataCalls.push(patch); },
+  };
+  const timers = makeFakeTimers();
+  withSilence(() => Resolver.runPostLoadHooks(page));
+  timers.restore();
+  // 同步:needsJoinMessage / inviterDisplayName 立即重置
+  assertEqual('5.同步.needsJoinMessage 重置', page.needsJoinMessage, false);
+  assertEqual('5.同步.inviterDisplayName 重置', page.inviterDisplayName, '');
+  // 同步:globalBEndMessageAdded / bEndSystemMessageAdded 立即重置
+  assertEqual('5.同步.globalBEndMessageAdded 重置', page.globalBEndMessageAdded, false);
+  assertEqual('5.同步.bEndSystemMessageAdded 重置', page.bEndSystemMessageAdded, false);
+  // 同步:setData 调用包含三个标志
+  assert('5.同步.setData 重置 hasCheckedBurnAfterReading',
+    setDataCalls.some(p => p.hasCheckedBurnAfterReading === false));
+  assert('5.同步.setData 重置 hasAddedConnectionMessage',
+    setDataCalls.some(p => p.hasAddedConnectionMessage === false));
+  assert('5.同步.setData 重置 isNewChatSession',
+    setDataCalls.some(p => p.isNewChatSession === true));
+  // 异步 timers 注册了 3 个顶层 + 1 个嵌套
+  // (1500/500/2000 三个外层。1500ms 内部嵌套 500ms 在 fn 执行时才注册)
+  assertEqual('5.同步.外层注册了 3 个 setTimeout', timers.tasks.length, 3);
+}
+
+// 用例 2:1500ms B 端检查 — isFromInvite=true 时调用 performBEndSystemMessageCheck
+{
+  let perfCalled = 0;
+  let dedupeCalled = 0;
+  const page = {
+    data: { isFromInvite: true },
+    setData: () => {},
+    performBEndSystemMessageCheck: () => { perfCalled++; },
+    removeDuplicateBEndMessages: () => { dedupeCalled++; },
+  };
+  const timers = makeFakeTimers();
+  withSilence(() => Resolver.runPostLoadHooks(page));
+  withSilence(() => timers.runAll());
+  timers.restore();
+  assertEqual('5.B端 perf 被调用', perfCalled, 1);
+  assertEqual('5.B端 dedupe 被调用', dedupeCalled, 1);
+}
+
+// 用例 3:1500ms B 端检查 — isFromInvite=false 时跳过
+{
+  let perfCalled = 0;
+  let dedupeCalled = 0;
+  const page = {
+    data: { isFromInvite: false },
+    setData: () => {},
+    performBEndSystemMessageCheck: () => { perfCalled++; },
+    removeDuplicateBEndMessages: () => { dedupeCalled++; },
+  };
+  const timers = makeFakeTimers();
+  withSilence(() => Resolver.runPostLoadHooks(page));
+  withSilence(() => timers.runAll());
+  timers.restore();
+  assertEqual('5.A端 perf 不被调用', perfCalled, 0);
+  assertEqual('5.A端 dedupe 不被调用', dedupeCalled, 0);
+}
+
+// 用例 4:2000ms 阅后即焚 — 冷却期外正常调用
+{
+  let cleanupCalled = 0;
+  const page = {
+    data: {
+      lastCleanupTime: Date.now() - 120000, // 2 分钟前
+      cleanupCooldownPeriod: 60000, // 60 秒冷却
+    },
+    setData: () => {},
+    checkBurnAfterReadingCleanup: () => { cleanupCalled++; },
+  };
+  const timers = makeFakeTimers();
+  withSilence(() => Resolver.runPostLoadHooks(page));
+  withSilence(() => timers.runAll());
+  timers.restore();
+  assertEqual('5.冷却期外 cleanup 调用', cleanupCalled, 1);
+}
+
+// 用例 5:2000ms 阅后即焚 — 冷却期内跳过
+{
+  let cleanupCalled = 0;
+  const page = {
+    data: {
+      lastCleanupTime: Date.now() - 30000, // 30 秒前
+      cleanupCooldownPeriod: 60000,
+    },
+    setData: () => {},
+    checkBurnAfterReadingCleanup: () => { cleanupCalled++; },
+  };
+  const timers = makeFakeTimers();
+  withSilence(() => Resolver.runPostLoadHooks(page));
+  withSilence(() => timers.runAll());
+  timers.restore();
+  assertEqual('5.冷却期内 cleanup 跳过', cleanupCalled, 0);
+}
+
+// 用例 6:2000ms 阅后即焚 — 无 lastCleanupTime 时正常调用(首次进入)
+{
+  let cleanupCalled = 0;
+  const page = {
+    data: { lastCleanupTime: null, cleanupCooldownPeriod: 60000 },
+    setData: () => {},
+    checkBurnAfterReadingCleanup: () => { cleanupCalled++; },
+  };
+  const timers = makeFakeTimers();
+  withSilence(() => Resolver.runPostLoadHooks(page));
+  withSilence(() => timers.runAll());
+  timers.restore();
+  assertEqual('5.首次进入 cleanup 正常调用', cleanupCalled, 1);
+}
+
+// 用例 7:500ms loading 清除
+{
+  const setDataCalls = [];
+  const page = {
+    data: {},
+    setData: (patch) => { setDataCalls.push(patch); },
+  };
+  const timers = makeFakeTimers();
+  withSilence(() => Resolver.runPostLoadHooks(page));
+  withSilence(() => timers.runAll());
+  timers.restore();
+  // setData 至少被调一次清除 isLoading
+  assert('5.500ms isLoading 被清除',
+    setDataCalls.some(p => p.isLoading === false));
+  assert('5.500ms isCreatingChat 被清除',
+    setDataCalls.some(p => p.isCreatingChat === false));
+  assert('5.500ms chatCreationStatus 清空',
+    setDataCalls.some(p => p.chatCreationStatus === ''));
+}
+
+// 用例 8:page 缺方法时 typeof 守卫不抛错
+{
+  const page = {
+    data: { isFromInvite: true, lastCleanupTime: null, cleanupCooldownPeriod: 60000 },
+    setData: () => {},
+    // 故意不提供 performBEndSystemMessageCheck / removeDuplicateBEndMessages / checkBurnAfterReadingCleanup
+  };
+  const timers = makeFakeTimers();
+  let threw = false;
+  try {
+    withSilence(() => Resolver.runPostLoadHooks(page));
+    withSilence(() => timers.runAll());
+  } catch (e) {
+    threw = true;
+  }
+  timers.restore();
+  assert('5.page 缺方法时不抛错', !threw);
+}
+
+
+
 
 
 origLog(`\n--- ${pass} pass / ${fail} fail ---`);

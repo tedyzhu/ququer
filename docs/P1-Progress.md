@@ -156,7 +156,7 @@ chat.js: 5948 → 5759 (-189 行)。
 ### 阶段 2(部分)已完成(2026-05-28)
 
 阶段 2 原计划 485 行身份判定核心一刀抽离,经评估**风险极高**(异步副作用、多 let 变量重写、矛盾 hotfix 历史),
-拆为 4 个子阶段渐进抽离。本次完成前 3 个子阶段:
+拆为 4 个子阶段渐进抽离。已完成 3 个子阶段:
 
 - **2a**: `detectInvitePresence(options)` — URL 参数预检测,纯函数,18 行
 - **2b**: `collectCreatorEvidence(page, options, inviteInfo, userInfo, preliminaryInviteDetected)` — stored invite 内的 14 个证据收集,弱状态(只读),70 行
@@ -166,8 +166,25 @@ chat.js: 5948 → 5759 (-189 行)。
 - chat.js: 5682 → 5590 (-92 行)
 - 新增 60 个测试用例(2a 9 + 2b 34 + 2c 17),共 109 个,全过
 
-后续 2d 子阶段:
-- **2d**: 云端验证(`await wx.cloud` + 占位符邀请检测) + 副作用调用(`clearIncorrectSystemMessages` / `addCreatorSystemMessage` 等)— 暂留 onLoad,等阶段 4 重新设计后再考虑
+### 阶段 5 已完成(2026-05-28)
+
+抽离 onLoad 末尾 4 个延迟副作用 hooks 为模块函数 `runPostLoadHooks(page)`:
+- 1500ms B 端系统消息安全检查(嵌套 500ms 去重)
+- 同步:重置 `needsJoinMessage` / `inviterDisplayName` / `globalBEndMessageAdded` / `bEndSystemMessageAdded` 等 4 个标志
+- 500ms 清除 loading 状态(`isLoading` / `isCreatingChat` / `chatCreationStatus`)
+- 2000ms 阅后即焚检查(带 60s 冷却期)
+
+抽离后:
+- chat.js: 5590 → 5537 (-53 行)
+- 新增 19 个测试用例,共 128 个,全过
+
+### 阶段 2d / 3 / 4 待实施
+
+| 阶段 | 内容 | 风险 |
+| --- | --- | --- |
+| 2d | 云端验证(`await wx.cloud`)+ 副作用调用 | 高 |
+| 3 | 身份决议 + 标题/系统消息 ~270 行 | 中 |
+| 4 | 分支动作 ~130 行 | 中 |
 
 ### 阶段 3-5 待实施
 

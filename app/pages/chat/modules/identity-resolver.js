@@ -401,3 +401,85 @@ function computeCreatorByEvidence(evidence) {
 }
 
 module.exports.computeCreatorByEvidence = computeCreatorByEvidence;
+
+
+// ========== 阶段 5:onLoad 后处理 hooks ==========
+
+/**
+ * 阶段 5:onLoad 末尾的 4 个延迟副作用 hooks
+ *
+ * 包括:
+ *  - B 端系统消息安全检查(1500ms 后,仅 isFromInvite=true 时执行)
+ *  - 重置阅后即焚 / 系统消息防重复标记
+ *  - 清除 loading 状态(500ms 后)
+ *  - 阅后即焚检查(2000ms 后,带冷却期)
+ *
+ * 与原 chat.js 行 1285-1340 的 4 个独立 setTimeout 块行为等价。
+ *
+ * 设计:
+ * - 内部仍用 setTimeout 异步触发,与原代码时序完全一致(1500/500/2000ms)
+ * - 同步部分(标志位重置)立即执行
+ * - 所有 page 方法调用通过 typeof 守卫,与原代码 `&&` 短路一致
+ *
+ * @param {Object} page - Page 实例
+ */
+function runPostLoadHooks(page) {
+  // 1500ms:B 端系统消息安全检查
+  setTimeout(function() {
+    if (page.data && page.data.isFromInvite) {
+      if (typeof page.performBEndSystemMessageCheck === 'function') {
+        page.performBEndSystemMessageCheck();
+      }
+      // 额外保险:清理可能的重复消息(仅 B 端)
+      setTimeout(function() {
+        if (typeof page.removeDuplicateBEndMessages === 'function') {
+          page.removeDuplicateBEndMessages();
+        }
+      }, 500);
+    } else {
+      console.log('🛡️ [B端检查] A端环境，跳过B端系统消息安全检查与去重');
+    }
+  }, 1500);
+
+  // 同步:重置 B 端加入消息标志
+  // 取消旧的"预添加 B 端系统消息"策略,改为在 joinByInvite 成功后统一添加
+  page.needsJoinMessage = false;
+  page.inviterDisplayName = '';
+
+  // 同步:重置阅后即焚和系统消息标记(不清空已处理标志,防止重复补充)
+  page.setData({
+    hasCheckedBurnAfterReading: false,
+    hasAddedConnectionMessage: false,
+    isNewChatSession: true,
+  });
+  page.globalBEndMessageAdded = false;
+  page.bEndSystemMessageAdded = false;
+
+  // 500ms:清除 loading 状态
+  setTimeout(function() {
+    console.log('🔧 [页面初始化] 确保清除loading状态，保持界面流畅');
+    page.setData({
+      isLoading: false,
+      isCreatingChat: false,
+      chatCreationStatus: '',
+    });
+    console.log('🔧 [页面初始化] ✅ loading状态已清除');
+  }, 500);
+
+  // 2000ms:阅后即焚检查(带冷却期)
+  setTimeout(function() {
+    console.log('🔥 [页面初始化] 执行阅后即焚检查');
+    var currentTime = Date.now();
+    var lastCleanupTime = page.data.lastCleanupTime;
+    var cooldownPeriod = page.data.cleanupCooldownPeriod;
+    if (lastCleanupTime && (currentTime - lastCleanupTime) < cooldownPeriod) {
+      console.log('🔥 [页面初始化] 仍在清理冷却期内，跳过阅后即焚检查');
+      return;
+    }
+    if (typeof page.checkBurnAfterReadingCleanup === 'function') {
+      page.checkBurnAfterReadingCleanup();
+    }
+  }, 2000);
+}
+
+module.exports.runPostLoadHooks = runPostLoadHooks;
