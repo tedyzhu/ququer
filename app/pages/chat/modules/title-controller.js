@@ -55,7 +55,7 @@ function fetchRealInviterNameAndUpdateTitle() {
         );
 
         if (otherParticipant && otherParticipant.nickName &&
-            !['朋友', '邀请者', '用户', '好友'].includes(otherParticipant.nickName)) {
+            !ChatHelpers.isPlaceholderNickname(otherParticipant.nickName)) {
           const realNickname = otherParticipant.nickName;
           const newTitle = `我和${realNickname}（2）`;
 
@@ -138,9 +138,7 @@ function updateReceiverTitleWithRealNames() {
       });
 
       if (potentialInviter && potentialInviter.nickName &&
-          potentialInviter.nickName !== '用户' &&
-          potentialInviter.nickName !== '朋友' &&
-          potentialInviter.nickName !== '好友') {
+          !ChatHelpers.isPlaceholderNickname(potentialInviter.nickName)) {
 
         const realInviterName = potentialInviter.nickName;
         const newTitle = `我和${realInviterName}（2）`;
@@ -179,9 +177,7 @@ function updateReceiverTitleWithRealNames() {
   });
 
   if (otherParticipant && otherParticipant.nickName &&
-      otherParticipant.nickName !== '用户' &&
-      otherParticipant.nickName !== '朋友' &&
-      otherParticipant.nickName !== '好友') {
+      !ChatHelpers.isPlaceholderNickname(otherParticipant.nickName)) {
 
     const realInviterName = otherParticipant.nickName;
     const newTitle = `我和${realInviterName}（2）`;
@@ -266,7 +262,7 @@ function updateTitleForReceiver(inviterNickName) {
       console.log('🔗 [接收方修复] 从URL解码的邀请者:', urlInviter);
 
       // 如果 URL 中的邀请者昵称更具体,使用它
-      if (urlInviter && urlInviter !== '朋友' && urlInviter !== '好友' && urlInviter !== '邀请者' && urlInviter !== '用户') {
+      if (urlInviter && !ChatHelpers.isPlaceholderNickname(urlInviter)) {
         finalInviterName = urlInviter;
         console.log('🔗 [接收方修复] ✅ 使用URL中的真实邀请者昵称:', finalInviterName);
       }
@@ -276,7 +272,7 @@ function updateTitleForReceiver(inviterNickName) {
   }
 
   // 🔥 【关键修复】如果仍然没有获取到有效昵称,从参与者列表获取
-  if (!finalInviterName || finalInviterName === '好友' || finalInviterName === '朋友' || finalInviterName === '邀请者' || finalInviterName === '用户') {
+  if (!finalInviterName || ChatHelpers.isPlaceholderNickname(finalInviterName)) {
     console.log('🔗 [接收方标题] ⚠️ 邀请者昵称仍不明确,从参与者列表获取...');
 
     const participants = this.data.participants || [];
@@ -287,7 +283,7 @@ function updateTitleForReceiver(inviterNickName) {
       return isNotSelf;
     });
 
-    if (otherParticipant && otherParticipant.nickName && otherParticipant.nickName !== '用户') {
+    if (otherParticipant && otherParticipant.nickName && !ChatHelpers.isPlaceholderNickname(otherParticipant.nickName)) {
       finalInviterName = otherParticipant.nickName;
       console.log('🔗 [接收方标题] ✅ 从参与者列表获取到邀请者昵称:', finalInviterName);
     } else {
@@ -495,7 +491,7 @@ function updateDynamicTitleWithRealNames() {
         }
       }
 
-      if (inviterFromUrl && inviterFromUrl !== '好友' && inviterFromUrl !== '朋友') {
+      if (inviterFromUrl && !ChatHelpers.isPlaceholderNickname(inviterFromUrl)) {
         title = `我和${inviterFromUrl}（2）`;
         console.log('🏷️ [真实姓名] 使用URL中的邀请者昵称:', inviterFromUrl);
       } else {
