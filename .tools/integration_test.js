@@ -309,4 +309,17 @@ if (jbiMissing.length === 0) {
   process.exit(1);
 }
 
+const RecoveryTools = require(path.join(__dirname, '../app/pages/chat/modules/recovery-tools.js'));
+const fakePage12 = { data: {}, setData: () => {} };
+RecoveryTools.attach(fakePage12);
+const rtRequired = ['fixBEndDisplayImmediately', 'checkAndFixNicknames', 'manuallyFixConnection', 'forceFixSpecificUserNicknames', 'checkAndClearConnectionStatus', 'forceFixParticipantDuplicates', 'checkAndFixMessageSync', 'restartMessageListener', 'checkSendMessageFunction', 'fixMessageSending', 'recreateChatRecord', 'checkMessagePermissions'];
+const rtMissing = rtRequired.filter(k => typeof fakePage12[k] !== 'function');
+if (rtMissing.length === 0) {
+  const rtCount = Object.keys(fakePage12).filter(k => typeof fakePage12[k] === 'function').length;
+  console.log(`   ✅ RecoveryTools.attach 挂上 ${rtCount} 个方法`);
+} else {
+  console.error('   ❌ RecoveryTools 缺失:', rtMissing);
+  process.exit(1);
+}
+
 console.log('\n[完成] chat.js 集成测试全部通过!');

@@ -297,7 +297,27 @@ attach 模式。该方法职责:
 | --- | --- | --- | --- |
 | `sendMessage` | 259 | 不可抽 | wxml `bindconfirm` 绑定 |
 | `showMessageError` | 48 | 低 | 与 sendMessage 紧耦合,留 chat.js |
-| 各种 fix/check 方法 | 80-105 | 低 | forceFixParticipantDuplicates / manuallyFixConnection / fixMessageSending 等可批量考虑 |
+
+### `recovery-tools` 已完成(2026-05-28) — P3 单 PR 最大削减纪录
+
+附带删除死代码 `tryCreateChat`(60 行,无任何调用)。
+
+抽离 12 个 fix/check/restart/recreate 类应急修复方法到 `modules/recovery-tools.js`,attach 模式:
+- fixBEndDisplayImmediately / checkAndFixNicknames / manuallyFixConnection /
+  forceFixSpecificUserNicknames / checkAndClearConnectionStatus /
+  forceFixParticipantDuplicates / checkAndFixMessageSync /
+  restartMessageListener / checkSendMessageFunction /
+  fixMessageSending / recreateChatRecord / checkMessagePermissions
+
+抽离后:
+- chat.js: 3549 → 2672 (**-877 行,P3 单 PR 最大削减纪录**,累计 **-82.8%**)
+- 新增 `modules/recovery-tools.js`(854 行)
+- integration_test 加第 12 个 attach 检查
+- bash run_all_tests.sh 6 个测试全过(187 用例)
+
+注:这些方法跟 chat-debug-tools.js 边界模糊,后续可能合并:
+- chat-debug-tools.js: console-only 调试工具(33 个),给开发者排错
+- recovery-tools.js: chat.js 内部业务路径调用的应急修复
 
 ### 阶段 3-5 待实施
 
