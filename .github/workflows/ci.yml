@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: 静态测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 显示 Node.js 版本
+        run: node --version
+
+      - name: 语法检查 chat.js
+        run: node -c app/pages/chat/chat.js
+
+      - name: 语法检查所有 chat 模块
+        run: |
+          set -e
+          for f in app/pages/chat/modules/*.js; do
+            node -c "$f"
+          done
+
+      - name: 运行完整测试套件
+        run: bash .tools/run_all_tests.sh
