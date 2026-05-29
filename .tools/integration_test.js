@@ -195,7 +195,7 @@ console.log(`   ✅ VoiceRecorder.init 挂上 ${vrCount} 个方法`);
 const SystemMessage = require(path.join(__dirname, '../app/pages/chat/modules/system-message.js'));
 const fakePage3 = { data: {}, setData: () => {} };
 SystemMessage.attach(fakePage3);
-const smRequired = ['addSystemMessage', 'startSystemMessageFade'];
+const smRequired = ['addSystemMessage', 'startSystemMessageFade', 'removeWrongCreatorMessages', 'removeDuplicateBEndMessages'];
 const smMissing = smRequired.filter(k => typeof fakePage3[k] !== 'function');
 if (smMissing.length === 0) {
   const smCount = Object.keys(fakePage3).filter(k => typeof fakePage3[k] === 'function').length;
