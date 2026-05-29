@@ -18,7 +18,7 @@
 
 ## 模块化重构
 
-P0/P1/P2 重构已完成,`app/pages/chat/chat.js` 从 15500 → 2565 行(-83.5%)。
+P0/P1/P2 重构已完成,`app/pages/chat/chat.js` 从 15500 → 2485 行(-84.0%)。
 12 个模块下沉到 `app/pages/chat/modules/`:
 
 | 模块 | 行数 | 职责 |
@@ -30,7 +30,7 @@ P0/P1/P2 重构已完成,`app/pages/chat/chat.js` 从 15500 → 2565 行(-83.5%)
 | `share-utils.js` | 103 | 分享卡片 payload + 访问记录 |
 | `voice-recorder.js` | 318 | 语音录制 / 播放子系统 |
 | `test-methods.js` | 2017 | 23 个调试 API,仅在开关启用时挂载 |
-| `system-message.js` | 1310 | 系统消息添加 / 淡出 / 校正(13 方法) |
+| `system-message.js` | 1396 | 系统消息添加 / 淡出 / 校正 / 清理(15 方法) |
 | `title-controller.js` | 809 | A/B 端标题控制(8 方法) |
 | `burn-after-read.js` | 433 | 阅后即焚定时器子系统(8 方法) |
 | `participant-listener.js` | 1904 | 参与者实时监听 + 真实昵称获取(9 方法) |
@@ -137,7 +137,7 @@ ququer/
 
 记录在此以便后续迭代取舍。**P2 重构(2026-05)后状态**:
 
-- `app/pages/chat/chat.js` 已从 15500 → 2565 行(-83.5%),12 个模块下沉到 `app/pages/chat/modules/`(详见 `docs/P1-Progress.md`)
+- `app/pages/chat/chat.js` 已从 15500 → 2485 行(-84.0%),12 个模块下沉到 `app/pages/chat/modules/`(详见 `docs/P1-Progress.md`)
 - ✅ `getConversations` 已从 N+1 改为 1+1 in 查询(commit `916e725`)
 - ✅ `debugUserDatabase` 已加 `DEBUG_TOOLS_ENABLED` 环境变量 guard,但前端 `this.debugUserDatabase()` 入口仍暴露,后续应彻底移除
 - ⚠️ 剩余大方法待评估:`onLoad` 1096 行(身份判定主流程,`identity-resolver` 模块的目标)、`fetchMessages` 462 行、`startMessageListener` 390 行、`joinChatByInvite` 335 行、`fetchMessagesAndMerge` 307 行

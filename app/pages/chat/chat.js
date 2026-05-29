@@ -1105,31 +1105,6 @@ Page({
   },
 
 
-  /**
-   * 🔥 【新增】移除b端错误的创建消息
-   */
-  removeWrongCreatorMessages: function() {
-    const { isFromInvite, messages } = this.data;
-    
-    // 只有b端需要移除错误的创建消息
-    if (!isFromInvite || !messages) return;
-    
-    const filteredMessages = messages.filter(msg => {
-      if (msg.isSystem && msg.content && msg.content.includes('您创建了私密聊天')) {
-        console.log('🔄 [b端清理] 移除错误的创建消息:', msg.content);
-        return false;
-      }
-      return true;
-    });
-    
-    if (filteredMessages.length !== messages.length) {
-      this._localMessageCache = filteredMessages;
-      this.setData({
-        messages: filteredMessages
-      });
-      console.log('🔄 [b端清理] ✅ 已移除错误的创建消息');
-    }
-  },
 
 
 
@@ -2508,59 +2483,4 @@ cleanupStaleData: function() {
     TestMethods.attach(this);
   },
   
-  /**
-   * 🔥 【HOTFIX-v1.3.57】清理重复的B端系统消息
-   */
-  removeDuplicateBEndMessages: function() {
-    console.log('🔥 [清理重复消息-v57] 开始清理重复的B端系统消息');
-    
-    const messages = this.data.messages || [];
-    const isFromInvite = !!this.data.isFromInvite;
-    if (!isFromInvite) {
-      console.log('🛡️ [清理重复消息-v57] A端环境，跳过B端去重');
-      return;
-    }
-    const joinMessages = [];
-    const otherMessages = [];
-    
-    // 分离加入消息和其他消息
-    messages.forEach(msg => {
-      if (msg && msg.isSystem && typeof msg.content === 'string' && msg.content.includes('加入') && msg.content.includes('的聊天')) {
-        joinMessages.push(msg);
-      } else if (msg && msg.isSystem && typeof msg.content === 'string' && /^.+加入聊天$/.test(msg.content)) {
-        // 始终移除 A 端样式“XX加入聊天”（B端不应出现）
-        console.log('🧹 [清理重复消息-v57] 移除A端样式系统消息:', msg.content);
-        // 不加入otherMessages
-      } else {
-        otherMessages.push(msg);
-      }
-    });
-    
-    if (joinMessages.length <= 1) {
-      console.log('🔥 [清理重复消息-v57] 没有重复的B端加入消息');
-      return;
-    }
-    
-    console.log(`🔥 [清理重复消息-v57] 发现${joinMessages.length}条重复的B端加入消息，保留最新的一条`);
-    
-    // 只保留最新的加入消息（通常是最后一个）
-    const latestJoinMessage = joinMessages[joinMessages.length - 1];
-    
-    // 重新组合消息列表
-    const cleanedMessages = [...otherMessages, latestJoinMessage];
-    
-    // 按时间排序（如果有时间戳的话）
-    cleanedMessages.sort((a, b) => {
-      if (a.timestamp && b.timestamp) {
-        return a.timestamp - b.timestamp;
-      }
-      return 0;
-    });
-    
-    this.setData({
-      messages: cleanedMessages
-    });
-    
-    console.log(`🔥 [清理重复消息-v57] ✅ 重复消息清理完成，从${messages.length}条减少到${cleanedMessages.length}条`);
-  }
 });
