@@ -9,71 +9,77 @@ set -e
 cd "$(dirname "$0")/.."
 
 echo "================================================================"
-echo "1/11 chat.js 集成测试(require/Page/wxml/模块导出/attach)"
+echo "1/12 chat.js 集成测试(require/Page/wxml/模块导出/attach)"
 echo "================================================================"
 node .tools/integration_test.js
 
 echo ""
 echo "================================================================"
-echo "2/11 chat-helpers 纯函数行为测试"
+echo "2/12 chat-helpers 纯函数行为测试"
 echo "================================================================"
 node .tools/chat_helpers_test.js
 
 echo ""
 echo "================================================================"
-echo "3/11 identity-utils 行为测试"
+echo "3/12 identity-utils 行为测试"
 echo "================================================================"
 node .tools/identity_utils_test.js
 
 echo ""
 echo "================================================================"
-echo "4/11 sanitize 双实现一致性测试(joinByInvite + cleanTempUserData)"
+echo "4/12 sanitize 双实现一致性测试(joinByInvite + cleanTempUserData)"
 echo "================================================================"
 node .tools/sanitize_participants_test.js
 
 echo ""
 echo "================================================================"
-echo "5/11 app.ensureLogin 时序测试"
+echo "5/12 app.ensureLogin 时序测试"
 echo "================================================================"
 node .tools/login_race_test.js
 
 echo ""
 echo "================================================================"
-echo "6/11 identity-resolver 行为测试"
+echo "6/12 identity-resolver 行为测试"
 echo "================================================================"
 node .tools/identity_resolver_test.js
 
 echo ""
 echo "================================================================"
-echo "7/11 system-message 关键方法行为测试"
+echo "7/12 system-message 关键方法行为测试"
 echo "================================================================"
 node .tools/system_message_test.js
 
 echo ""
 echo "================================================================"
-echo "8/11 burn-after-read 关键方法行为测试"
+echo "8/12 burn-after-read 关键方法行为测试"
 echo "================================================================"
 node .tools/burn_after_read_test.js
 
 echo ""
 echo "================================================================"
-echo "9/11 message-fetch 关键路径行为测试"
+echo "9/12 message-fetch 关键路径行为测试"
 echo "================================================================"
 node .tools/message_fetch_test.js
 
 echo ""
 echo "================================================================"
-echo "10/11 message-listener 关键路径行为测试"
+echo "10/12 message-listener 关键路径行为测试"
 echo "================================================================"
 node .tools/message_listener_test.js
 
 echo ""
 echo "================================================================"
-echo "11/11 participant-listener 关键路径行为测试"
+echo "11/12 participant-listener 关键路径行为测试"
 echo "================================================================"
 node .tools/participant_listener_test.js
 
 echo ""
 echo "================================================================"
-echo "[完成] 全部 11 个静态测试通过"
+echo "12/12 message-polling 关键路径行为测试"
+echo "================================================================"
+node .tools/message_polling_test.js
+
+echo ""
+echo "================================================================"
+echo "[完成] 全部 12 个静态测试通过"
 echo "================================================================"
