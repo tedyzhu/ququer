@@ -127,14 +127,15 @@ app/pages/chat/modules/
 
 ## 测试套件
 
-`bash .tools/run_all_tests.sh` — 7 个测试,共 217 用例:
+`bash .tools/run_all_tests.sh` — 8 个测试,共 459 个 PASS:
 
-| 测试 | 用例数 | 覆盖 |
+| 测试 | PASS 数 | 覆盖 |
 | --- | --- | --- |
-| `integration_test.js` | 结构性 | chat.js + 15 个 attach 模块的 require/attach 校验 |
-| `chat_helpers_test.js` | 101 | 8 个纯函数 |
-| `identity_resolver_test.js` | 50 | parseLoadOptions / cleanupStaleInviteInfo / 集成 |
+| `integration_test.js` | 结构性 | chat.js + 20 个 attach 模块的 require/attach 校验 |
+| `chat_helpers_test.js` | 110 | 8 个纯函数 + normalizeTimestamp(P4 新增 9) |
+| `identity_resolver_test.js` | 187 | parseLoadOptions / cleanupStaleInviteInfo / 集成 |
 | `identity_utils_test.js` | 33 | 身份判定 9 条决策路径 |
 | `sanitize_participants_test.js` | 53 | joinByInvite + cleanTempUserData 双实现一致性 |
 | `login_race_test.js` | 10 | app.ensureLogin 4 种时序场景 |
 | `system_message_test.js` | 30 | addSystemMessage / removeWrongCreatorMessages / removeDuplicateBEndMessages / clearIncorrectSystemMessages / addCreatorSystemMessage(P4 新增) |
+| `burn_after_read_test.js` | 36 | destroyMessage / markMessageAsReadAndDestroy / permanentlyDeleteMessage / clearAllDestroyTimers / processOfflineMessages(P4 新增) |
