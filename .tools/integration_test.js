@@ -335,4 +335,17 @@ if (mpMissing.length === 0) {
   process.exit(1);
 }
 
+const DbHelpers = require(path.join(__dirname, '../app/pages/chat/modules/db-helpers.js'));
+const fakePage14 = { data: {}, setData: () => {} };
+DbHelpers.attach(fakePage14);
+const dbRequired = ['updateUserInfoInDatabase', 'updateSpecificUserInfo', 'createConversationRecord', 'syncParticipantsToDatabase'];
+const dbMissing = dbRequired.filter(k => typeof fakePage14[k] !== 'function');
+if (dbMissing.length === 0) {
+  const dbCount = Object.keys(fakePage14).filter(k => typeof fakePage14[k] === 'function').length;
+  console.log(`   ✅ DbHelpers.attach 挂上 ${dbCount} 个方法`);
+} else {
+  console.error('   ❌ DbHelpers 缺失:', dbMissing);
+  process.exit(1);
+}
+
 console.log('\n[完成] chat.js 集成测试全部通过!');
