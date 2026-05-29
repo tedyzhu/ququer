@@ -78,14 +78,8 @@ function attach(page) {
 
                   // 🔥 【HOTFIX-v1.3.68】B端系统消息过滤 - B端不应该接收A端的系统消息
                   if (this.data.isFromInvite && newDoc.isSystem && newDoc.content) {
-                    // 🔥 【HOTFIX-v1.3.68】只过滤A端格式，保留B端格式
-                    const shouldFilterForBSide =
-                      newDoc.content.includes('您创建了私密聊天') ||
-                      newDoc.content.includes('可点击右上角菜单分享链接邀请朋友加入') ||
-                      newDoc.content.includes('私密聊天已创建') ||
-                      newDoc.content.includes('分享链接邀请朋友') ||
-                      (newDoc.content.includes('创建') && newDoc.content.includes('聊天')) ||
-                      (/^.+加入聊天$/.test(newDoc.content) && !/^加入.+的聊天$/.test(newDoc.content)); // 只过滤A端格式"XX加入聊天"
+                    // 收敛(C1):统一调权威检测器,只过滤A端格式,保留B端格式
+                    const shouldFilterForBSide = ChatHelpers.isASideSystemMessage(newDoc.content);
 
                     if (shouldFilterForBSide) {
                       console.log('🔥 [B端过滤-v1.3.68] B端过滤A端系统消息:', newDoc.content);
@@ -208,14 +202,8 @@ function attach(page) {
                         return;
                       }
                       if (bSide) {
-                        var isASideSystem = (
-                          rawContent.includes('您创建了私密聊天') ||
-                          rawContent.includes('可点击右上角菜单分享链接邀请朋友加入') ||
-                          rawContent.includes('私密聊天已创建') ||
-                          rawContent.includes('分享链接邀请朋友') ||
-                          (rawContent.includes('创建') && rawContent.includes('聊天')) ||
-                          (/^.+加入聊天$/.test(rawContent) && !/^加入.+的聊天$/.test(rawContent))
-                        );
+                        // 收敛(C2):统一调权威检测器
+                        var isASideSystem = ChatHelpers.isASideSystemMessage(rawContent);
                         if (isASideSystem) return;
                       }
 
@@ -305,14 +293,8 @@ function attach(page) {
                           return;
                         }
                         if (fbIsB) {
-                          var aSys = (
-                            mc.includes('您创建了私密聊天') ||
-                            mc.includes('可点击右上角菜单分享链接邀请朋友加入') ||
-                            mc.includes('私密聊天已创建') ||
-                            mc.includes('分享链接邀请朋友') ||
-                            (mc.includes('创建') && mc.includes('聊天')) ||
-                            (/^.+加入聊天$/.test(mc) && !/^加入.+的聊天$/.test(mc))
-                          );
+                          // 收敛(C3):统一调权威检测器
+                          var aSys = ChatHelpers.isASideSystemMessage(mc);
                           if (aSys) return;
                         }
 
