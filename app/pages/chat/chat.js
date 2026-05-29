@@ -1658,7 +1658,7 @@ Page({
       const cleanedMessages = messages.filter(m => {
         if (!m || !m.isSystem || typeof m.content !== 'string') return true;
         // 移除A端样式"XX加入聊天"(但保留B端样式"加入XX的聊天")
-        if (/^.+加入聊天$/.test(m.content) && !/^加入.+的聊天$/.test(m.content)) {
+        if (ChatHelpers.isASideJoinMessage(m.content)) { // 收敛(C8)
           console.log('🧹 [B端onShow清理] 移除A端样式系统消息:', m.content);
           return false;
         }
