@@ -147,3 +147,5 @@ app/pages/chat/modules/
 
 > **后续阶段**:[P4-Summary.md](./P4-Summary.md) — P4 不动 chat.js,聚焦测试加固 + CI 集成,
 > 测试套件从 217 → 559 PASS,新增 4 个测试 + 7 个独立 PR。
+> [P5-Summary.md](./P5-Summary.md) — P5 继续测试加固,扩展到 13 个有专测保障的模块,
+> 测试套件从 559 → 790 PASS,新增 6 个测试 + 8 个独立 PR。
