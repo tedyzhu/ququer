@@ -322,4 +322,17 @@ if (rtMissing.length === 0) {
   process.exit(1);
 }
 
+const MessagePolling = require(path.join(__dirname, '../app/pages/chat/modules/message-polling.js'));
+const fakePage13 = { data: {}, setData: () => {} };
+MessagePolling.attach(fakePage13);
+const mpRequired = ['startPollingMessages', 'startMessagePolling'];
+const mpMissing = mpRequired.filter(k => typeof fakePage13[k] !== 'function');
+if (mpMissing.length === 0) {
+  const mpCount = Object.keys(fakePage13).filter(k => typeof fakePage13[k] === 'function').length;
+  console.log(`   ✅ MessagePolling.attach 挂上 ${mpCount} 个方法`);
+} else {
+  console.error('   ❌ MessagePolling 缺失:', mpMissing);
+  process.exit(1);
+}
+
 console.log('\n[完成] chat.js 集成测试全部通过!');
