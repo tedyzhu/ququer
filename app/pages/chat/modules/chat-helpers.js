@@ -70,6 +70,45 @@ function isPlaceholderNickname(name) {
 }
 
 /**
+ * 判断内容是否为 A 端加入格式"XX加入聊天"(非 B 端"加入XX的聊天")。
+ * 权威来源:替代散落在 message-fetch / message-listener / chat.js 的内联正则。
+ * @param {string} content - 系统消息内容
+ * @returns {boolean}
+ */
+function isASideJoinMessage(content) {
+  if (!content || typeof content !== 'string') return false;
+  return /^.+加入聊天$/.test(content) && !/^加入.+的聊天$/.test(content);
+}
+
+/**
+ * 判断内容是否为 B 端加入格式"加入XX的聊天"。
+ * @param {string} content - 系统消息内容
+ * @returns {boolean}
+ */
+function isBSideJoinMessage(content) {
+  if (!content || typeof content !== 'string') return false;
+  return /^加入.+的聊天$/.test(content);
+}
+
+/**
+ * 判断内容是否为 A 端专属系统消息(B 端应过滤掉)。
+ * 语义 = 现状各散落副本 OR 链的并集:5 类创建文案 + A 端加入格式。
+ * @param {string} content - 系统消息内容
+ * @returns {boolean}
+ */
+function isASideSystemMessage(content) {
+  if (!content || typeof content !== 'string') return false;
+  return (
+    content.includes('您创建了私密聊天') ||
+    content.includes('可点击右上角菜单分享链接邀请朋友加入') ||
+    content.includes('私密聊天已创建') ||
+    content.includes('分享链接邀请朋友') ||
+    (content.includes('创建') && content.includes('聊天')) ||
+    isASideJoinMessage(content)
+  );
+}
+
+/**
  * 判断消息是否属于系统消息
  * @param {Object} message - 原始或格式化后的消息对象
  * @returns {boolean}
@@ -304,6 +343,9 @@ module.exports = {
   // 纯函数
   isPlaceholderJoinMessage,
   isPlaceholderNickname,
+  isASideJoinMessage,
+  isBSideJoinMessage,
+  isASideSystemMessage,
   isSystemLikeMessage,
   ensureSystemFlags,
   parseDebugBoolean,

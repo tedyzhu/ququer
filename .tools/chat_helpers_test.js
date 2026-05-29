@@ -322,5 +322,83 @@ console.log('\n--- registerMessageKeys ---');
   assertEqual('registerMessageKeys null message 不抛错', set.size, 0);
 }
 
+// ===== isASideJoinMessage / isBSideJoinMessage / isASideSystemMessage =====
+console.log('\n--- isASideJoinMessage ---');
+const aSideJoinCases = [
+  ['小明加入聊天', true],
+  ['向冬加入聊天', true],
+  // B 端格式不算 A 端
+  ['加入小明的聊天', false],
+  ['加入向冬的聊天', false],
+  // 非加入格式
+  ['您创建了私密聊天', false],
+  ['普通文本消息', false],
+  ['', false],
+  [null, false],
+  [undefined, false],
+  [123, false],
+  [{}, false],
+];
+for (const [input, expected] of aSideJoinCases) {
+  assertEqual(`isASideJoinMessage(${JSON.stringify(input)})`, helpers.isASideJoinMessage(input), expected);
+}
+
+console.log('\n--- isBSideJoinMessage ---');
+const bSideJoinCases = [
+  ['加入小明的聊天', true],
+  ['加入向冬的聊天', true],
+  // A 端格式不算 B 端
+  ['小明加入聊天', false],
+  ['您创建了私密聊天', false],
+  ['普通文本', false],
+  ['', false],
+  [null, false],
+  [undefined, false],
+  [42, false],
+];
+for (const [input, expected] of bSideJoinCases) {
+  assertEqual(`isBSideJoinMessage(${JSON.stringify(input)})`, helpers.isBSideJoinMessage(input), expected);
+}
+
+console.log('\n--- isASideSystemMessage ---');
+const aSideSysCases = [
+  // 5 类创建文案
+  ['您创建了私密聊天', true],
+  ['您创建了私密聊天，可点击右上角菜单分享链接邀请朋友加入', true],
+  ['可点击右上角菜单分享链接邀请朋友加入', true],
+  ['私密聊天已创建', true],
+  ['分享链接邀请朋友', true],
+  ['创建了私密聊天', true], // 含"创建"且含"聊天"
+  // A 端加入格式
+  ['小明加入聊天', true],
+  // B 端格式不是 A 端系统消息
+  ['加入小明的聊天', false],
+  // 普通文本
+  ['你好呀', false],
+  ['今天天气不错', false],
+  // 非字符串
+  ['', false],
+  [null, false],
+  [undefined, false],
+  [0, false],
+  [{}, false],
+];
+for (const [input, expected] of aSideSysCases) {
+  assertEqual(`isASideSystemMessage(${JSON.stringify(input)})`, helpers.isASideSystemMessage(input), expected);
+}
+
+// 互斥性:A 端加入格式 → isASideJoinMessage=true 且 isBSideJoinMessage=false
+{
+  const c = '小红加入聊天';
+  assert('互斥.A端加入格式 A=true B=false',
+    helpers.isASideJoinMessage(c) === true && helpers.isBSideJoinMessage(c) === false);
+}
+// 互斥性:B 端加入格式 → isBSideJoinMessage=true 且 isASideJoinMessage=false
+{
+  const c = '加入小红的聊天';
+  assert('互斥.B端加入格式 B=true A=false',
+    helpers.isBSideJoinMessage(c) === true && helpers.isASideJoinMessage(c) === false);
+}
+
 console.log(`\n--- ${pass} pass / ${fail} fail ---`);
 process.exit(fail > 0 ? 1 : 0);
