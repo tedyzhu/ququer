@@ -19,8 +19,13 @@
 | P3 | [P3-Summary.md](./P3-Summary.md) | 持续抽离到极限(18 PR) | 5948 → 2237(-62.4%) | 217 |
 | P4 | [P4-Summary.md](./P4-Summary.md) | 测试加固 + CI 集成(8 PR) | 2237 不动 | 217 → 559 |
 | P5 | [P5-Summary.md](./P5-Summary.md) | 测试覆盖到几乎全部业务模块(9 PR) | 2237 不动 | 559 → 790 |
+| 根因治理 | [Refactoring-Methodology.md](./Refactoring-Methodology.md) | 标题/系统消息/身份识别 3 主题(PR #40-#42) | 2237 不动 | 790 → 883 |
 
-**累计**:chat.js 从 15500 → 2237 行(**-85.6%**),20 个 chat 模块 / 18 个静态测试 / **790 PASS** / CI ~10-13 秒。
+**累计**:chat.js 从 15500 → 2237 行(**-85.6%**),20 个 chat 模块 / 19 个静态测试 / **883 PASS** / CI ~10-13 秒。
+
+## 方法论(可复用)
+
+[**Refactoring-Methodology.md**](./Refactoring-Methodology.md) — 把 P0–P5 模块化重构 + 三个根因治理 spec 沉淀的手法固化为方法论:无真机验证通道下,如何用纯静态测试安全地改遗留代码(attach 薄壳模式、根因治理五步法、Tier A/B 分层、"发现 bug ≠ 立刻修"红线)。
 
 ---
 
