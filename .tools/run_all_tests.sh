@@ -9,89 +9,95 @@ set -e
 cd "$(dirname "$0")/.."
 
 echo "================================================================"
-echo "1/14 chat.js 集成测试(require/Page/wxml/模块导出/attach)"
+echo "1/15 chat.js 集成测试(require/Page/wxml/模块导出/attach)"
 echo "================================================================"
 node .tools/integration_test.js
 
 echo ""
 echo "================================================================"
-echo "2/14 chat-helpers 纯函数行为测试"
+echo "2/15 chat-helpers 纯函数行为测试"
 echo "================================================================"
 node .tools/chat_helpers_test.js
 
 echo ""
 echo "================================================================"
-echo "3/14 identity-utils 行为测试"
+echo "3/15 identity-utils 行为测试"
 echo "================================================================"
 node .tools/identity_utils_test.js
 
 echo ""
 echo "================================================================"
-echo "4/14 sanitize 双实现一致性测试(joinByInvite + cleanTempUserData)"
+echo "4/15 sanitize 双实现一致性测试(joinByInvite + cleanTempUserData)"
 echo "================================================================"
 node .tools/sanitize_participants_test.js
 
 echo ""
 echo "================================================================"
-echo "5/14 app.ensureLogin 时序测试"
+echo "5/15 app.ensureLogin 时序测试"
 echo "================================================================"
 node .tools/login_race_test.js
 
 echo ""
 echo "================================================================"
-echo "6/14 identity-resolver 行为测试"
+echo "6/15 identity-resolver 行为测试"
 echo "================================================================"
 node .tools/identity_resolver_test.js
 
 echo ""
 echo "================================================================"
-echo "7/14 system-message 关键方法行为测试"
+echo "7/15 system-message 关键方法行为测试"
 echo "================================================================"
 node .tools/system_message_test.js
 
 echo ""
 echo "================================================================"
-echo "8/14 burn-after-read 关键方法行为测试"
+echo "8/15 burn-after-read 关键方法行为测试"
 echo "================================================================"
 node .tools/burn_after_read_test.js
 
 echo ""
 echo "================================================================"
-echo "9/14 message-fetch 关键路径行为测试"
+echo "9/15 message-fetch 关键路径行为测试"
 echo "================================================================"
 node .tools/message_fetch_test.js
 
 echo ""
 echo "================================================================"
-echo "10/14 message-listener 关键路径行为测试"
+echo "10/15 message-listener 关键路径行为测试"
 echo "================================================================"
 node .tools/message_listener_test.js
 
 echo ""
 echo "================================================================"
-echo "11/14 participant-listener 关键路径行为测试"
+echo "11/15 participant-listener 关键路径行为测试"
 echo "================================================================"
 node .tools/participant_listener_test.js
 
 echo ""
 echo "================================================================"
-echo "12/14 message-polling 关键路径行为测试"
+echo "12/15 message-polling 关键路径行为测试"
 echo "================================================================"
 node .tools/message_polling_test.js
 
 echo ""
 echo "================================================================"
-echo "13/14 voice-recorder 关键路径行为测试"
+echo "13/15 voice-recorder 关键路径行为测试"
 echo "================================================================"
 node .tools/voice_recorder_test.js
 
 echo ""
 echo "================================================================"
-echo "14/14 share-utils 行为测试"
+echo "14/15 share-utils 行为测试"
 echo "================================================================"
 node .tools/share_utils_test.js
 
 echo ""
 echo "================================================================"
-echo "[完成] 全部 14 个静态测试通过"
+echo "15/15 destroyed-store 行为测试"
+echo "================================================================"
+node .tools/destroyed_store_test.js
+
+echo ""
+echo "================================================================"
+echo "[完成] 全部 15 个静态测试通过"
 echo "================================================================"
