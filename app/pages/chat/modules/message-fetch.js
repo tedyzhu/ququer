@@ -798,6 +798,73 @@ function attach(page) {
         }
       });
     };
+
+  /**
+   * 显示模拟消息数据(作为备份)
+   *
+   * 当 fetchMessages 云函数调用失败时使用,展示 3 条占位消息让用户看到界面非空。
+   */
+  page.showMockMessages = function() {
+    const currentUser = this.data.currentUser;
+    const mockMessages = [
+      {
+        id: '1',
+        senderId: 'other',
+        isSelf: false,
+        content: '你好，这是一条测试消息',
+        type: 'text',
+        time: '14:20',
+        timeDisplay: '14:20',
+        showTime: true,
+        status: 'received',
+        destroyed: false,
+        destroying: false,
+        remainTime: 0,
+        avatar: '/assets/images/default-avatar.png',
+        isSystem: false
+      },
+      {
+        id: '2',
+        senderId: 'self',
+        isSelf: true,
+        content: '你好，很高兴认识你',
+        type: 'text',
+        time: '14:21',
+        timeDisplay: '14:21',
+        showTime: true,
+        status: 'sent',
+        destroyed: false,
+        destroying: false,
+        remainTime: 0,
+        avatar: currentUser?.avatarUrl || '/assets/images/default-avatar.png',
+        isSystem: false
+      },
+      {
+        id: '3',
+        senderId: 'other',
+        isSelf: false,
+        content: '这条消息会自动销毁',
+        type: 'text',
+        time: '14:22',
+        timeDisplay: '14:22',
+        showTime: true,
+        status: 'received',
+        destroyed: false,
+        destroying: false,
+        remainTime: 0,
+        avatar: '/assets/images/default-avatar.png',
+        isSystem: false
+      }
+    ];
+
+    this.setData({
+      messages: mockMessages,
+      isLoading: false
+    });
+
+    // 滚动到底部
+    this.scrollToBottom();
+  };
 }
 
 module.exports = { attach };
