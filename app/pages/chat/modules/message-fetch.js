@@ -16,7 +16,7 @@
  */
 
 const ChatHelpers = require('./chat-helpers.js');
-const { isPlaceholderJoinMessage, isSystemLikeMessage, normalizeTimestamp } = ChatHelpers;
+const { isPlaceholderJoinMessage, isSystemLikeMessage, normalizeTimestamp, isASideJoinMessage, isBSideJoinMessage, isASideSystemMessage } = ChatHelpers;
 
 /**
  * @param {Object} page - Page 实例
@@ -130,15 +130,8 @@ function attach(page) {
                   : !!this.data.isFromInvite;
                 
                 if (isFromInvite) {
-                  // 🔥 【HOTFIX-v1.3.68】B端用户：彻底过滤掉所有A端相关的系统消息
-                  const shouldFilterForBSide = 
-                    msg.content.includes('您创建了私密聊天') ||
-                    msg.content.includes('可点击右上角菜单分享链接邀请朋友加入') ||
-                    msg.content.includes('私密聊天已创建') ||
-                    msg.content.includes('分享链接邀请朋友') ||
-                    (msg.content.includes('创建') && msg.content.includes('聊天')) ||
-                    // 🔥 【HOTFIX-v1.3.68】过滤A端加入消息格式"XX加入聊天"（但保留B端格式"加入XX的聊天"）
-                    (/^.+加入聊天$/.test(msg.content) && !/^加入.+的聊天$/.test(msg.content));
+                  // 收敛(C4):统一调权威检测器,B端彻底过滤A端系统消息(保留B端格式)
+                  const shouldFilterForBSide = isASideSystemMessage(msg.content);
                   
                   if (shouldFilterForBSide) {
                     console.log('🔥 [B端消息过滤-v1.3.68] B端彻底过滤A端系统消息:', msg.content);
@@ -182,13 +175,11 @@ function attach(page) {
                   let isCorrectFormat = false;
                   
                   if (isFromInvite) {
-                    // B端只保留B端格式的加入消息
-                    isCorrectFormat = /^加入.+的聊天$/.test(msg.content); // "加入xx的聊天"
+                    // 收敛(C7):B端只保留B端格式的加入消息
+                    isCorrectFormat = isBSideJoinMessage(msg.content); // "加入xx的聊天"
                   } else {
-                    // A端保留A端格式的消息
-                    isCorrectFormat = 
-                      (/^.+加入聊天$/.test(msg.content) && !/^加入.+的聊天$/.test(msg.content)) || // "xx加入聊天"（非"加入xx的聊天"）
-                      msg.content.includes('您创建了私密聊天'); // A端创建消息
+                    // 收敛(C5):A端保留A端加入格式 或 创建消息
+                    isCorrectFormat = isASideJoinMessage(msg.content) || msg.content.includes('您创建了私密聊天');
                   }
                     
                   if (isCorrectFormat) {
@@ -205,13 +196,11 @@ function attach(page) {
                   let isCorrectFormat = false;
                   
                   if (isFromInvite) {
-                    // B端只保留B端格式："加入xx的聊天"
-                    isCorrectFormat = /^加入.+的聊天$/.test(msg.content);
+                    // 收敛(C7):B端只保留B端格式"加入xx的聊天"
+                    isCorrectFormat = isBSideJoinMessage(msg.content);
                   } else {
-                    // A端保留A端格式："xx加入聊天" 或 "您创建了私密聊天"
-                    isCorrectFormat = 
-                      (/^.+加入聊天$/.test(msg.content) && !/^加入.+的聊天$/.test(msg.content)) ||
-                      msg.content.includes('您创建了私密聊天');
+                    // 收敛(C5):A端保留A端加入格式 或 "您创建了私密聊天"
+                    isCorrectFormat = isASideJoinMessage(msg.content) || msg.content.includes('您创建了私密聊天');
                   }
                   
                   if (!isCorrectFormat) {
@@ -231,7 +220,7 @@ function attach(page) {
               : (that.data && that.data.isFromInvite))) {
               allMessages = allMessages.filter(m => {
                 if (!m || !isSystemLikeMessage(m) || typeof m.content !== 'string') return true;
-                if (/^.+加入聊天$/.test(m.content) && !/^加入.+的聊天$/.test(m.content)) {
+                if (isASideJoinMessage(m.content)) { // 收敛(C6)
                   console.log('🧹 [合并过滤] (B端) 移除A端样式系统消息:', m.content);
                   return false;
                 }
@@ -510,7 +499,7 @@ function attach(page) {
                   return null;
                 }
                 // 过滤A端的"XX加入聊天"格式（但保留B端的"加入XX的聊天"格式）
-                if (/^.+加入聊天$/.test(msg.content) && !/^加入.+的聊天$/.test(msg.content)) {
+                if (isASideJoinMessage(msg.content)) { // 收敛(C6)
                   console.log('🔥 [B端过滤-v1.3.67] 过滤A端加入消息:', msg.content);
                   return null;
                 }
@@ -596,7 +585,7 @@ function attach(page) {
               const beforeCleanCount = messages.length;
               messages = messages.filter(m => {
                 if (!m || !isSystemLikeMessage(m) || typeof m.content !== 'string') return true;
-                if (/^.+加入聊天$/.test(m.content) && !/^加入.+的聊天$/.test(m.content)) {
+                if (isASideJoinMessage(m.content)) { // 收敛(C6)
                   console.log('🧹 [B端setData前清理] 移除A端样式系统消息:', m.content);
                   return false;
                 }
