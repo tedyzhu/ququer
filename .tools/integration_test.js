@@ -283,4 +283,17 @@ if (mfMissing.length === 0) {
   process.exit(1);
 }
 
+const ParticipantInfer = require(path.join(__dirname, '../app/pages/chat/modules/participant-infer.js'));
+const fakePage10 = { data: {}, setData: () => {} };
+ParticipantInfer.attach(fakePage10);
+const piRequired = ['inferParticipantsFromMessages', 'syncInferredParticipantsToDatabase'];
+const piMissing = piRequired.filter(k => typeof fakePage10[k] !== 'function');
+if (piMissing.length === 0) {
+  const piCount = Object.keys(fakePage10).filter(k => typeof fakePage10[k] === 'function').length;
+  console.log(`   ✅ ParticipantInfer.attach 挂上 ${piCount} 个方法`);
+} else {
+  console.error('   ❌ ParticipantInfer 缺失:', piMissing);
+  process.exit(1);
+}
+
 console.log('\n[完成] chat.js 集成测试全部通过!');
