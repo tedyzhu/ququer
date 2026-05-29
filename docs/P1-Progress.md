@@ -258,13 +258,30 @@ attach 模式。两者构成消息拉取子系统。
 - 两方法的 B 端系统消息过滤逻辑高度重复
 - 时间戳归一化逻辑在两处都有副本,可提取 normalizeTimestamp(rawTs)
 
+### `participant-infer` 已完成(2026-05-28)
+
+抽离 `inferParticipantsFromMessages` (172 行) + `syncInferredParticipantsToDatabase` (28 行)
+到 `modules/participant-infer.js`,attach 模式。两者构成云端 participants 缺失/不完整时的兜底逻辑。
+
+抽离后:
+- chat.js: 4081 → 3884 (-197 行)
+- 新增 `modules/participant-infer.js`(222 行)
+- integration_test:加入第 10 个 attach 检查
+
+**重要边界发现**:wxml 中 `bindXxx="methodName"` 绑定的方法**不能用 attach 模式**,
+因为小程序 Page 注册时会快照属性,attach 是 onLoad 时才挂,wxml 找不到。
+本次抽离前曾尝试抽 `sendMessage`(wxml 通过 `bindconfirm="sendMessage"` 绑定),
+集成测试立即报错。回滚后改抽 `inferParticipants` 系列(无 wxml 绑定)。
+
+后续遇到 wxml 绑定的方法须保留薄壳或留在 chat.js。
+
 ### 剩余二线大方法
 
-| 方法 | 行数 | 风险 |
-| --- | --- | --- |
-| `joinChatByInvite` | 335 | 中(身份判定链路调用方,改动可能反向影响) |
-| `sendMessage` | 259 | 中(包含 isSending 防抖、消息状态机) |
-| `inferParticipantsFromMessages` | 169 | 低(独立兜底逻辑) |
+| 方法 | 行数 | 风险 | 备注 |
+| --- | --- | --- | --- |
+| `joinChatByInvite` | 335 | 中 | 身份判定链路调用方 |
+| `sendMessage` | 259 | 不可抽 | wxml `bindconfirm` 绑定 |
+| `showMessageError` | 48 | 低 | 与 sendMessage 紧耦合,留 chat.js |
 
 ### 阶段 3-5 待实施
 
