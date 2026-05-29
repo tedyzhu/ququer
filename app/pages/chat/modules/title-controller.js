@@ -16,6 +16,19 @@
 const ChatHelpers = require('./chat-helpers.js');
 
 /**
+ * 从"我和{对方昵称}（2）"格式的标题中提取对方昵称。
+ * 非此格式返回 null(交由外层按非占位符处理)。
+ * 用于把"对整段标题做占位符子串判断"收敛为"对单一昵称做权威判定"。
+ * @param {string} title - 标题字符串
+ * @returns {string|null}
+ */
+function extractOtherNameFromTitle(title) {
+  if (!title || typeof title !== 'string') return null;
+  const m = /^我和(.+)（2）$/.exec(title);
+  return m ? m[1] : null;
+}
+
+/**
  * 🔥 【HOTFIX-v1.3.55】获取真实邀请者昵称并更新 B 端标题
  *
  * 仅 B 端使用。直接调用 getChatParticipants 云函数,从云端拿真实昵称后:
@@ -42,7 +55,7 @@ function fetchRealInviterNameAndUpdateTitle() {
         );
 
         if (otherParticipant && otherParticipant.nickName &&
-            !['朋友', '邀请者', '用户', '好友'].includes(otherParticipant.nickName)) {
+            !ChatHelpers.isPlaceholderNickname(otherParticipant.nickName)) {
           const realNickname = otherParticipant.nickName;
           const newTitle = `我和${realNickname}（2）`;
 
@@ -125,9 +138,7 @@ function updateReceiverTitleWithRealNames() {
       });
 
       if (potentialInviter && potentialInviter.nickName &&
-          potentialInviter.nickName !== '用户' &&
-          potentialInviter.nickName !== '朋友' &&
-          potentialInviter.nickName !== '好友') {
+          !ChatHelpers.isPlaceholderNickname(potentialInviter.nickName)) {
 
         const realInviterName = potentialInviter.nickName;
         const newTitle = `我和${realInviterName}（2）`;
@@ -166,9 +177,7 @@ function updateReceiverTitleWithRealNames() {
   });
 
   if (otherParticipant && otherParticipant.nickName &&
-      otherParticipant.nickName !== '用户' &&
-      otherParticipant.nickName !== '朋友' &&
-      otherParticipant.nickName !== '好友') {
+      !ChatHelpers.isPlaceholderNickname(otherParticipant.nickName)) {
 
     const realInviterName = otherParticipant.nickName;
     const newTitle = `我和${realInviterName}（2）`;
@@ -253,7 +262,7 @@ function updateTitleForReceiver(inviterNickName) {
       console.log('🔗 [接收方修复] 从URL解码的邀请者:', urlInviter);
 
       // 如果 URL 中的邀请者昵称更具体,使用它
-      if (urlInviter && urlInviter !== '朋友' && urlInviter !== '好友' && urlInviter !== '邀请者' && urlInviter !== '用户') {
+      if (urlInviter && !ChatHelpers.isPlaceholderNickname(urlInviter)) {
         finalInviterName = urlInviter;
         console.log('🔗 [接收方修复] ✅ 使用URL中的真实邀请者昵称:', finalInviterName);
       }
@@ -263,7 +272,7 @@ function updateTitleForReceiver(inviterNickName) {
   }
 
   // 🔥 【关键修复】如果仍然没有获取到有效昵称,从参与者列表获取
-  if (!finalInviterName || finalInviterName === '好友' || finalInviterName === '朋友' || finalInviterName === '邀请者' || finalInviterName === '用户') {
+  if (!finalInviterName || ChatHelpers.isPlaceholderNickname(finalInviterName)) {
     console.log('🔗 [接收方标题] ⚠️ 邀请者昵称仍不明确,从参与者列表获取...');
 
     const participants = this.data.participants || [];
@@ -274,7 +283,7 @@ function updateTitleForReceiver(inviterNickName) {
       return isNotSelf;
     });
 
-    if (otherParticipant && otherParticipant.nickName && otherParticipant.nickName !== '用户') {
+    if (otherParticipant && otherParticipant.nickName && !ChatHelpers.isPlaceholderNickname(otherParticipant.nickName)) {
       finalInviterName = otherParticipant.nickName;
       console.log('🔗 [接收方标题] ✅ 从参与者列表获取到邀请者昵称:', finalInviterName);
     } else {
@@ -456,9 +465,8 @@ function updateDynamicTitleWithRealNames() {
 
     if (otherParticipant) {
       const otherNameRaw = otherParticipant?.nickName || otherParticipant?.name || '';
-      const isPlaceholderName = typeof this.isPlaceholderNickname === 'function'
-        ? this.isPlaceholderNickname(otherNameRaw)
-        : (!otherNameRaw || ['用户', '朋友', '好友', '邀请者', '新用户'].includes(otherNameRaw));
+      // 收敛(S1):统一调权威检测器,删除 inline 数组兜底
+      const isPlaceholderName = ChatHelpers.isPlaceholderNickname(otherNameRaw);
       if (!isPlaceholderName && (otherParticipant.openId || otherParticipant.id) !== 'temp_user') {
         const otherName = otherNameRaw;
         title = `我和${otherName}（2）`;
@@ -483,7 +491,7 @@ function updateDynamicTitleWithRealNames() {
         }
       }
 
-      if (inviterFromUrl && inviterFromUrl !== '好友' && inviterFromUrl !== '朋友') {
+      if (inviterFromUrl && !ChatHelpers.isPlaceholderNickname(inviterFromUrl)) {
         title = `我和${inviterFromUrl}（2）`;
         console.log('🏷️ [真实姓名] 使用URL中的邀请者昵称:', inviterFromUrl);
       } else {
@@ -534,14 +542,10 @@ function updateDynamicTitle() {
   // 🔥 【1008修复】B 端标题保护:只保护真实昵称,允许更新占位符
   if (this.data.isFromInvite && this.data.hasJoinedAsReceiver) {
     const currentTitle = this.data.dynamicTitle;
-    // 🔥 检查标题是否包含占位符昵称
-    const hasPlaceholder = currentTitle && (
-      currentTitle.includes('用户') ||
-      currentTitle.includes('朋友') ||
-      currentTitle.includes('好友') ||
-      currentTitle.includes('邀请者') ||
-      currentTitle.includes('新用户')
-    );
+    // 收敛(S4):原先对整段标题做子串 includes 判断,会误伤真名含占位子串者
+    // (如「用户体验师」)。改为先从标题提取对方昵称,再用权威检测器判定。
+    const otherNameInTitle = extractOtherNameFromTitle(currentTitle);
+    const hasPlaceholder = otherNameInTitle !== null && ChatHelpers.isPlaceholderNickname(otherNameInTitle);
 
     // 🔥 只有标题是真实昵称(不包含占位符)时才保护
     if (currentTitle && currentTitle.includes('我和') && currentTitle.includes('（2）') && !hasPlaceholder) {
@@ -649,7 +653,8 @@ function updateDynamicTitle() {
       // 🔥 【A端特殊处理】如果是 A 端创建者,只在真正有 B 端加入时才显示双人标题
       if (isDefinitelyASide) {
         const otherNameRaw = otherParticipant?.nickName || otherParticipant?.name;
-        const isValidName = otherNameRaw && !['用户','朋友','好友','邀请者'].includes(otherNameRaw);
+        // 收敛(S2):统一调权威检测器(原 inline 数组漏判「新用户」等)
+        const isValidName = !ChatHelpers.isPlaceholderNickname(otherNameRaw);
 
         if (isValidName && (otherParticipant.openId || otherParticipant.id) !== 'temp_user') {
           title = `我和${otherNameRaw}（2）`;
@@ -660,7 +665,8 @@ function updateDynamicTitle() {
         }
       } else {
         const otherNameRaw = otherParticipant?.nickName || otherParticipant?.name;
-        const isPlaceholderName = !otherNameRaw || ['用户','朋友','好友','邀请者'].includes(otherNameRaw);
+        // 收敛(S3):统一调权威检测器(原 inline 数组漏判「新用户」等)
+        const isPlaceholderName = ChatHelpers.isPlaceholderNickname(otherNameRaw);
 
         if (!isPlaceholderName && (otherParticipant.openId || otherParticipant.id) !== 'temp_user') {
           const otherName = otherNameRaw;

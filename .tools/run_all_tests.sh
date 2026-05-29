@@ -9,113 +9,119 @@ set -e
 cd "$(dirname "$0")/.."
 
 echo "================================================================"
-echo "1/18 chat.js 集成测试(require/Page/wxml/模块导出/attach)"
+echo "1/19 chat.js 集成测试(require/Page/wxml/模块导出/attach)"
 echo "================================================================"
 node .tools/integration_test.js
 
 echo ""
 echo "================================================================"
-echo "2/18 chat-helpers 纯函数行为测试"
+echo "2/19 chat-helpers 纯函数行为测试"
 echo "================================================================"
 node .tools/chat_helpers_test.js
 
 echo ""
 echo "================================================================"
-echo "3/18 identity-utils 行为测试"
+echo "3/19 identity-utils 行为测试"
 echo "================================================================"
 node .tools/identity_utils_test.js
 
 echo ""
 echo "================================================================"
-echo "4/18 sanitize 双实现一致性测试(joinByInvite + cleanTempUserData)"
+echo "4/19 sanitize 双实现一致性测试(joinByInvite + cleanTempUserData)"
 echo "================================================================"
 node .tools/sanitize_participants_test.js
 
 echo ""
 echo "================================================================"
-echo "5/18 app.ensureLogin 时序测试"
+echo "5/19 app.ensureLogin 时序测试"
 echo "================================================================"
 node .tools/login_race_test.js
 
 echo ""
 echo "================================================================"
-echo "6/18 identity-resolver 行为测试"
+echo "6/19 identity-resolver 行为测试"
 echo "================================================================"
 node .tools/identity_resolver_test.js
 
 echo ""
 echo "================================================================"
-echo "7/18 system-message 关键方法行为测试"
+echo "7/19 system-message 关键方法行为测试"
 echo "================================================================"
 node .tools/system_message_test.js
 
 echo ""
 echo "================================================================"
-echo "8/18 burn-after-read 关键方法行为测试"
+echo "8/19 burn-after-read 关键方法行为测试"
 echo "================================================================"
 node .tools/burn_after_read_test.js
 
 echo ""
 echo "================================================================"
-echo "9/18 message-fetch 关键路径行为测试"
+echo "9/19 message-fetch 关键路径行为测试"
 echo "================================================================"
 node .tools/message_fetch_test.js
 
 echo ""
 echo "================================================================"
-echo "10/18 message-listener 关键路径行为测试"
+echo "10/19 message-listener 关键路径行为测试"
 echo "================================================================"
 node .tools/message_listener_test.js
 
 echo ""
 echo "================================================================"
-echo "11/18 participant-listener 关键路径行为测试"
+echo "11/19 participant-listener 关键路径行为测试"
 echo "================================================================"
 node .tools/participant_listener_test.js
 
 echo ""
 echo "================================================================"
-echo "12/18 message-polling 关键路径行为测试"
+echo "12/19 message-polling 关键路径行为测试"
 echo "================================================================"
 node .tools/message_polling_test.js
 
 echo ""
 echo "================================================================"
-echo "13/18 voice-recorder 关键路径行为测试"
+echo "13/19 voice-recorder 关键路径行为测试"
 echo "================================================================"
 node .tools/voice_recorder_test.js
 
 echo ""
 echo "================================================================"
-echo "14/18 share-utils 行为测试"
+echo "14/19 share-utils 行为测试"
 echo "================================================================"
 node .tools/share_utils_test.js
 
 echo ""
 echo "================================================================"
-echo "15/18 destroyed-store 行为测试"
+echo "15/19 destroyed-store 行为测试"
 echo "================================================================"
 node .tools/destroyed_store_test.js
 
 echo ""
 echo "================================================================"
-echo "16/18 db-helpers 行为测试"
+echo "16/19 db-helpers 行为测试"
 echo "================================================================"
 node .tools/db_helpers_test.js
 
 echo ""
 echo "================================================================"
-echo "17/18 keyboard 行为测试"
+echo "17/19 keyboard 行为测试"
 echo "================================================================"
 node .tools/keyboard_test.js
 
 echo ""
 echo "================================================================"
-echo "18/18 message-debug-hook 行为测试"
+echo "18/19 message-debug-hook 行为测试"
 echo "================================================================"
 node .tools/message_debug_hook_test.js
 
 echo ""
 echo "================================================================"
-echo "[完成] 全部 18 个静态测试通过"
+echo "19/19 title-controller 标题决策行为测试"
+echo "================================================================"
+node .tools/title_controller_test.js
+
+echo ""
+echo "================================================================"
+echo "[完成] 全部 19 个静态测试通过"
 echo "================================================================"

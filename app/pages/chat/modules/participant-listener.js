@@ -497,9 +497,8 @@ function startParticipantListener(chatId) {
                     let finalName = null; // 避免使用"新用户"等占位符
 
                     if (otherP && otherP.nickName) {
-                      const isStillPlaceholder = otherP.nickName === '用户' || otherP.nickName === '好友' ||
-                                                 otherP.nickName === '邀请者' || otherP.nickName === '朋友' ||
-                                                 otherP.nickName === '新用户';
+                      // 收敛(S6):统一调权威检测器(原逐项 === 比较)
+                      const isStillPlaceholder = this.isPlaceholderNickname(otherP.nickName);
                       if (!isStillPlaceholder) {
                         finalName = otherP.nickName;
                         console.log('🔥 [A端系统消息-v1.3.64] ✅ 从参与者列表获取到真实昵称:', finalName);

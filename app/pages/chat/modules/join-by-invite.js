@@ -137,7 +137,8 @@ function attach(page) {
             }, 800);
             
             // 🔥 【B端立即标题】额外的立即标题设置，确保B端标题即使在参与者信息未加载前也正确显示
-            if (decodedInviterName && decodedInviterName !== '朋友' && decodedInviterName !== '邀请者') {
+            // 收敛(L140 区):统一调权威检测器(原仅判 '朋友'/'邀请者' 两项)
+            if (decodedInviterName && !this.isPlaceholderNickname(decodedInviterName)) {
               const immediateTitle = `我和${decodedInviterName}（2）`;
               console.log('🔥 [B端立即标题] 设置立即标题:', immediateTitle);
               wx.setNavigationBarTitle({
@@ -153,7 +154,8 @@ function attach(page) {
             console.log('🔥 [HOTFIX-v1.3.71] B端标题和系统消息统一由fetchChatParticipantsWithRealNames处理');
             
             // 🔥 【策略】只在有真实昵称时立即设置标题，系统消息完全交给fetchChatParticipantsWithRealNames
-            if (decodedInviterName && !['朋友', '邀请者', '用户', '好友', '新用户'].includes(decodedInviterName)) {
+            // 收敛(S5):统一调权威检测器(原 inline 数组)
+            if (decodedInviterName && !this.isPlaceholderNickname(decodedInviterName)) {
               console.log('🔥 [HOTFIX-v1.3.71-立即] ✅ 检测到真实昵称，立即设置标题');
               const immediateTitle = `我和${decodedInviterName}（2）`;
               wx.setNavigationBarTitle({ title: immediateTitle });
