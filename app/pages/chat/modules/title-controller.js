@@ -516,72 +516,6 @@ function updateDynamicTitleWithRealNames() {
   console.log('🏷️ [真实姓名] 页面标题和导航栏标题已更新');
 }
 
-/**
- * 🔥 【HOTFIX-v1.3.45】用真实昵称更新标题
- *
- * 收到某个参与者的真实昵称后局部刷新 — 同时清理 temp_ 等无效参与者。
- *
- * @param {string} participantId - 参与者 ID
- * @param {string} realNickname - 真实昵称
- */
-function updateTitleWithRealNickname(participantId, realNickname) {
-  // 🔥 【A端动态标题】A 端标题应该根据参与者数量动态变化
-  console.log('🔥 [动态标题] A端标题随参与者变化:', realNickname);
-
-  console.log('🔥 [统一标题更新] 使用真实昵称更新标题:', realNickname);
-
-  // 🔥 【统一策略】双端都使用相同的标题更新逻辑
-
-  // 更新参与者列表中的昵称
-  const participants = this.data.participants || [];
-  const updatedParticipants = participants.map(p => {
-    if ((p.id || p.openId) === participantId) {
-      return { ...p, nickName: realNickname };
-    }
-    return p;
-  });
-
-  // 🔥 【过滤垃圾数据】过滤掉 temp_user 等无效参与者
-  const validParticipants = updatedParticipants.filter(p => {
-    const id = p.id || p.openId;
-    return id && id !== 'temp_user' && !id.startsWith('temp_') && id.length > 5;
-  });
-
-  console.log('🔥 [参与者过滤] 原始参与者数量:', updatedParticipants.length, '过滤后:', validParticipants.length);
-
-  // 🔥 【统一标题策略】根据过滤后的参与者数量决定标题格式
-  let newTitle;
-  const participantCount = validParticipants.length;
-
-  if (participantCount === 1) {
-    // 只有自己:显示自己昵称
-    const currentUser = this.data.currentUser;
-    newTitle = currentUser?.nickName || '我';
-    console.log('🔥 [统一标题] 单人状态,显示自己昵称:', newTitle);
-  } else if (participantCount === 2) {
-    // 双人聊天:显示"我和XX（2）"
-    newTitle = `我和${realNickname}（2）`;
-    console.log('🔥 [统一标题] 双人聊天,显示对方昵称:', newTitle);
-  } else {
-    // 多人聊天:显示"群聊（X）"
-    newTitle = `群聊（${participantCount}）`;
-    console.log('🔥 [统一标题] 多人聊天,显示群聊格式:', newTitle);
-  }
-
-  this.setData({
-    participants: validParticipants, // 🔥 使用过滤后的参与者列表
-    dynamicTitle: newTitle,
-    chatTitle: newTitle,
-    contactName: newTitle
-  }, () => {
-    wx.setNavigationBarTitle({
-      title: newTitle,
-      success: () => {
-        console.log('🔥 [统一标题] ✅ 标题更新成功:', newTitle);
-      }
-    });
-  });
-}
 
 /**
  * 🔥 核心:动态标题更新
@@ -802,7 +736,6 @@ function attach(page) {
   page.updateTitleForReceiver = updateTitleForReceiver;
   page.protectReceiverTitle = protectReceiverTitle;
   page.updateDynamicTitleWithRealNames = updateDynamicTitleWithRealNames;
-  page.updateTitleWithRealNickname = updateTitleWithRealNickname;
   page.updateDynamicTitle = updateDynamicTitle;
 }
 

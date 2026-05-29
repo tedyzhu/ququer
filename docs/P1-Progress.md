@@ -319,6 +319,35 @@ attach 模式。该方法职责:
 - chat-debug-tools.js: console-only 调试工具(33 个),给开发者排错
 - recovery-tools.js: chat.js 内部业务路径调用的应急修复
 
+### 后续小型抽离(PR #15-17,2026-05-28)
+
+为接近边际收益,做了 3 个小幅度模块化:
+
+- **PR #15** `message-polling`:轮询备用方案 110 行 → `modules/message-polling.js`,
+  chat.js 2672 → 2565
+- **PR #16** `system-message-cleanup`:`removeWrongCreatorMessages` + `removeDuplicateBEndMessages`
+  80 行合并到现有 `modules/system-message.js`,chat.js 2565 → 2485
+- **PR #17** `db-helpers`:4 个云数据库写入辅助 100 行 → `modules/db-helpers.js`,
+  chat.js 2485 → 2385
+
+### P3 当前总览(2026-05-28)
+
+```
+chat.js:    15500 → 2385  (-84.6%)
+模块数:     12 → 18 (+identity-resolver / message-listener / message-fetch /
+                       participant-infer / join-by-invite / recovery-tools /
+                       message-polling / db-helpers)
+测试用例:   ~200 → ~187 (集成测试 + 静态测试)
+```
+
+剩余 chat.js 主要由 wxml 绑定方法(sendMessage/onShow/onMessageTap 等)和 onLoad 主流程(644 行)构成,
+继续抽边际收益已显著降低。
+
+P3 候选转向:
+- 云函数模块化(joinByInvite 478 行 / debugUserDatabase 335 行)
+- onLoad 阶段 2d(云端验证 + 副作用,~215 行,高风险)
+- 模块内部技术债清理(message-fetch 主路径与备用路径重复 / 时间戳归一化提取)
+
 ### 阶段 3-5 待实施
 
 | 阶段 | 行数 | 内容 | 风险 |

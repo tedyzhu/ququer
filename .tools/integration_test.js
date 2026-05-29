@@ -208,7 +208,7 @@ if (smMissing.length === 0) {
 const TitleController = require(path.join(__dirname, '../app/pages/chat/modules/title-controller.js'));
 const fakePage4 = { data: {}, setData: () => {} };
 TitleController.attach(fakePage4);
-const tcRequired = ['updateTitleForReceiver', 'protectReceiverTitle', 'updateReceiverTitleWithRealNames', 'fetchRealInviterNameAndUpdateTitle', 'updateDynamicTitle', 'updateDynamicTitleWithRealNames', 'updateTitleWithRealNickname'];
+const tcRequired = ['updateTitleForReceiver', 'protectReceiverTitle', 'updateReceiverTitleWithRealNames', 'fetchRealInviterNameAndUpdateTitle', 'updateDynamicTitle', 'updateDynamicTitleWithRealNames'];
 const tcMissing = tcRequired.filter(k => typeof fakePage4[k] !== 'function');
 if (tcMissing.length === 0) {
   const tcCount = Object.keys(fakePage4).filter(k => typeof fakePage4[k] === 'function').length;
