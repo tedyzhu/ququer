@@ -14,6 +14,17 @@
  * 被测 6 个方法:
  *   updateDynamicTitle / updateDynamicTitleWithRealNames / updateTitleForReceiver /
  *   updateReceiverTitleWithRealNames / fetchRealInviterNameAndUpdateTitle / protectReceiverTitle
+ *
+ * ===== Tier B 收敛前→收敛后行为更正清单(本次治理的行为变化记录)=====
+ * 收敛占位符黑名单到权威 isPlaceholderNickname() 后,以下用例发生预期翻转
+ * (占位符不再泄漏进标题,与权威标题规则一致;已按用户确认"接受更正"更新基线):
+ *   - D14 双人A端「新用户」: 我和新用户（2） → 我自己
+ *   - D15 双人B端「新用户」: 我和新用户（2） → 我和朋友（2）(兜底)
+ * 以下用例收敛前后产出一致(路径切换但结果相同,无可观测变化):
+ *   - D16 双人B端真名含占位子串「用户体验师」: 我和用户体验师（2）(收敛前走重算,
+ *     收敛后走早退保护,均得对方真名标题)
+ *   - R7c 双人A端「发送方」: 真机本就走权威检测(inline 数组是死兜底),收敛零影响
+ * 其余 49 个 Tier A 用例严格零变化。
  */
 
 const path = require('path');
