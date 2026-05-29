@@ -296,4 +296,17 @@ if (piMissing.length === 0) {
   process.exit(1);
 }
 
+const JoinByInvite = require(path.join(__dirname, '../app/pages/chat/modules/join-by-invite.js'));
+const fakePage11 = { data: {}, setData: () => {} };
+JoinByInvite.attach(fakePage11);
+const jbiRequired = ['joinChatByInvite'];
+const jbiMissing = jbiRequired.filter(k => typeof fakePage11[k] !== 'function');
+if (jbiMissing.length === 0) {
+  const jbiCount = Object.keys(fakePage11).filter(k => typeof fakePage11[k] === 'function').length;
+  console.log(`   ✅ JoinByInvite.attach 挂上 ${jbiCount} 个方法`);
+} else {
+  console.error('   ❌ JoinByInvite 缺失:', jbiMissing);
+  process.exit(1);
+}
+
 console.log('\n[完成] chat.js 集成测试全部通过!');

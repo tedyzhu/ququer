@@ -275,13 +275,29 @@ attach 模式。两者构成消息拉取子系统。
 
 后续遇到 wxml 绑定的方法须保留薄壳或留在 chat.js。
 
+### `join-by-invite` 已完成(2026-05-28)
+
+抽离 `joinChatByInvite` 338 行(B 端从邀请链接进入入口)到 `modules/join-by-invite.js`,
+attach 模式。该方法职责:
+- 兜底用户信息(从 wx.storage / app.globalData 恢复)
+- 调云函数 joinByInvite 加入聊天
+- 加入成功:确认 B 端身份,设置标题(立即 + 800ms 保险),清理错误 A 端消息,
+  重启消息监听,更新参与者列表,延迟拉取消息合并
+- 加入失败:走 addSystemMessage 显示错误
+
+抽离后:
+- chat.js: 3884 → 3549 (-335 行,累计 -77.1%)
+- 新增 `modules/join-by-invite.js`(367 行)
+- integration_test 加第 11 个 attach 检查
+- bash run_all_tests.sh 6 个测试全过(187 用例)
+
 ### 剩余二线大方法
 
 | 方法 | 行数 | 风险 | 备注 |
 | --- | --- | --- | --- |
-| `joinChatByInvite` | 335 | 中 | 身份判定链路调用方 |
 | `sendMessage` | 259 | 不可抽 | wxml `bindconfirm` 绑定 |
 | `showMessageError` | 48 | 低 | 与 sendMessage 紧耦合,留 chat.js |
+| 各种 fix/check 方法 | 80-105 | 低 | forceFixParticipantDuplicates / manuallyFixConnection / fixMessageSending 等可批量考虑 |
 
 ### 阶段 3-5 待实施
 
