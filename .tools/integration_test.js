@@ -348,4 +348,17 @@ if (dbMissing.length === 0) {
   process.exit(1);
 }
 
+const Keyboard = require(path.join(__dirname, '../app/pages/chat/modules/keyboard.js'));
+const fakePage15 = { data: {}, setData: () => {} };
+Keyboard.attach(fakePage15);
+const kbRequired = ['getEffectiveKeyboardHeight', '_registerKeyboardListener'];
+const kbMissing = kbRequired.filter(k => typeof fakePage15[k] !== 'function');
+if (kbMissing.length === 0) {
+  const kbCount = Object.keys(fakePage15).filter(k => typeof fakePage15[k] === 'function').length;
+  console.log(`   ✅ Keyboard.attach 挂上 ${kbCount} 个方法`);
+} else {
+  console.error('   ❌ Keyboard 缺失:', kbMissing);
+  process.exit(1);
+}
+
 console.log('\n[完成] chat.js 集成测试全部通过!');
