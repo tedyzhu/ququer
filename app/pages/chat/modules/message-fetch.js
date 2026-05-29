@@ -16,7 +16,7 @@
  */
 
 const ChatHelpers = require('./chat-helpers.js');
-const { isPlaceholderJoinMessage, isSystemLikeMessage } = ChatHelpers;
+const { isPlaceholderJoinMessage, isSystemLikeMessage, normalizeTimestamp } = ChatHelpers;
 
 /**
  * @param {Object} page - Page 实例
@@ -96,26 +96,8 @@ function attach(page) {
                 }
               }
               
-              // 保留原始数值时间戳
-              let numericTs = Date.now();
-              try {
-                if (msg.sendTime) {
-                  if (typeof msg.sendTime === 'number') {
-                    numericTs = msg.sendTime;
-                  } else if (msg.sendTime._date) {
-                    numericTs = new Date(msg.sendTime._date).getTime();
-                  } else if (msg.sendTime.getTime) {
-                    numericTs = msg.sendTime.getTime();
-                  } else {
-                    const p = new Date(msg.sendTime).getTime();
-                    if (!isNaN(p)) numericTs = p;
-                  }
-                } else if (msg._createTime) {
-                  numericTs = typeof msg._createTime === 'number'
-                    ? msg._createTime
-                    : new Date(msg._createTime).getTime();
-                }
-              } catch (_e) { /* fallback Date.now() */ }
+              // 保留原始数值时间戳(详见 chat-helpers.js#normalizeTimestamp)
+              const numericTs = normalizeTimestamp(msg.sendTime || msg._createTime);
 
               return {
                 id: resolvedServerId,
@@ -500,30 +482,12 @@ function attach(page) {
               }
               
               // 🚨 【修复时间错误】安全处理sendTime
+              // 显示时间格式化(详见 chat-helpers.js#normalizeTimestamp)
               let msgTime = '00:00';
               try {
-                if (msg.sendTime) {
-                  // 处理不同格式的时间
-                  let timeValue;
-                  if (typeof msg.sendTime === 'string') {
-                    timeValue = new Date(msg.sendTime);
-                  } else if (msg.sendTime._date) {
-                    // 微信云数据库的serverDate格式
-                    timeValue = new Date(msg.sendTime._date);
-                  } else if (msg.sendTime.getTime) {
-                    // 已经是Date对象
-                    timeValue = msg.sendTime;
-                  } else {
-                    // 时间戳格式
-                    timeValue = new Date(msg.sendTime);
-                  }
-                  
-                  if (timeValue && !isNaN(timeValue.getTime())) {
-                    msgTime = that.formatTime(timeValue);
-                  } else {
-                    console.warn('🚨 [时间修复] 无效时间格式:', msg.sendTime);
-                    msgTime = that.formatTime(new Date());
-                  }
+                const tsForDisplay = normalizeTimestamp(msg.sendTime);
+                if (msg.sendTime != null) {
+                  msgTime = that.formatTime(new Date(tsForDisplay));
                 } else {
                   console.warn('🚨 [时间修复] 消息缺少sendTime字段:', msg._id);
                   msgTime = that.formatTime(new Date());
@@ -554,26 +518,8 @@ function attach(page) {
               
               const systemLikeMsg = isSystemLikeMessage(msg);
 
-              // 保留原始数值时间戳，供 checkBurnAfterReadingCleanup 等判断消息新旧
-              let numericTimestamp = Date.now();
-              try {
-                if (msg.sendTime) {
-                  if (typeof msg.sendTime === 'number') {
-                    numericTimestamp = msg.sendTime;
-                  } else if (msg.sendTime._date) {
-                    numericTimestamp = new Date(msg.sendTime._date).getTime();
-                  } else if (msg.sendTime.getTime) {
-                    numericTimestamp = msg.sendTime.getTime();
-                  } else {
-                    const parsed = new Date(msg.sendTime).getTime();
-                    if (!isNaN(parsed)) numericTimestamp = parsed;
-                  }
-                } else if (msg._createTime) {
-                  numericTimestamp = typeof msg._createTime === 'number'
-                    ? msg._createTime
-                    : new Date(msg._createTime).getTime();
-                }
-              } catch (_e) { /* 解析失败保持 Date.now() */ }
+              // 保留原始数值时间戳,供 checkBurnAfterReadingCleanup 等判断消息新旧
+              const numericTimestamp = normalizeTimestamp(msg.sendTime || msg._createTime);
 
               return {
                 id: resolvedMessageId,
