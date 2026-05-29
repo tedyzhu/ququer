@@ -142,3 +142,8 @@ app/pages/chat/modules/
 | `message_fetch_test.js` | 35 | fetchMessages / fetchMessagesAndMerge / showMockMessages — 闸门 / 成功路径 / B 端过滤 / 失败回退(P4 新增) |
 | `message_listener_test.js` | 31 | startMessageListener / stopMessageListener — watch 链 / onChange direct-add / B 端过滤 / 兜底 fetchMessages / onError 重启(P4 新增) |
 | `participant_listener_test.js` | 34 | getOtherParticipantRealName / retryGetRealInviterName / deduplicateParticipants / fetchChatParticipants / startParticipantListener — 5 个核心方法的关键分支(P4 新增) |
+
+---
+
+> **后续阶段**:[P4-Summary.md](./P4-Summary.md) — P4 不动 chat.js,聚焦测试加固 + CI 集成,
+> 测试套件从 217 → 559 PASS,新增 4 个测试 + 7 个独立 PR。
