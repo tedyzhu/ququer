@@ -16,6 +16,19 @@
 const ChatHelpers = require('./chat-helpers.js');
 
 /**
+ * 从"我和{对方昵称}（2）"格式的标题中提取对方昵称。
+ * 非此格式返回 null(交由外层按非占位符处理)。
+ * 用于把"对整段标题做占位符子串判断"收敛为"对单一昵称做权威判定"。
+ * @param {string} title - 标题字符串
+ * @returns {string|null}
+ */
+function extractOtherNameFromTitle(title) {
+  if (!title || typeof title !== 'string') return null;
+  const m = /^我和(.+)（2）$/.exec(title);
+  return m ? m[1] : null;
+}
+
+/**
  * 🔥 【HOTFIX-v1.3.55】获取真实邀请者昵称并更新 B 端标题
  *
  * 仅 B 端使用。直接调用 getChatParticipants 云函数,从云端拿真实昵称后:
@@ -533,14 +546,10 @@ function updateDynamicTitle() {
   // 🔥 【1008修复】B 端标题保护:只保护真实昵称,允许更新占位符
   if (this.data.isFromInvite && this.data.hasJoinedAsReceiver) {
     const currentTitle = this.data.dynamicTitle;
-    // 🔥 检查标题是否包含占位符昵称
-    const hasPlaceholder = currentTitle && (
-      currentTitle.includes('用户') ||
-      currentTitle.includes('朋友') ||
-      currentTitle.includes('好友') ||
-      currentTitle.includes('邀请者') ||
-      currentTitle.includes('新用户')
-    );
+    // 收敛(S4):原先对整段标题做子串 includes 判断,会误伤真名含占位子串者
+    // (如「用户体验师」)。改为先从标题提取对方昵称,再用权威检测器判定。
+    const otherNameInTitle = extractOtherNameFromTitle(currentTitle);
+    const hasPlaceholder = otherNameInTitle !== null && ChatHelpers.isPlaceholderNickname(otherNameInTitle);
 
     // 🔥 只有标题是真实昵称(不包含占位符)时才保护
     if (currentTitle && currentTitle.includes('我和') && currentTitle.includes('（2）') && !hasPlaceholder) {
