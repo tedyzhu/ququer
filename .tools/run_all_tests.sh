@@ -9,41 +9,47 @@ set -e
 cd "$(dirname "$0")/.."
 
 echo "================================================================"
-echo "1/5 chat.js 集成测试(require/Page/wxml/模块导出/attach)"
+echo "1/7 chat.js 集成测试(require/Page/wxml/模块导出/attach)"
 echo "================================================================"
 node .tools/integration_test.js
 
 echo ""
 echo "================================================================"
-echo "2/5 chat-helpers 纯函数行为测试"
+echo "2/7 chat-helpers 纯函数行为测试"
 echo "================================================================"
 node .tools/chat_helpers_test.js
 
 echo ""
 echo "================================================================"
-echo "3/5 identity-utils 行为测试"
+echo "3/7 identity-utils 行为测试"
 echo "================================================================"
 node .tools/identity_utils_test.js
 
 echo ""
 echo "================================================================"
-echo "4/5 sanitize 双实现一致性测试(joinByInvite + cleanTempUserData)"
+echo "4/7 sanitize 双实现一致性测试(joinByInvite + cleanTempUserData)"
 echo "================================================================"
 node .tools/sanitize_participants_test.js
 
 echo ""
 echo "================================================================"
-echo "5/6 app.ensureLogin 时序测试"
+echo "5/7 app.ensureLogin 时序测试"
 echo "================================================================"
 node .tools/login_race_test.js
 
 echo ""
 echo "================================================================"
-echo "6/6 identity-resolver 阶段 1 行为测试"
+echo "6/7 identity-resolver 行为测试"
 echo "================================================================"
 node .tools/identity_resolver_test.js
 
 echo ""
 echo "================================================================"
-echo "[完成] 全部 6 个静态测试通过"
+echo "7/7 system-message 关键方法行为测试"
+echo "================================================================"
+node .tools/system_message_test.js
+
+echo ""
+echo "================================================================"
+echo "[完成] 全部 7 个静态测试通过"
 echo "================================================================"
