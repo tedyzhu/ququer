@@ -127,7 +127,7 @@ app/pages/chat/modules/
 
 ## 测试套件
 
-`bash .tools/run_all_tests.sh` — 6 个测试,共 187 用例:
+`bash .tools/run_all_tests.sh` — 7 个测试,共 217 用例:
 
 | 测试 | 用例数 | 覆盖 |
 | --- | --- | --- |
@@ -137,3 +137,4 @@ app/pages/chat/modules/
 | `identity_utils_test.js` | 33 | 身份判定 9 条决策路径 |
 | `sanitize_participants_test.js` | 53 | joinByInvite + cleanTempUserData 双实现一致性 |
 | `login_race_test.js` | 10 | app.ensureLogin 4 种时序场景 |
+| `system_message_test.js` | 30 | addSystemMessage / removeWrongCreatorMessages / removeDuplicateBEndMessages / clearIncorrectSystemMessages / addCreatorSystemMessage(P4 新增) |
