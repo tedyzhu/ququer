@@ -251,5 +251,158 @@ console.log('\n--- hasBEndJoinEver / markBEndJoinEver ---');
   assertEqual('无 chatId 时 mark 不写 storage', Object.keys(mockStorage).length, 0);
 }
 
+// ============ P5 边缘场景补充 ============
+console.log('\n--- P5 边缘场景补充 ---');
+
+// 边缘 1: 自己根本不在 participants 里,但其他人是 creator → 推为接收方
+{
+  const page = makePage({
+    currentUser: { openId: 'lurker' },
+    participants: [
+      { openId: 'someone_else', isCreator: true },
+      { openId: 'another', isJoiner: true }
+    ]
+  });
+  assertEqual('e1.自己不在 list,他人是 creator → 接收方', IdentityUtils.isReceiverEnvironment(page), true);
+}
+
+// 边缘 2: storage 中 creator 就是当前用户自己 → 不返回 true,继续走默认 false
+{
+  Object.keys(mockStorage).forEach(k => delete mockStorage[k]);
+  mockStorage['creator_chat_self'] = 'user_self';
+  const page = makePage({
+    contactId: 'chat_self',
+    currentUser: { openId: 'user_self' }
+  });
+  assertEqual('e2.storage creator 就是自己,不推为接收方', IdentityUtils.isReceiverEnvironment(page), false);
+  delete mockStorage['creator_chat_self'];
+}
+
+// 边缘 3: wx.getStorageSync 抛异常时被吞,返回 false(默认发送方)
+{
+  const origGet = global.wx.getStorageSync;
+  global.wx.getStorageSync = function() { throw new Error('storage broken'); };
+  const page = makePage({
+    contactId: 'chat_x',
+    currentUser: { openId: 'me' }
+  });
+  // 静默 console.warn
+  const origWarn = console.warn;
+  console.warn = () => {};
+  try {
+    assertEqual('e3.storage 抛异常时安全返回 false', IdentityUtils.isReceiverEnvironment(page), false);
+  } finally {
+    console.warn = origWarn;
+    global.wx.getStorageSync = origGet;
+  }
+}
+
+// 边缘 4: 短路优先级 - data.isSender === false 优先于 finalIsFromInvite=false
+{
+  const page = makePage({ isSender: false }, { finalIsFromInvite: false });
+  // data.isSender=false 应短路返回 true,不会进 finalIsFromInvite 分支
+  assertEqual('e4.data.isSender=false 短路优先', IdentityUtils.isReceiverEnvironment(page), true);
+}
+
+// 边缘 5: finalIsFromInvite 不是 boolean(undefined / null / string)时跳过该路径
+{
+  const page = makePage({}, { finalIsFromInvite: undefined });
+  assertEqual('e5a.finalIsFromInvite=undefined 跳过', IdentityUtils.isReceiverEnvironment(page), false);
+}
+{
+  const page = makePage({}, { finalIsFromInvite: null });
+  assertEqual('e5b.finalIsFromInvite=null 跳过', IdentityUtils.isReceiverEnvironment(page), false);
+}
+{
+  const page = makePage({}, { finalIsFromInvite: 'true' }); // 字符串不算 boolean
+  assertEqual('e5c.finalIsFromInvite=string 跳过', IdentityUtils.isReceiverEnvironment(page), false);
+}
+
+// 边缘 6: isSender 不是 boolean 时跳过该路径
+{
+  const page = makePage({}, { isSender: undefined });
+  assertEqual('e6.isSender=undefined 跳过', IdentityUtils.isReceiverEnvironment(page), false);
+}
+
+// 边缘 7: isMessageFromCurrentUser - getApp 抛异常时整体 try/catch 兜底返回 false
+{
+  const origGetApp = global.getApp;
+  global.getApp = function() { throw new Error('app broken'); };
+  const page = makePage({ currentUser: { openId: 'me' } });
+  const origWarn = console.warn;
+  console.warn = () => {};
+  try {
+    // try 块内 getApp() 抛错,整个 catch 兜底 → 返回 false(即使 currentUser 可读)
+    assertEqual('e7.getApp 抛错时整体兜底返回 false', IdentityUtils.isMessageFromCurrentUser(page, 'me'), false);
+  } finally {
+    console.warn = origWarn;
+    global.getApp = origGetApp;
+  }
+}
+
+// 边缘 8: isMessageFromCurrentUser - senderId 是 0 / false / undefined
+{
+  const page = makePage({ currentUser: { openId: 'me' } });
+  assertEqual('e8a.senderId=0 → false', IdentityUtils.isMessageFromCurrentUser(page, 0), false);
+  assertEqual('e8b.senderId=false → false', IdentityUtils.isMessageFromCurrentUser(page, false), false);
+  assertEqual('e8c.senderId=undefined → false', IdentityUtils.isMessageFromCurrentUser(page, undefined), false);
+}
+
+// 边缘 9: hasBEndJoinEver - wx.getStorageSync 抛异常被吞
+{
+  const origGet = global.wx.getStorageSync;
+  global.wx.getStorageSync = function() { throw new Error('storage broken'); };
+  const page = makePage({ contactId: 'chat_z' });
+  const origWarn = console.warn;
+  console.warn = () => {};
+  try {
+    assertEqual('e9.hasBEndJoinEver 异常时安全返回 false', IdentityUtils.hasBEndJoinEver(page), false);
+  } finally {
+    console.warn = origWarn;
+    global.wx.getStorageSync = origGet;
+  }
+}
+
+// 边缘 10: markBEndJoinEver - wx.setStorageSync 抛异常被吞,不冒泡
+{
+  const origSet = global.wx.setStorageSync;
+  global.wx.setStorageSync = function() { throw new Error('storage broken'); };
+  const page = makePage({ contactId: 'chat_w' });
+  const origWarn = console.warn;
+  console.warn = () => {};
+  let threw = false;
+  try {
+    IdentityUtils.markBEndJoinEver(page);
+  } catch (e) {
+    threw = true;
+  } finally {
+    console.warn = origWarn;
+    global.wx.setStorageSync = origSet;
+  }
+  assertEqual('e10.markBEndJoinEver 异常被吞', threw, false);
+}
+
+// 边缘 11: 自己在 participants 中但既不是 creator 也不是 receiver 标记,
+// 且其他人也不是 creator → 走 storage 兜底,无命中则默认 false
+{
+  Object.keys(mockStorage).forEach(k => delete mockStorage[k]);
+  const page = makePage({
+    contactId: 'chat_clean',
+    currentUser: { openId: 'me' },
+    participants: [
+      { openId: 'me', nickName: 'Me' },
+      { openId: 'other', nickName: 'Other' } // 都没标记
+    ]
+  });
+  assertEqual('e11.无线索时默认 false', IdentityUtils.isReceiverEnvironment(page), false);
+}
+
+// 边缘 12: data.isFromInvite=false 不应被当作"true 短路"(检查严格 === true)
+{
+  const page = makePage({ isFromInvite: false });
+  // 应该跳过路径 1,继续后续判断 → 默认 false
+  assertEqual('e12.isFromInvite=false 不短路', IdentityUtils.isReceiverEnvironment(page), false);
+}
+
 console.log(`\n--- ${pass} pass / ${fail} fail ---`);
 process.exit(fail > 0 ? 1 : 0);
