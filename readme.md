@@ -31,7 +31,7 @@ P0/P1/P2 重构已完成,`app/pages/chat/chat.js` 从 15500 → 2385 行(-84.6%)
 | `voice-recorder.js` | 318 | 语音录制 / 播放子系统 |
 | `test-methods.js` | 2017 | 23 个调试 API,仅在开关启用时挂载 |
 | `system-message.js` | 1396 | 系统消息添加 / 淡出 / 校正 / 清理(15 方法) |
-| `title-controller.js` | 809 | A/B 端标题控制(8 方法) |
+| `title-controller.js` | 742 | A/B 端标题控制(7 方法,删除死代码 updateTitleWithRealNickname) |
 | `burn-after-read.js` | 433 | 阅后即焚定时器子系统(8 方法) |
 | `participant-listener.js` | 1904 | 参与者实时监听 + 真实昵称获取(9 方法) |
 | `chat-debug-tools.js` | 1696 | 33 个调试工具方法(身份切换、强制修复、批量删除等) |
