@@ -127,7 +127,7 @@ app/pages/chat/modules/
 
 ## 测试套件
 
-`bash .tools/run_all_tests.sh` — 9 个测试,共 494 个 PASS:
+`bash .tools/run_all_tests.sh` — 10 个测试,共 525 个 PASS:
 
 | 测试 | PASS 数 | 覆盖 |
 | --- | --- | --- |
@@ -140,3 +140,4 @@ app/pages/chat/modules/
 | `system_message_test.js` | 30 | addSystemMessage / removeWrongCreatorMessages / removeDuplicateBEndMessages / clearIncorrectSystemMessages / addCreatorSystemMessage(P4 新增) |
 | `burn_after_read_test.js` | 36 | destroyMessage / markMessageAsReadAndDestroy / permanentlyDeleteMessage / clearAllDestroyTimers / processOfflineMessages(P4 新增) |
 | `message_fetch_test.js` | 35 | fetchMessages / fetchMessagesAndMerge / showMockMessages — 闸门 / 成功路径 / B 端过滤 / 失败回退(P4 新增) |
+| `message_listener_test.js` | 31 | startMessageListener / stopMessageListener — watch 链 / onChange direct-add / B 端过滤 / 兜底 fetchMessages / onError 重启(P4 新增) |
