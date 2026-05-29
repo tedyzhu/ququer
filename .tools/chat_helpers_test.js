@@ -218,6 +218,57 @@ console.log('\n--- formatTime ---');
   assertEqual('formatTime 边界 00:00', helpers.formatTime(d), '00:00');
 }
 
+// ===== normalizeTimestamp =====
+console.log('\n--- normalizeTimestamp ---');
+{
+  // number 直接返回
+  assertEqual('normalizeTimestamp(number)', helpers.normalizeTimestamp(1700000000000), 1700000000000);
+}
+{
+  // 微信 serverDate 格式 { _date: ISO }
+  const dateStr = '2026-05-29T10:00:00.000Z';
+  const expected = new Date(dateStr).getTime();
+  assertEqual('normalizeTimestamp({_date: ISO})', helpers.normalizeTimestamp({ _date: dateStr }), expected);
+}
+{
+  // Date 实例
+  const d = new Date(2026, 4, 29);
+  assertEqual('normalizeTimestamp(Date)', helpers.normalizeTimestamp(d), d.getTime());
+}
+{
+  // 字符串可解析
+  const expected = new Date('2026-05-29').getTime();
+  assertEqual('normalizeTimestamp(string)', helpers.normalizeTimestamp('2026-05-29'), expected);
+}
+{
+  // null → fallback
+  const fb = 1234567890;
+  assertEqual('normalizeTimestamp(null) fallback', helpers.normalizeTimestamp(null, fb), fb);
+}
+{
+  // undefined → fallback
+  const fb = 9999;
+  assertEqual('normalizeTimestamp(undefined) fallback', helpers.normalizeTimestamp(undefined, fb), fb);
+}
+{
+  // 无效字符串 → fallback
+  const fb = 1111;
+  assertEqual('normalizeTimestamp(invalid string) fallback', helpers.normalizeTimestamp('not-a-date', fb), fb);
+}
+{
+  // 没传 fallback,默认 Date.now()
+  const before = Date.now();
+  const r = helpers.normalizeTimestamp(null);
+  const after = Date.now();
+  assert('normalizeTimestamp(null) 无 fallback 时返回 Date.now()', r >= before && r <= after);
+}
+{
+  // 抛错的对象不应崩
+  const weirdObj = { _date: undefined, getTime: () => { throw new Error('boom'); } };
+  const fb = 7777;
+  assertEqual('normalizeTimestamp(throwing) fallback', helpers.normalizeTimestamp(weirdObj, fb), fb);
+}
+
 // ===== smartNicknameMatch =====
 console.log('\n--- smartNicknameMatch ---');
 const matchCases = [

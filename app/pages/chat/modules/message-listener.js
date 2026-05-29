@@ -22,7 +22,7 @@
  */
 
 const ChatHelpers = require('./chat-helpers.js');
-const { DEFAULT_DESTROY_TIMEOUT, isPlaceholderJoinMessage, isSystemLikeMessage } = ChatHelpers;
+const { DEFAULT_DESTROY_TIMEOUT, isPlaceholderJoinMessage, isSystemLikeMessage, normalizeTimestamp } = ChatHelpers;
 
 /**
  * @param {Object} page - Page 实例
@@ -219,20 +219,9 @@ function attach(page) {
                         if (isASideSystem) return;
                       }
 
-                      var normalizedTimestamp = Date.now();
-                      var rawTs = newMessage.timestamp || newMessage.sendTime || newMessage._createTime;
-                      if (typeof rawTs === 'number') {
-                        normalizedTimestamp = rawTs;
-                      } else if (rawTs && rawTs._date) {
-                        var parsedDate = new Date(rawTs._date).getTime();
-                        if (!isNaN(parsedDate)) normalizedTimestamp = parsedDate;
-                      } else if (rawTs && rawTs.getTime) {
-                        var parsedObjDate = rawTs.getTime();
-                        if (!isNaN(parsedObjDate)) normalizedTimestamp = parsedObjDate;
-                      } else if (rawTs) {
-                        var parsedStrDate = new Date(rawTs).getTime();
-                        if (!isNaN(parsedStrDate)) normalizedTimestamp = parsedStrDate;
-                      }
+                      var normalizedTimestamp = normalizeTimestamp(
+                        newMessage.timestamp || newMessage.sendTime || newMessage._createTime
+                      );
 
                       var systemLike = isSystemLikeMessage(newMessage);
                       batchNewMessages.push({
@@ -327,20 +316,9 @@ function attach(page) {
                           if (aSys) return;
                         }
 
-                        var fbTimestamp = Date.now();
-                        var fbRawTs = message.timestamp || message.sendTime || message._createTime;
-                        if (typeof fbRawTs === 'number') {
-                          fbTimestamp = fbRawTs;
-                        } else if (fbRawTs && fbRawTs._date) {
-                          var fbParsedDate = new Date(fbRawTs._date).getTime();
-                          if (!isNaN(fbParsedDate)) fbTimestamp = fbParsedDate;
-                        } else if (fbRawTs && fbRawTs.getTime) {
-                          var fbParsedObjDate = fbRawTs.getTime();
-                          if (!isNaN(fbParsedObjDate)) fbTimestamp = fbParsedObjDate;
-                        } else if (fbRawTs) {
-                          var fbParsedStrDate = new Date(fbRawTs).getTime();
-                          if (!isNaN(fbParsedStrDate)) fbTimestamp = fbParsedStrDate;
-                        }
+                        var fbTimestamp = normalizeTimestamp(
+                          message.timestamp || message.sendTime || message._createTime
+                        );
 
                         var sysLike = isSystemLikeMessage(message);
                         fbBatch.push({

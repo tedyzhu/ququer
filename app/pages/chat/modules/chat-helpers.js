@@ -258,6 +258,40 @@ function smartNicknameMatch(name1, name2) {
   return exactMatch && hasMinLength;
 }
 
+/**
+ * 把多种来源的时间戳归一化为 ms 数字
+ *
+ * 支持的输入格式:
+ *  - number(已是 ms)
+ *  - 微信云数据库 serverDate 格式: { _date: 'ISO 字符串' }
+ *  - Date 实例(有 .getTime())
+ *  - 任意可被 new Date() 解析的字符串
+ *
+ * 解析失败时返回 fallback,默认 Date.now()。
+ *
+ * @param {any} rawTs - 原始时间戳值
+ * @param {number} [fallback=Date.now()] - 解析失败时的兜底
+ * @returns {number} ms 时间戳
+ */
+function normalizeTimestamp(rawTs, fallback) {
+  const fb = typeof fallback === 'number' ? fallback : Date.now();
+  if (rawTs == null) return fb;
+  if (typeof rawTs === 'number') return rawTs;
+  try {
+    if (rawTs._date) {
+      const parsed = new Date(rawTs._date).getTime();
+      if (!isNaN(parsed)) return parsed;
+    }
+    if (typeof rawTs.getTime === 'function') {
+      const parsedObj = rawTs.getTime();
+      if (!isNaN(parsedObj)) return parsedObj;
+    }
+    const parsedStr = new Date(rawTs).getTime();
+    if (!isNaN(parsedStr)) return parsedStr;
+  } catch (_e) { /* fallback */ }
+  return fb;
+}
+
 module.exports = {
   // 常量
   SYSTEM_MESSAGE_DEFAULTS,
@@ -277,5 +311,6 @@ module.exports = {
   summarizeMessageIdDiff,
   formatTime,
   registerMessageKeys,
-  smartNicknameMatch
+  smartNicknameMatch,
+  normalizeTimestamp
 };
