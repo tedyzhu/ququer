@@ -165,7 +165,7 @@ const REQUIRED_PAGE_METHODS = [
   'isReceiverEnvironment', 'isMessageFromCurrentUser', 'isPlaceholderNickname',
   'hasBEndJoinEver', 'markBEndJoinEver', 'initializeDestroyedMessageStore',
   // 业务核心
-  'fetchMessages', 'sendMessage',
+  'sendMessage',
   // wxml 事件入口
   ...[...eventBindings]
 ];
@@ -267,6 +267,19 @@ if (mlMissing.length === 0) {
   console.log(`   ✅ MessageListener.attach 挂上 ${mlCount} 个方法`);
 } else {
   console.error('   ❌ MessageListener 缺失:', mlMissing);
+  process.exit(1);
+}
+
+const MessageFetch = require(path.join(__dirname, '../app/pages/chat/modules/message-fetch.js'));
+const fakePage9 = { data: {}, setData: () => {} };
+MessageFetch.attach(fakePage9);
+const mfRequired = ['fetchMessages', 'fetchMessagesAndMerge'];
+const mfMissing = mfRequired.filter(k => typeof fakePage9[k] !== 'function');
+if (mfMissing.length === 0) {
+  const mfCount = Object.keys(fakePage9).filter(k => typeof fakePage9[k] === 'function').length;
+  console.log(`   ✅ MessageFetch.attach 挂上 ${mfCount} 个方法`);
+} else {
+  console.error('   ❌ MessageFetch 缺失:', mfMissing);
   process.exit(1);
 }
 

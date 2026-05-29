@@ -243,13 +243,26 @@ P3#1 阶段告一段落后,转向二线大方法。
 已知技术债(本次保留不修):
 - 主路径(docChanges) 与备用路径(docs) 几乎是复制粘贴,后续可提取共用过滤函数
 
+### `message-fetch` 已完成(2026-05-28)
+
+抽离 `fetchMessagesAndMerge` (310 行) + `fetchMessages` (465 行) 到 `modules/message-fetch.js`,
+attach 模式。两者构成消息拉取子系统。
+
+抽离后:
+- chat.js: 4853 → 4078 (-775 行,**P3 单次最大削减再创新高**)
+- 新增 `modules/message-fetch.js`(803 行,含 JSDoc 与已知技术债说明)
+- integration_test:`fetchMessages` 从 REQUIRED_PAGE_METHODS 移除,加入第 9 个 attach 检查
+- `bash run_all_tests.sh` 6 个测试全过(187 用例)
+
+已知技术债(本次保留不修):
+- 两方法的 B 端系统消息过滤逻辑高度重复
+- 时间戳归一化逻辑在两处都有副本,可提取 normalizeTimestamp(rawTs)
+
 ### 剩余二线大方法
 
 | 方法 | 行数 | 风险 |
 | --- | --- | --- |
-| `fetchMessages` | 462 | 中(B 端过滤逻辑与 system-message 强耦合) |
 | `joinChatByInvite` | 335 | 中(身份判定链路调用方,改动可能反向影响) |
-| `fetchMessagesAndMerge` | 307 | 中(与 fetchMessages 大量重复) |
 | `sendMessage` | 259 | 中(包含 isSending 防抖、消息状态机) |
 | `inferParticipantsFromMessages` | 169 | 低(独立兜底逻辑) |
 
