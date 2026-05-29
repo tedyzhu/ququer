@@ -360,7 +360,7 @@ origLog('--- updateDynamicTitle ---');
 
 // D14 [Tier B] 双人 A 端 边界占位「新用户」
 //   收敛前: L652 数组漏判「新用户」→ 视为真名 → 我和新用户（2）
-//   收敛后: isPlaceholderNickname('新用户')=true → 保持自己昵称 我自己
+//   收敛后(S2 已收敛): isPlaceholderNickname('新用户')=true → 保持自己昵称 我自己
 {
   resetEnv();
   const page = makeTitlePage({ data: {
@@ -369,13 +369,13 @@ origLog('--- updateDynamicTitle ---');
     dynamicTitle: '',
   } });
   withSilence(() => page.updateDynamicTitle());
-  // TIER_B(收敛前→收敛后): '我和新用户（2）' → '我自己'
-  assertEqual('D14.[TierB]双人A端「新用户」(收敛前=我和新用户（2）)', page.data.dynamicTitle, '我和新用户（2）');
+  // TIER_B 已更正(收敛前 '我和新用户（2）' → 收敛后 '我自己'):占位符不再泄漏进标题
+  assertEqual('D14.[TierB]双人A端「新用户」(收敛后=我自己)', page.data.dynamicTitle, '我自己');
 }
 
 // D15 [Tier B] 双人 B 端 边界占位「新用户」+ 无 URL/storage
 //   收敛前: L663 数组漏判「新用户」→ 视为真名 → 我和新用户（2）
-//   收敛后: 判占位 → 兜底 我和朋友（2）
+//   收敛后(S3 已收敛): 判占位 → 兜底 我和朋友（2）
 {
   resetEnv();
   const page = makeTitlePage({ data: {
@@ -384,8 +384,8 @@ origLog('--- updateDynamicTitle ---');
     dynamicTitle: '',
   } });
   withSilence(() => page.updateDynamicTitle());
-  // TIER_B(收敛前→收敛后): '我和新用户（2）' → '我和朋友（2）'
-  assertEqual('D15.[TierB]双人B端「新用户」(收敛前=我和新用户（2）)', page.data.dynamicTitle, '我和新用户（2）');
+  // TIER_B 已更正(收敛前 '我和新用户（2）' → 收敛后 '我和朋友（2）'):占位符被兜底替换
+  assertEqual('D15.[TierB]双人B端「新用户」(收敛后=我和朋友（2）)', page.data.dynamicTitle, '我和朋友（2）');
 }
 
 // D16 [Tier B] 双人 B 端 真名含占位子串「用户体验师」+ hasJoinedAsReceiver + 前置该标题

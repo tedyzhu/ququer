@@ -456,9 +456,8 @@ function updateDynamicTitleWithRealNames() {
 
     if (otherParticipant) {
       const otherNameRaw = otherParticipant?.nickName || otherParticipant?.name || '';
-      const isPlaceholderName = typeof this.isPlaceholderNickname === 'function'
-        ? this.isPlaceholderNickname(otherNameRaw)
-        : (!otherNameRaw || ['用户', '朋友', '好友', '邀请者', '新用户'].includes(otherNameRaw));
+      // 收敛(S1):统一调权威检测器,删除 inline 数组兜底
+      const isPlaceholderName = ChatHelpers.isPlaceholderNickname(otherNameRaw);
       if (!isPlaceholderName && (otherParticipant.openId || otherParticipant.id) !== 'temp_user') {
         const otherName = otherNameRaw;
         title = `我和${otherName}（2）`;
@@ -649,7 +648,8 @@ function updateDynamicTitle() {
       // 🔥 【A端特殊处理】如果是 A 端创建者,只在真正有 B 端加入时才显示双人标题
       if (isDefinitelyASide) {
         const otherNameRaw = otherParticipant?.nickName || otherParticipant?.name;
-        const isValidName = otherNameRaw && !['用户','朋友','好友','邀请者'].includes(otherNameRaw);
+        // 收敛(S2):统一调权威检测器(原 inline 数组漏判「新用户」等)
+        const isValidName = !ChatHelpers.isPlaceholderNickname(otherNameRaw);
 
         if (isValidName && (otherParticipant.openId || otherParticipant.id) !== 'temp_user') {
           title = `我和${otherNameRaw}（2）`;
@@ -660,7 +660,8 @@ function updateDynamicTitle() {
         }
       } else {
         const otherNameRaw = otherParticipant?.nickName || otherParticipant?.name;
-        const isPlaceholderName = !otherNameRaw || ['用户','朋友','好友','邀请者'].includes(otherNameRaw);
+        // 收敛(S3):统一调权威检测器(原 inline 数组漏判「新用户」等)
+        const isPlaceholderName = ChatHelpers.isPlaceholderNickname(otherNameRaw);
 
         if (!isPlaceholderName && (otherParticipant.openId || otherParticipant.id) !== 'temp_user') {
           const otherName = otherNameRaw;
