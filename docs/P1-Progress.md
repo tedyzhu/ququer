@@ -330,43 +330,95 @@ attach 模式。该方法职责:
 - **PR #17** `db-helpers`:4 个云数据库写入辅助 100 行 → `modules/db-helpers.js`,
   chat.js 2485 → 2385
 
-### P3 当前总览(2026-05-28)
+### 接近极限的最后几刀(PR #18-20,2026-05-28)
+
+- **PR #18** `docs-and-cleanup`:文档同步 + 删除死代码 `updateTitleWithRealNickname`(65 行)
+- **PR #19** `keyboard`:`getEffectiveKeyboardHeight` + `_registerKeyboardListener` 85 行 → `modules/keyboard.js`,
+  chat.js 2385 → 2303
+- **PR #20** `mock-messages`:`showMockMessages` 61 行合并到 `modules/message-fetch.js`,
+  chat.js 2303 → 2237
+
+## P3 阶段总结(2026-05-28)
+
+### 累计成果
 
 ```
-chat.js:    15500 → 2385  (-84.6%)
-模块数:     12 → 18 (+identity-resolver / message-listener / message-fetch /
-                       participant-infer / join-by-invite / recovery-tools /
-                       message-polling / db-helpers)
-测试用例:   ~200 → ~187 (集成测试 + 静态测试)
+chat.js:    15500 → 2237  (-13263 行,-85.6%)
+模块数:     12 → 20
+测试用例:   ~200 → 187(集成测试 6 套 + 静态测试)
 ```
 
-剩余 chat.js 主要由 wxml 绑定方法(sendMessage/onShow/onMessageTap 等)和 onLoad 主流程(644 行)构成,
-继续抽边际收益已显著降低。
+P3 阶段共完成 **18 个独立 PR**(#3-#20):
 
-P3 候选转向:
-- 云函数模块化(joinByInvite 478 行 / debugUserDatabase 335 行)
-- onLoad 阶段 2d(云端验证 + 副作用,~215 行,高风险)
-- 模块内部技术债清理(message-fetch 主路径与备用路径重复 / 时间戳归一化提取)
+| PR | 内容 | chat.js 减幅 |
+| --- | --- | --- |
+| #3 | 准备工作:文档同步 + 死代码 + 测试基础设施 | -223 |
+| #4-#9 | identity-resolver 渐进抽离(阶段 1-5) | -465 |
+| #10 | message-listener(实时消息监听) | -407 |
+| #11 | message-fetch(消息拉取) | -775 |
+| #12 | participant-infer(参与者推断兜底) | -197 |
+| #13 | join-by-invite(B 端加入流程) | -335 |
+| #14 | recovery-tools(应急修复 12 方法,**单 PR 最大**) | -877 |
+| #15 | message-polling(消息轮询备用) | -107 |
+| #16 | system-message-cleanup(2 清理方法合并) | -80 |
+| #17 | db-helpers(4 db 写入 helper) | -100 |
+| #18 | docs-and-cleanup | 0 |
+| #19 | keyboard(软键盘监听) | -82 |
+| #20 | mock-messages(合并到 message-fetch) | -66 |
 
-### 阶段 3-5 待实施
+### 当前 modules 结构(20 个,合计 13296 行)
 
-| 阶段 | 行数 | 内容 | 风险 |
-| --- | --- | --- | --- |
-| 3 | 1011-1280 | 身份决议 + 标题/系统消息 270 行 | 中 |
-| 4 | 1281-1410 | 分支动作(邀请进入 / 新聊天 / 已存在)130 行 | 中 |
-| 5 | 1411-1477 | 后处理(B 端补充消息 / 阅后即焚检查)67 行 | 低 |
+| 模块 | 行数 | 职责 |
+| --- | --- | --- |
+| `test-methods.js` | 2017 | 23 个调试 API |
+| `participant-listener.js` | 1904 | 参与者实时监听 |
+| `chat-debug-tools.js` | 1696 | 33 个调试工具 |
+| `system-message.js` | 1396 | 系统消息 15 方法 |
+| `message-fetch.js` | 870 | 消息拉取 + mock |
+| `identity-resolver.js` | 856 | 身份判定渐进抽离 |
+| `recovery-tools.js` | 854 | 12 应急修复 |
+| `title-controller.js` | 742 | 标题控制 7 方法 |
+| `message-listener.js` | 444 | 实时监听 |
+| `burn-after-read.js` | 433 | 阅后即焚 |
+| `join-by-invite.js` | 367 | B 端加入 |
+| `voice-recorder.js` | 318 | 语音 |
+| `chat-helpers.js` | 281 | 常量+纯函数 |
+| `participant-infer.js` | 222 | 参与者推断 |
+| `identity-utils.js` | 166 | 身份工具 |
+| `message-debug-hook.js` | 152 | 调试钩子 |
+| `message-polling.js` | 133 | 消息轮询 |
+| `db-helpers.js` | 129 | db 写入 |
+| `keyboard.js` | 107 | 软键盘 |
+| `destroyed-store.js` | 106 | 销毁存储 |
+| `share-utils.js` | 103 | 分享 |
 
-后续阶段由独立 spec 与 PR 推进,每阶段必须先有静态测试基线再抽离。
+### chat.js 拆分已达极限
 
-## P3 候选(尚未启动)
+剩余 2237 行结构:
+- `onLoad` 646 行(P3#1 阶段 2d 内 ~80 行高风险代码暂未拆)
+- wxml 绑定方法(不可抽):`sendMessage` 259 / `onShow` 146 / `onMessageTap`+`onMessageLongTap` 91 /
+  `onInputFocus`+`onInputBlur` 76 / `showChatMenu` 33 / `openEmojiPicker` 17 / `onInputChange` 5 / `preventPageScroll`
+- 与 wxml 绑定方法紧耦合:`showMessageError` 48
+- 杂项小方法 ~50 行(`scheduleScrollToBottom` / `scrollToBottom` / `clearChatHistory` / 各种 3 行薄壳)
 
-按 risk/benefit 排序:
+### P3 后未启动 / 主动放弃的项
 
-1. **`identity-resolver`(高风险高收益)**:把 `onLoad` 的 1096 行身份判定主流程拆出。需先抽象 IdentityState 对象,保证业务行为零变化。是 P2 时刻意绕开的最大头。**已有静态测试基础设施作为回归保障**(见 P3 准备工作 #3)。
-2. **二线大方法继续拆**:`fetchMessages` / `startMessageListener` 等可能加入 modules 中的合适模块(如 `message-fetch.js`、`message-listener.js`)
-3. **云函数模块化**:`joinByInvite` 478 行 / `debugUserDatabase` 335 行可拆 helper
-4. ~~**静态测试覆盖**~~ ✅ 已完成,见 P3 准备工作 #3
-5. ~~**彻底移除 `debugUserDatabase` 前端入口**~~ ✅ 已完成,见 P3 准备工作 #4
+| 候选 | 状态 | 原因 |
+| --- | --- | --- |
+| `identity-resolver` 阶段 2d(云端验证 + 副作用 ~80 行) | 主动放弃 | 高风险(异步副作用 + 多 let 重写 + 矛盾 hotfix),收益不抵成本 |
+| 云函数模块化(joinByInvite 478 行) | 主动放弃 | 云函数按文件夹独立部署,模块化收益小;sanitize 双实现一致性已通过测试保证 |
+| `debugUserDatabase` 云函数模块化 | 主动放弃 | 已加 dev guard 且前端入口已移除(PR #5) |
+| 模块内技术债清理(message-fetch 主/备用路径重复 / 时间戳归一化提取) | 待启动 | 低风险但收益小,可作为 P4 维护性工作 |
+
+### P4 候选(可选启动)
+
+| 候选 | 价值 |
+| --- | --- |
+| 静态测试加强 | 现 187 用例集中在 identity-resolver 与 chat-helpers,其他大模块覆盖薄弱 |
+| 模块内技术债清理 | message-fetch 重复路径合并 / 时间戳归一化工具提取 |
+| chat-debug-tools / recovery-tools 边界整理 | 两者职责模糊,可合并 |
+| onLoad 阶段 2d(高风险) | 未抽的最后一块烂账,需要先有真机调试通道 |
+| CI 集成 | run_all_tests.sh 接入 GitHub Actions,PR 自动跑 |
 
 ## 抽离策略备忘
 

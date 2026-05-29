@@ -18,8 +18,8 @@
 
 ## 模块化重构
 
-P0/P1/P2 重构已完成,`app/pages/chat/chat.js` 从 15500 → 2237 行(-85.6%)。
-12 个模块下沉到 `app/pages/chat/modules/`:
+P0/P1/P2/P3 重构已完成,`app/pages/chat/chat.js` 从 15500 → 2237 行(-85.6%)。
+20 个模块下沉到 `app/pages/chat/modules/`:
 
 | 模块 | 行数 | 职责 |
 | --- | --- | --- |
@@ -37,7 +37,7 @@ P0/P1/P2 重构已完成,`app/pages/chat/chat.js` 从 15500 → 2237 行(-85.6%)
 | `chat-debug-tools.js` | 1696 | 33 个调试工具方法(身份切换、强制修复、批量删除等) |
 | `identity-resolver.js` | 856 | onLoad 身份判定主流程的渐进式拆分(P3#1 阶段 1-5 部分完成) |
 | `message-listener.js` | 444 | 实时消息监听 + 停止(wx.cloud.database watch) |
-| `message-fetch.js` | 803 | 消息拉取子系统(fetchMessages 全量 + fetchMessagesAndMerge fast-path) |
+| `message-fetch.js` | 870 | 消息拉取子系统(fetchMessages 全量 + fetchMessagesAndMerge fast-path + showMockMessages 兜底) |
 | `participant-infer.js` | 222 | 参与者推断子系统(inferParticipantsFromMessages + syncInferredParticipantsToDatabase) |
 | `join-by-invite.js` | 367 | 接收方加入聊天子系统(joinChatByInvite,B 端从邀请链接进入入口) |
 | `recovery-tools.js` | 854 | 调试 / 应急修复工具子系统(12 个 fix/check/restart/recreate 方法) |
@@ -137,14 +137,17 @@ ququer/
 
 ## 已知技术债
 
-记录在此以便后续迭代取舍。**P2 重构(2026-05)后状态**:
+记录在此以便后续迭代取舍。**P3 重构(2026-05-28)后状态**:
 
-- `app/pages/chat/chat.js` 已从 15500 → 2237 行(-85.6%),12 个模块下沉到 `app/pages/chat/modules/`(详见 `docs/P1-Progress.md`)
+- ✅ `app/pages/chat/chat.js` 已从 15500 → 2237 行(-85.6%),20 个模块下沉到 `app/pages/chat/modules/`(详见 `docs/P1-Progress.md`)
 - ✅ `getConversations` 已从 N+1 改为 1+1 in 查询(commit `916e725`)
-- ✅ `debugUserDatabase` 已加 `DEBUG_TOOLS_ENABLED` 环境变量 guard,但前端 `this.debugUserDatabase()` 入口仍暴露,后续应彻底移除
-- ⚠️ 剩余大方法待评估:`onLoad` 1096 行(身份判定主流程,`identity-resolver` 模块的目标)、`fetchMessages` 462 行、`startMessageListener` 390 行、`joinChatByInvite` 335 行、`fetchMessagesAndMerge` 307 行
-- ⚠️ 云函数 `joinByInvite` 478 行,可考虑按职责拆 helper
-- ⚠️ 自动化测试仅有 `.tools/integration_test.js` 单元覆盖关键 require / attach 路径,业务流程仍需补静态用例(因真机测试通道不稳)
+- ✅ `debugUserDatabase` 已加 `DEBUG_TOOLS_ENABLED` 环境变量 guard,前端 `this.debugUserDatabase()` 入口已彻底移除(PR #5)
+- ✅ 二线大方法 `fetchMessages` / `fetchMessagesAndMerge` / `startMessageListener` / `joinChatByInvite` 已抽为模块
+- ⚠️ chat.js 剩余 `onLoad` 646 行(身份判定主流程已抽离 80%,内部仍有 ~80 行高风险云端验证 + 副作用代码)
+- ⚠️ chat.js 内 `sendMessage` 259 行因 wxml 绑定不可抽
+- ⚠️ 云函数 `joinByInvite` 478 行 / `debugUserDatabase` 335 行,主动放弃模块化(独立部署单位,模块化收益有限)
+- ⚠️ 静态测试 187 用例集中在 `identity-resolver` 与 `chat-helpers`,其他大模块覆盖薄弱
+- ⚠️ `chat-debug-tools.js` 与 `recovery-tools.js` 职责模糊,后续可考虑合并
 
 ## 联系方式
 
