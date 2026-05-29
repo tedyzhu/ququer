@@ -6,6 +6,18 @@
 
 **v1.3.96**(主版本号见 `app/pages/chat/chat.js` 内 `HOTFIX-v1.3.96` 标记)
 
+## 文档导航
+
+工程文档在 [`docs/`](./docs/),从 [`docs/README.md`](./docs/README.md) 入口。各阶段交付:
+
+- [P0-Cleanup-Summary](./docs/P0-Cleanup-Summary.md) — 仓库清理
+- [P1-Summary](./docs/P1-Summary.md) — chat.js 模块化起点 + 性能
+- [P3-Summary](./docs/P3-Summary.md) — 持续抽离到极限(18 PR,chat.js 5948 → 2237)
+- [P4-Summary](./docs/P4-Summary.md) — 测试加固 + CI 集成(8 PR,217 → 559 PASS)
+- [P5-Summary](./docs/P5-Summary.md) — 测试覆盖到几乎全部业务模块(9 PR,559 → 790 PASS)
+
+历史 hotfix 报告在 [`docs/archive/`](./docs/archive/);更早的零散修复在 [`.plans/archive/`](./.plans/) (见 [.plans/README.md](./.plans/README.md))。
+
 完整变更记录见 `.plans/archive/`,最新若干个修复要点:
 
 - v1.3.96 A 端最终防护——出现接收方强证据时,忽略本地创建者弱证据,并清理旧创建者缓存
@@ -16,10 +28,15 @@
 - v1.3.89 A 端身份多重证据判定(聊天 ID 片段、访问历史、昵称冲突、creatorKey 存储)
 - v1.3.86 联通 createChat 与 joinByInvite,统一系统消息文案
 
-## 模块化重构
+## 模块化重构与测试加固
 
-P0/P1/P2/P3 重构已完成,`app/pages/chat/chat.js` 从 15500 → 2237 行(-85.6%)。
-20 个模块下沉到 `app/pages/chat/modules/`:
+P0/P1/P2/P3/P4/P5 全部完成,详细阶段交付见 [`docs/README.md`](./docs/README.md):
+
+- **结构**:`app/pages/chat/chat.js` 从 15500 → 2237 行(**-85.6%**),20 个模块下沉到 `app/pages/chat/modules/`
+- **测试**:18 个静态测试 / **790 PASS** / `bash .tools/run_all_tests.sh` 在 ~10 秒跑通
+- **CI**:GitHub Actions 自动跑全套测试,~10-13 秒(`.github/workflows/ci.yml`)
+
+### 模块全景
 
 | 模块 | 行数 | 职责 |
 | --- | --- | --- |
@@ -31,21 +48,19 @@ P0/P1/P2/P3 重构已完成,`app/pages/chat/chat.js` 从 15500 → 2237 行(-85.
 | `voice-recorder.js` | 318 | 语音录制 / 播放子系统 |
 | `test-methods.js` | 2017 | 23 个调试 API,仅在开关启用时挂载 |
 | `system-message.js` | 1396 | 系统消息添加 / 淡出 / 校正 / 清理(15 方法) |
-| `title-controller.js` | 742 | A/B 端标题控制(7 方法,删除死代码 updateTitleWithRealNickname) |
+| `title-controller.js` | 742 | A/B 端标题控制(7 方法) |
 | `burn-after-read.js` | 433 | 阅后即焚定时器子系统(8 方法) |
 | `participant-listener.js` | 1904 | 参与者实时监听 + 真实昵称获取(9 方法) |
 | `chat-debug-tools.js` | 1696 | 33 个调试工具方法(身份切换、强制修复、批量删除等) |
-| `identity-resolver.js` | 856 | onLoad 身份判定主流程的渐进式拆分(P3#1 阶段 1-5 部分完成) |
+| `identity-resolver.js` | 856 | onLoad 身份判定主流程的渐进式拆分 |
 | `message-listener.js` | 444 | 实时消息监听 + 停止(wx.cloud.database watch) |
 | `message-fetch.js` | 870 | 消息拉取子系统(fetchMessages 全量 + fetchMessagesAndMerge fast-path + showMockMessages 兜底) |
-| `participant-infer.js` | 222 | 参与者推断子系统(inferParticipantsFromMessages + syncInferredParticipantsToDatabase) |
-| `join-by-invite.js` | 367 | 接收方加入聊天子系统(joinChatByInvite,B 端从邀请链接进入入口) |
+| `participant-infer.js` | 222 | 参与者推断子系统 |
+| `join-by-invite.js` | 367 | 接收方加入聊天子系统 |
 | `recovery-tools.js` | 854 | 调试 / 应急修复工具子系统(12 个 fix/check/restart/recreate 方法) |
 | `message-polling.js` | 133 | 消息轮询子系统(实时 watcher 的备用方案) |
-| `db-helpers.js` | 129 | 数据库写入辅助(updateUserInfoInDatabase / updateSpecificUserInfo / createConversationRecord / syncParticipantsToDatabase) |
-| `keyboard.js` | 107 | 软键盘监听子系统(getEffectiveKeyboardHeight + _registerKeyboardListener) |
-
-详细抽离过程与策略见 `docs/P1-Progress.md`,各模块独立 spec 在 `.kiro/specs/chat-*-module/`。
+| `db-helpers.js` | 129 | 数据库写入辅助 |
+| `keyboard.js` | 107 | 软键盘监听子系统 |
 
 ## 核心功能
 
@@ -86,8 +101,8 @@ ququer/
 │   ├── error-handler.js                # 统一错误处理
 │   └── ...
 ├── cloudfunctions/                     # 云函数(每个独立 package.json)
-├── docs/                               # 当前生效的修复文档
-├── .plans/archive/                     # 历史规划与 hotfix 记录归档
+├── docs/                               # 工程文档(阶段交付 + 速查索引)
+├── .plans/archive/                     # 历史规划与 hotfix 记录归档(只读)
 └── assets/                             # 静态资源
 ```
 
@@ -137,17 +152,19 @@ ququer/
 
 ## 已知技术债
 
-记录在此以便后续迭代取舍。**P3 重构(2026-05-28)后状态**:
+记录在此以便后续迭代取舍。**P5 测试加固(2026-05-29)后状态**:
 
-- ✅ `app/pages/chat/chat.js` 已从 15500 → 2237 行(-85.6%),20 个模块下沉到 `app/pages/chat/modules/`(详见 `docs/P1-Progress.md`)
-- ✅ `getConversations` 已从 N+1 改为 1+1 in 查询(commit `916e725`)
-- ✅ `debugUserDatabase` 已加 `DEBUG_TOOLS_ENABLED` 环境变量 guard,前端 `this.debugUserDatabase()` 入口已彻底移除(PR #5)
-- ✅ 二线大方法 `fetchMessages` / `fetchMessagesAndMerge` / `startMessageListener` / `joinChatByInvite` 已抽为模块
+- ✅ chat.js 已从 15500 → 2237 行(**-85.6%**),20 个模块下沉到 `app/pages/chat/modules/`
+- ✅ `getConversations` 已从 N+1 改为 1+1 in 查询
+- ✅ `debugUserDatabase` 已加 `DEBUG_TOOLS_ENABLED` 环境变量 guard,前端入口已彻底移除
+- ✅ 二线大方法 `fetchMessages` / `fetchMessagesAndMerge` / `startMessageListener` / `joinChatByInvite` 等已抽为模块
+- ✅ 静态测试 **18 个测试 / 790 PASS**(P3 末 217 → P4 末 559 → P5 末 790),业务核心 13 个模块全部有专测
+- ✅ CI 接入 GitHub Actions,每次 PR 自动跑全套(~10-13 秒)
 - ⚠️ chat.js 剩余 `onLoad` 646 行(身份判定主流程已抽离 80%,内部仍有 ~80 行高风险云端验证 + 副作用代码)
-- ⚠️ chat.js 内 `sendMessage` 259 行因 wxml 绑定不可抽
+- ⚠️ chat.js 内 `sendMessage` 259 行因 wxml 绑定不可抽(P3 边界)
 - ⚠️ 云函数 `joinByInvite` 478 行 / `debugUserDatabase` 335 行,主动放弃模块化(独立部署单位,模块化收益有限)
-- ⚠️ 静态测试 187 用例集中在 `identity-resolver` 与 `chat-helpers`,其他大模块覆盖薄弱
-- ⚠️ `chat-debug-tools.js` 与 `recovery-tools.js` 职责模糊,后续可考虑合并
+- ⚠️ `chat-debug-tools.js` 与 `recovery-tools.js` 边界整理:P4 评估后**主动放弃**,两者职责实际清晰(console-only 调试 vs 业务路径调用)
+- ⚠️ 真机调试通道一直未恢复,任何动态行为只能依赖静态测试推断(P5-Summary § P6 候选 中标记为最大痛点)
 
 ## 联系方式
 
