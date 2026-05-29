@@ -165,6 +165,7 @@ ququer/
 - ⚠️ 云函数 `joinByInvite` 478 行 / `debugUserDatabase` 335 行,主动放弃模块化(独立部署单位,模块化收益有限)
 - ⚠️ `chat-debug-tools.js` 与 `recovery-tools.js` 边界整理:P4 评估后**主动放弃**,两者职责实际清晰(console-only 调试 vs 业务路径调用)
 - ⚠️ 真机调试通道一直未恢复,任何动态行为只能依赖静态测试推断(P5-Summary § P6 候选 中标记为最大痛点)
+- 🐛 **已知 bug(待真机验证后修)**:`identity-resolver.js` `resolveFinalIdentity` 的"频繁访问"创建者证据读取扁平键 `chat_visit_${chatId}_${openId}`,但实际写入方 `share-utils.recordChatVisit` 写的是 map 键 `chat_visit_history`={[chatId]:count},两键从不一致 → 该处 `isFrequentVisitor` 恒为 false(证据静默失效)。已在 `.tools/identity_resolver_test.js` 用 bug-1/2/3 用例固化现状;修复会改变身份判定行为,需真机验证后再动。
 
 ## 联系方式
 

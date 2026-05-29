@@ -1035,6 +1035,63 @@ function setupStageThreeMocks(storageOverrides) {
 //   测试不构造,记录此事实即可
 
 
+// ============ resolveFinalIdentity:访问计数存储键不一致 bug 固化 ============
+// 【已知 bug 文档化】resolveFinalIdentity 内"频繁访问"证据读的是扁平键
+//   `chat_visit_${chatId}_${openId}`,但全项目唯一的写入方(share-utils.recordChatVisit)
+//   写的是 map 键 `chat_visit_history` = { [chatId]: count }。两者从不一致,
+//   导致 resolveFinalIdentity 里的 isFrequentVisitor 永远为 false(读到不存在的键)。
+//   本组用例固化【当前现状】(bug 存在),修复需真机验证身份判定,故暂不修,仅文档化。
+origLog('\n--- resolveFinalIdentity:访问计数存储键不一致 bug 固化 ---');
+
+// bug-1:即使 chat_visit_history[chatId] 达到阈值(>=2),resolveFinalIdentity 也不认其为频繁访问者
+//   构造:仅靠"频繁访问"这一条弱创建者证据,期望它【失效】→ isActualCreator 不因此为 true
+{
+  // 只写入实际写入方使用的 map 键,不写扁平键
+  setupStageThreeMocks({ 'chat_visit_history': { 'chat_v': 5 } });
+  const page = { data: { contactId: 'chat_v' }, needsCreatorMessage: false };
+  const r = withSilence(() => Resolver.resolveFinalIdentity(page, {
+    isNewChat: false, skipCreatorCheck: false, inviteInfo: null,
+    inviter: '', // 无邀请者
+    isFromInvite: false, // 无强接收方证据
+    options: { id: 'chat_v' }, // 无 create action / fromInvite / inviter
+    userInfo: { openId: 'user_freq' },
+  }));
+  // 现状:chat_visit_history 不被 resolveFinalIdentity 读取(它读扁平键)→ isFrequentVisitor=false
+  // → 无任何创建者证据(isStoredCreator/isReturningCreator/hasCreateAction 均 false)
+  // → isActualCreator=false
+  assertEqual('bug-1.map 键达阈值但 resolveFinalIdentity 不认频繁访问 → isActualCreator=false', r.isActualCreator, false);
+}
+
+// bug-2:对照——若写入 resolveFinalIdentity 实际读的扁平键,频繁访问证据才生效
+//   这是"修复后应有的行为"对照参照(当前生产无人写此键,故此用例仅证明读取逻辑本身没坏)
+{
+  // 写入与实现一致的扁平键 chat_visit_<chatId>_<openId>,确保命中
+  setupStageThreeMocks({ 'chat_visit_chat_w_user_x': 3 });
+  const page = { data: { contactId: 'chat_w' }, needsCreatorMessage: false };
+  const r = withSilence(() => Resolver.resolveFinalIdentity(page, {
+    isNewChat: false, skipCreatorCheck: false, inviteInfo: null,
+    inviter: '',
+    isFromInvite: false,
+    options: { id: 'chat_w' },
+    userInfo: { openId: 'user_x' },
+  }));
+  // 写入了实现实际读取的扁平键 chat_visit_chat_w_user_x=3 → isFrequentVisitor=true
+  // → isActualCreator=true(频繁访问弱证据生效)
+  assertEqual('bug-2.对照:写入扁平键时频繁访问证据生效 → isActualCreator=true', r.isActualCreator, true);
+}
+
+// bug-3:share-utils 写入路径与 resolveFinalIdentity 读取路径键名确实不同(根因固化)
+{
+  // 模拟 share-utils.recordChatVisit 的写入键
+  const writeKey = 'chat_visit_history';
+  // resolveFinalIdentity 的读取键
+  const chatId = 'chat_z';
+  const openId = 'user_z';
+  const readKey = `chat_visit_${chatId}_${openId}`;
+  assert('bug-3.写入键(chat_visit_history) ≠ 读取键(chat_visit_<chatId>_<openId>)', writeKey !== readKey);
+}
+
+
 // ============ setupInitialTitle(阶段 3b) ============
 origLog('\n--- setupInitialTitle ---');
 
