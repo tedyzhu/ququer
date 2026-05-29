@@ -18,7 +18,7 @@
 
 ## 模块化重构
 
-P0/P1/P2 重构已完成,`app/pages/chat/chat.js` 从 15500 → 5260 行(-66.1%)。
+P0/P1/P2 重构已完成,`app/pages/chat/chat.js` 从 15500 → 4853 行(-68.7%)。
 12 个模块下沉到 `app/pages/chat/modules/`:
 
 | 模块 | 行数 | 职责 |
@@ -35,6 +35,8 @@ P0/P1/P2 重构已完成,`app/pages/chat/chat.js` 从 15500 → 5260 行(-66.1%)
 | `burn-after-read.js` | 433 | 阅后即焚定时器子系统(8 方法) |
 | `participant-listener.js` | 1904 | 参与者实时监听 + 真实昵称获取(9 方法) |
 | `chat-debug-tools.js` | 1696 | 33 个调试工具方法(身份切换、强制修复、批量删除等) |
+| `identity-resolver.js` | 856 | onLoad 身份判定主流程的渐进式拆分(P3#1 阶段 1-5 部分完成) |
+| `message-listener.js` | 444 | 实时消息监听 + 停止(wx.cloud.database watch) |
 
 详细抽离过程与策略见 `docs/P1-Progress.md`,各模块独立 spec 在 `.kiro/specs/chat-*-module/`。
 
@@ -130,7 +132,7 @@ ququer/
 
 记录在此以便后续迭代取舍。**P2 重构(2026-05)后状态**:
 
-- `app/pages/chat/chat.js` 已从 15500 → 5260 行(-66.1%),12 个模块下沉到 `app/pages/chat/modules/`(详见 `docs/P1-Progress.md`)
+- `app/pages/chat/chat.js` 已从 15500 → 4853 行(-68.7%),12 个模块下沉到 `app/pages/chat/modules/`(详见 `docs/P1-Progress.md`)
 - ✅ `getConversations` 已从 N+1 改为 1+1 in 查询(commit `916e725`)
 - ✅ `debugUserDatabase` 已加 `DEBUG_TOOLS_ENABLED` 环境变量 guard,但前端 `this.debugUserDatabase()` 入口仍暴露,后续应彻底移除
 - ⚠️ 剩余大方法待评估:`onLoad` 1096 行(身份判定主流程,`identity-resolver` 模块的目标)、`fetchMessages` 462 行、`startMessageListener` 390 行、`joinChatByInvite` 335 行、`fetchMessagesAndMerge` 307 行
