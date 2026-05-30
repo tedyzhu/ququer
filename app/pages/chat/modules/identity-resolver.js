@@ -767,6 +767,22 @@ function resolveFinalIdentity(page, ctx) {
   console.log('🔥 [最终判断] - 综合证据:', hasValidInviteEvidence);
   console.log('🔥 [最终判断] - 最终结果:', finalIsFromInvite);
 
+  // 真机日志埋点:身份判定结果(双端排查身份误判的关键节点)
+  try {
+    const rtLog = app && app.globalData && app.globalData.realtimeLogger;
+    if (rtLog) {
+      rtLog.logIdentity({
+        chatId: chatId,
+        openId: currentUserOpenId,
+        finalIsFromInvite: finalIsFromInvite,
+        isActualCreator: isActualCreator,
+        hasUrlInviter: hasUrlInviter,
+        hasStoredInviter: hasStoredInviter,
+        hasValidInviteEvidence: hasValidInviteEvidence,
+      });
+    }
+  } catch (e) { /* 日志失败不影响身份判定 */ }
+
   return { finalIsFromInvite, isActualCreator };
 }
 

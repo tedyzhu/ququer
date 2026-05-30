@@ -728,6 +728,17 @@ function updateDynamicTitle() {
       console.error('🏷️ [优化标题] 导航栏标题更新失败:', err);
     }
   });
+
+  // 真机日志埋点:标题决策结果
+  try {
+    const rtLog = getApp().globalData && getApp().globalData.realtimeLogger;
+    if (rtLog) rtLog.logTitle({
+      method: 'updateDynamicTitle',
+      title: title,
+      participantCount: participantCount,
+      isFromInvite: !!this.data.isFromInvite,
+    });
+  } catch (e) {}
 }
 
 // TODO: 后续 task 将逐步搬入各方法实现

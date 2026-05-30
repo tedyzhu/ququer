@@ -1,3 +1,5 @@
+const realtimeLogger = require('./app/utils/realtime-logger.js');
+
 App({
   /**
    * 全局数据
@@ -11,7 +13,8 @@ App({
     pendingInvite: null,  // 存储待处理的邀请信息
     ENCODING_FIX_APPLIED: false, // 编码修复状态
     CLOUD_FIX_APPLIED: false, // 云函数错误修复状态
-    SAFE_CLOUD_FIX_APPLIED: false // 安全的云函数错误修复状态
+    SAFE_CLOUD_FIX_APPLIED: false, // 安全的云函数错误修复状态
+    realtimeLogger: null // 实时日志封装(onLaunch 初始化)
   },
 
   /**
@@ -20,7 +23,17 @@ App({
    */
   onLaunch: function (options) {
     console.log('小程序启动，参数:', options);
-    
+
+    // 🔥 真机日志回收:尽早初始化实时日志,挂到 globalData 供各页埋点
+    //   体验版/真机跑双端时,后台运维中心→实时日志按 openId 筛选可分别看 A/B 端
+    try {
+      realtimeLogger.init({ enabled: true });
+      this.globalData.realtimeLogger = realtimeLogger;
+      realtimeLogger.log('小程序启动', { scene: options && options.scene, path: options && options.path });
+    } catch (e) {
+      console.warn('实时日志初始化失败(不影响启动):', e);
+    }
+
     // 🔥 立即保存启动参数，确保分享链接信息不丢失
     this.globalData.launchOptions = options;
     

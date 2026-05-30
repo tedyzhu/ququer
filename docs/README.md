@@ -27,6 +27,8 @@
 
 [**Refactoring-Methodology.md**](./Refactoring-Methodology.md) — 把 P0–P5 模块化重构 + 三个根因治理 spec 沉淀的手法固化为方法论:无真机验证通道下,如何用纯静态测试安全地改遗留代码(attach 薄壳模式、根因治理五步法、Tier A/B 分层、"发现 bug ≠ 立刻修"红线)。
 
+[**RealDevice-Testing-Guide.md**](./RealDevice-Testing-Guide.md) — 真机双端测试指南:两台真手机 + 后台实时日志跑通 A 创建 → 转发 → B 加入流程,解决真机调试通道 Timeout 的痛点。配套 `app/utils/realtime-logger.js` 已在身份判定/B 端加入/标题决策三个关键节点埋点。
+
 ---
 
 ## 速查
