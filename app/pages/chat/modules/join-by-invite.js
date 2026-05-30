@@ -31,6 +31,13 @@ function attach(page) {
       console.log('🔗 [被邀请者] 开始加入聊天, chatId:', chatId, 'inviter:', inviter);
       
       const app = getApp();
+
+      // 真机日志埋点:B 端加入入口
+      try {
+        const rtLog = app && app.globalData && app.globalData.realtimeLogger;
+        if (rtLog) rtLog.logJoin({ stage: 'enter', chatId: chatId, inviter: inviter });
+      } catch (e) {}
+
       let userInfo = this.data.currentUser || app.globalData.userInfo;
       
       // 如果没有用户信息，使用默认信息
@@ -78,6 +85,18 @@ function attach(page) {
         },
         success: (res) => {
           console.log('🔗 [被邀请者] 加入聊天成功:', res.result);
+
+          // 真机日志埋点:B 端加入云函数返回
+          try {
+            const rtLog = app && app.globalData && app.globalData.realtimeLogger;
+            if (rtLog) rtLog.logJoin({
+              stage: 'cloud-return',
+              chatId: chatId,
+              success: !!(res.result && res.result.success),
+              participantCount: (res.result && res.result.participants && res.result.participants.length) || 0,
+              error: (res.result && res.result.error) || null,
+            });
+          } catch (e) {}
           
           // ⚡ 【热修复】立即强制清除连接状态，不管任何条件
           this.setData({
@@ -360,6 +379,10 @@ function attach(page) {
         },
         fail: (err) => {
           console.error('🔗 [被邀请者] 调用joinByInvite失败:', err);
+          try {
+            const rtLog = app && app.globalData && app.globalData.realtimeLogger;
+            if (rtLog) rtLog.logJoin({ stage: 'cloud-fail', chatId: chatId, error: (err && err.errMsg) || String(err) });
+          } catch (e) {}
           this.addSystemMessage('网络错误，加入聊天失败', { autoFadeStaySeconds: 3, fadeSeconds: 5 });
         }
       });
